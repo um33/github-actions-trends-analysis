@@ -1,0 +1,78 @@
+{
+  "C": {
+    "adoptionPercentage": 65,
+    "totalProjects": 509
+  },
+  "Java": {
+    "adoptionPercentage": 64,
+    "totalProjects": 973
+  },
+  "Kotlin": {
+    "adoptionPercentage": 79,
+    "totalProjects": 123
+  },
+  "JavaScript": {
+    "adoptionPercentage": 51,
+    "totalProjects": 1678
+  },
+  "TypeScript": {
+    "adoptionPercentage": 83,
+    "totalProjects": 919
+  },
+  "Go": {
+    "adoptionPercentage": 79,
+    "totalProjects": 755
+  },
+  "Dart": {
+    "adoptionPercentage": 74,
+    "totalProjects": 62
+  },
+  "C#": {
+    "adoptionPercentage": 63,
+    "totalProjects": 397
+  },
+  "Shell": {
+    "adoptionPercentage": 62,
+    "totalProjects": 268
+  },
+  "Python": {
+    "adoptionPercentage": 69,
+    "totalProjects": 1570
+  },
+  "C++": {
+    "adoptionPercentage": 70,
+    "totalProjects": 730
+  },
+  "Swift": {
+    "adoptionPercentage": 53,
+    "totalProjects": 146
+  },
+  "Ruby": {
+    "adoptionPercentage": 78,
+    "totalProjects": 245
+  },
+  "Objective-C": {
+    "adoptionPercentage": 21,
+    "totalProjects": 161
+  },
+  "Rust": {
+    "adoptionPercentage": 92,
+    "totalProjects": 168
+  },
+  "PHP": {
+    "adoptionPercentage": 69,
+    "totalProjects": 387
+  },
+  "Nix": {
+    "adoptionPercentage": 66,
+    "totalProjects": 3
+  },
+  "Groovy": {
+    "adoptionPercentage": 50,
+    "totalProjects": 8
+  },
+  "Elixir": {
+    "adoptionPercentage": 92,
+    "totalProjects": 13
+  }
+}

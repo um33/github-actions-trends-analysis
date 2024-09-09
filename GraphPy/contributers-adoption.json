@@ -1,0 +1,150 @@
+{
+    "15": {
+      "bar 1": {
+        "adoptionRate": 26
+      },
+      "bar 2": {
+        "adoptionRate": 33
+      },
+      "bar 3": {
+        "adoptionRate": 28
+      },
+      "bar 4": {
+        "adoptionRate": 37
+      },
+      "bar 5": {
+        "adoptionRate": 37
+      }
+    },
+    "25": {
+      "bar 6": {
+        "adoptionRate": 38
+      },
+      "bar 7": {
+        "adoptionRate": 38
+      },
+      "bar 8": {
+        "adoptionRate": 50
+      },
+      "bar 9": {
+        "adoptionRate": 40
+      },
+      "bar 10": {
+        "adoptionRate": 55
+      }
+    },
+    "39": {
+      "bar 11": {
+        "adoptionRate": 49
+      },
+      "bar 12": {
+        "adoptionRate": 56
+      },
+      "bar 13": {
+        "adoptionRate": 50
+      },
+      "bar 14": {
+        "adoptionRate": 54
+      },
+      "bar 15": {
+        "adoptionRate": 56
+      }
+    },
+    "58": {
+      "bar 16": {
+        "adoptionRate": 57
+      },
+      "bar 17": {
+        "adoptionRate": 63
+      },
+      "bar 18": {
+        "adoptionRate": 66
+      },
+      "bar 19": {
+        "adoptionRate": 66
+      },
+      "bar 20": {
+        "adoptionRate": 67
+      }
+    },
+    "83": {
+      "bar 21": {
+        "adoptionRate": 70
+      },
+      "bar 22": {
+        "adoptionRate": 67
+      },
+      "bar 23": {
+        "adoptionRate": 71
+      },
+      "bar 24": {
+        "adoptionRate": 78
+      },
+      "bar 25": {
+        "adoptionRate": 75
+      }
+    },
+    "115": {
+      "bar 26": {
+        "adoptionRate": 74
+      },
+      "bar 27": {
+        "adoptionRate": 83
+      },
+      "bar 28": {
+        "adoptionRate": 80
+      },
+      "bar 29": {
+        "adoptionRate": 82
+      },
+      "bar 30": {
+        "adoptionRate": 85
+      }
+    },
+    "169": {
+      "bar 31": {
+        "adoptionRate": 83
+      },
+      "bar 32": {
+        "adoptionRate": 79
+      },
+      "bar 33": {
+        "adoptionRate": 85
+      },
+      "bar 34": {
+        "adoptionRate": 78
+      },
+      "bar 35": {
+        "adoptionRate": 81
+      }
+    },
+    "253": {
+      "bar 36": {
+        "adoptionRate": 84
+      },
+      "bar 37": {
+        "adoptionRate": 85
+      },
+      "bar 38": {
+        "adoptionRate": 89
+      },
+      "bar 39": {
+        "adoptionRate": 88
+      },
+      "bar 40": {
+        "adoptionRate": 89
+      }
+    },
+    "384": {
+      "bar 41": {
+        "adoptionRate": 91
+      },
+      "bar 42": {
+        "adoptionRate": 91
+      },
+      "bar 43": {
+        "adoptionRate": 86
+      }
+    }
+  }
+  

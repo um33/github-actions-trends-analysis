@@ -1,0 +1,63 @@
+{
+    "500": {
+      "bar 1": { "adoptionRate": 63 },
+      "bar 2": { "adoptionRate": 62 },
+      "bar 3": { "adoptionRate": 60 },
+      "bar 4": { "adoptionRate": 64 },
+      "bar 5": { "adoptionRate": 61 }
+    },
+    "570": {
+      "bar 6": { "adoptionRate": 64 },
+      "bar 7": { "adoptionRate": 62 },
+      "bar 8": { "adoptionRate": 61 },
+      "bar 9": { "adoptionRate": 66 },
+      "bar 10": { "adoptionRate": 58 }
+    },
+    "662": {
+      "bar 11": { "adoptionRate": 70 },
+      "bar 12": { "adoptionRate": 56 },
+      "bar 13": { "adoptionRate": 60 },
+      "bar 14": { "adoptionRate": 68 },
+      "bar 15": { "adoptionRate": 65 }
+    },
+    "781": {
+      "bar 16": { "adoptionRate": 60 },
+      "bar 17": { "adoptionRate": 64 },
+      "bar 18": { "adoptionRate": 67 },
+      "bar 19": { "adoptionRate": 65 },
+      "bar 20": { "adoptionRate": 70 }
+    },
+    "948": {
+      "bar 21": { "adoptionRate": 60 },
+      "bar 22": { "adoptionRate": 63 },
+      "bar 23": { "adoptionRate": 68 },
+      "bar 24": { "adoptionRate": 68 },
+      "bar 25": { "adoptionRate": 65 }
+    },
+    "1184": {
+      "bar 26": { "adoptionRate": 59 },
+      "bar 27": { "adoptionRate": 60 },
+      "bar 28": { "adoptionRate": 67 },
+      "bar 29": { "adoptionRate": 69 },
+      "bar 30": { "adoptionRate": 65 }
+    },
+    "1586": {
+      "bar 31": { "adoptionRate": 67 },
+      "bar 32": { "adoptionRate": 63 },
+      "bar 33": { "adoptionRate": 69 },
+      "bar 34": { "adoptionRate": 74 },
+      "bar 35": { "adoptionRate": 69 }
+    },
+    "2390": {
+      "bar 36": { "adoptionRate": 65 },
+      "bar 37": { "adoptionRate": 70 },
+      "bar 38": { "adoptionRate": 71 },
+      "bar 39": { "adoptionRate": 73 },
+      "bar 40": { "adoptionRate": 75 }
+    },
+    "5399": {
+      "bar 41": { "adoptionRate": 74 },
+      "bar 42": { "adoptionRate": 79 },
+      "bar 43": { "adoptionRate": 79 }
+    }
+  }
