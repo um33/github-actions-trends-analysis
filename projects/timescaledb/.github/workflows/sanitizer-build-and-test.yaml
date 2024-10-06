@@ -1,0 +1,250 @@
+# Run regression tests under memory sanitizer
+name: Sanitizer test
+"on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
+  push:
+    branches:
+      - main
+      - prerelease_test
+      - trigger/sanitizer
+  pull_request:
+    paths: .github/workflows/sanitizer-build-and-test.yaml
+
+env:
+  name: "Sanitizer"
+  PG_SRC_DIR: "pgbuild"
+  PG_INSTALL_DIR: "postgresql"
+  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
+  llvm_config: "llvm-config-15"
+  CLANG: "clang-15"
+  CC: "clang-15"
+  CXX: "clang-15"
+  # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
+  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # clang CFLAGS
+  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+
+  # We do not link libasan dynamically to avoid problems with libdl and our libraries.
+  # clang does this by default, but we need to explicitly state that for gcc.
+  # static gcc LDFLAGS
+  # LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
+  # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
+  LDFLAGS: "-fsanitize=address,undefined"
+  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
+    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+    detect_leaks=0 abort_on_error=1
+
+  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
+    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+
+  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
+    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+
+  IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
+  sanitizer:
+    # Change the JOB_NAME variable below when changing the name.
+    # Don't use the env variable here because the env context is not accessible.
+    name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: config
+    strategy:
+      fail-fast: false
+      matrix:
+        # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
+        os: ["ubuntu-22.04"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+    steps:
+    - name: Install Linux Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+          libtest-most-perl ${{ env.extra_packages }}
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
+    # Create a directory for sanitizer logs. This directory is referenced by
+    # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
+    - name: Create sanitizer log directory
+      run: |
+        mkdir ${{ github.workspace }}/sanitizer
+
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
+    - name: Cache PostgreSQL ${{ matrix.pg }}
+      id: cache-postgresql
+      uses: actions/cache@v4
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
+          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+
+    - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        # Add instrumentation to the Postgres memory contexts. For more details, see
+        # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
+        patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+        cd ~/$PG_SRC_DIR
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
+          --with-openssl --without-readline --without-zlib --without-libxml
+        make -j$(nproc)
+        make -j$(nproc) -C src/test/isolation
+        make -j$(nproc) -C contrib/postgres_fdw
+
+    - name: Upload config.log
+      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
+
+    - name: Install PostgreSQL ${{ matrix.pg }}
+      run: |
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        ~/$PG_INSTALL_DIR/bin/pg_config --version
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+        make -j$(nproc) -C build
+        make -C build install
+
+    - name: make installcheck
+      run: |
+        set -o pipefail
+        # IGNORE some test since they fail under ASAN.
+        make -k -C build installcheck SKIPS="${{matrix.skips_version}}" \
+          IGNORES="${IGNORES} ${{matrix.ignores_version}}" \
+          PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+
+    - name: Show regression diffs
+      if: always()
+      id: collectlogs
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+        if [[ "${{ runner.os }}" == "Linux" ]] ; then
+          # wait in case there are in-progress coredumps
+          sleep 10
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          # print OOM killer information
+          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+        fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        path: |
+          regression.log
+          installcheck.log
+
+    - name: Save PostgreSQL log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        path: postmaster.*
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", conditionName
+          up 1
+          l
+          info args
+          info locals
+          bt full
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
+
+    - name: Show sanitizer logs
+      if: always()
+      run: |
+        tail -vn +1 sanitizer* || :
+
+    - name: Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Coredumps ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        path: coredumps
+
+    - name: Upload sanitizer logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        # The log_path sanitizer option means "Write logs to 'log_path.pid'".
+        # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+        path: ${{ github.workspace }}/sanitizer*
+
+    - name: Upload test results to the database
+      if: always()
+      env:
+        # GitHub Actions allow you neither to use the env context for the job name,
+        # nor to access the job name from the step context, so we have to
+        # duplicate it to work around this nonsense.
+        JOB_NAME: PG${{ matrix.pg }} ${{ env.name }} ${{ matrix.os }}
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh

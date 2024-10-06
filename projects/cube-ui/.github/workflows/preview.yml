@@ -1,0 +1,20 @@
+name: 🔂 Surge PR Preview
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'SurgePreview')
+    steps:
+      - uses: actions/checkout@v2
+      - uses: afc163/surge-preview@v1
+        with:
+          surge_token: ${{ secrets.SURGE_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          build: |
+            npm install
+            npm run doc-demo-build
+          dist: docs/example

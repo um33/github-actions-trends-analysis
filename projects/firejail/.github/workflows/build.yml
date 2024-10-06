@@ -1,0 +1,91 @@
+# Checks that `make dist` works and builds the project with the default
+# configuration.
+
+name: Build
+
+# Note: Keep this list in sync with DISTFILES in ../../Makefile.
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+    paths:
+      - 'contrib/**'
+      - 'etc/**'
+      - 'm4/**'
+      - 'platform/**'
+      - 'src/**'
+      - 'test/**'
+      - .github/workflows/build.yml
+      - COPYING
+      - Makefile
+      - README
+      - RELNOTES
+      - ci/printenv.sh
+      - config.mk.in
+      - config.sh.in
+      - configure
+      - configure.ac
+      - install.sh
+      - mkdeb.sh
+      - mketc.sh
+  pull_request:
+    paths:
+      - 'contrib/**'
+      - 'etc/**'
+      - 'm4/**'
+      - 'platform/**'
+      - 'src/**'
+      - 'test/**'
+      - .github/workflows/build.yml
+      - COPYING
+      - Makefile
+      - README
+      - RELNOTES
+      - ci/printenv.sh
+      - config.mk.in
+      - config.sh.in
+      - configure
+      - configure.ac
+      - install.sh
+      - mkdeb.sh
+      - mketc.sh
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+      with:
+        egress-policy: block
+        allowed-endpoints: >
+          azure.archive.ubuntu.com:80
+          github.com:443
+          packages.microsoft.com:443
+          ppa.launchpadcontent.net:443
+    - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: update package information
+      run: sudo apt-get update -qy
+    - name: install dependencies
+      run: >
+        sudo apt-get install -qy
+        gcc-12 libapparmor-dev libselinux1-dev
+    - name: print env
+      run: ./ci/printenv.sh
+    - name: configure
+      run: >
+        ./configure CC=gcc-12
+        --prefix=/usr --enable-fatal-warnings --enable-analyzer
+        --enable-apparmor --enable-selinux
+        || (cat config.log; exit 1)
+    - name: make
+      run: make
+    - name: make install
+      run: sudo make install
+    - name: print version
+      run: make print-version

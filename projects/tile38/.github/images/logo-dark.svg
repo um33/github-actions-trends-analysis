@@ -1,0 +1,92 @@
+<svg fill="none" viewBox="0 0 2458 804" width="611" height="200" xmlns="http://www.w3.org/2000/svg">
+  
+  <style>
+    .tile { stroke: #ffffff }
+    .tile-bg { stroke: black }
+    .three { stroke: #60869f }
+    .eight { stroke: #a32121 }
+    .eight-eight-join { fill: #d94d53 }
+    .three-eight-join { fill: #db6d74 }
+    .three-three-join { fill: #8ab0c8 }
+  </style>
+
+  <!-- TILE -->
+  <g>
+    <line x1="38.5" y1="145.5" x2="379.5" y2="145.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="209" y1="145.5" x2="209" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="553.5" y1="145.5" x2="553.5" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="743" y1="656.5" x2="1046" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="743" y1="145.5" x2="743" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="1191.5" y1="145.5" x2="1494.5" y2="145.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="1191.5" y1="401" x2="1453.5" y2="401" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="1191.5" y1="656.5" x2="1494.5" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+    <line x1="1191.5" y1="145.5" x2="1191.5" y2="656.5" 
+      stroke-width="76" stroke-linecap="round" class="tile" />
+  </g>
+
+  <!-- 38 -->
+  <defs>
+    <clipPath id="mask-circle-join">
+      <circle cx="107" cy="186" r="186" />
+    </clipPath>
+    <circle cx="107" cy="-119" r="186" stroke-width="67" 
+      clip-path="url(#mask-circle-join)" id="circle-join" />
+    <clipPath id="mask-circle-join-half">
+      <rect width="119" height="67" />
+    </clipPath>
+    <use href="#circle-join" clip-path="url(#mask-circle-join-half)" 
+      id="circle-join-half" />
+  </defs>
+  <g class="thirty-eight" transform="translate(2056 -77) rotate(45)">
+    <g transform="translate(186 186)" >
+      <g>
+        <g transform="translate(0 0) rotate(180 0 0)">
+          <g transform="translate(-152.5 0)">
+            <path d="M 0 0 a 1 1 0 0 0 305 0" 
+              stroke-width="67" stroke-linecap="round" class="three" />
+          </g>
+        </g>
+        <g transform="translate(0 0) rotate(271 0 0)">
+          <g transform="translate(-152.5 0)">
+            <path d="M 0 0 a 1 1 0 0 0 305 0"
+              stroke-width="67" stroke-linecap="round" class="three" />
+          </g>
+        </g>
+      </g>
+      <g transform="translate(0 305) rotate(90 0 0)">
+        <g transform="translate(0 0) rotate(180 0 0)">
+          <g transform="translate(-152.5 0)">
+            <path d="M 0 0 a 1 1 0 0 0 305 0"
+              stroke-width="67" stroke-linecap="round" class="three" />
+          </g>
+        </g>
+        <g transform="translate(0 0) rotate(271 0 0)">
+          <g transform="translate(-152.5 0)">
+            <path d="M 0 0 a 1 1 0 0 0 305 0"
+              stroke-width="67" stroke-linecap="round" class="three" />
+          </g>
+        </g>
+      </g>
+    </g>
+    <circle cx="491" cy="186" r="152.5" stroke-width="67" class="eight" />
+    <circle cx="491" cy="491" r="152.5" stroke-width="67" class="eight" />
+    <use href="#circle-join" transform="translate(384 305)" 
+      class="eight-eight-join"/>
+    <use href="#circle-join" transform="translate(372 79) rotate(90)" 
+      class="three-eight-join"/>
+    <use href="#circle-join" transform="translate(372 384) rotate(90)" 
+      class="three-eight-join" />
+    <use href="#circle-join-half" transform="translate(293 372) rotate(180)" 
+      class="three-three-join" />
+    <circle cx="179" cy="338.5" r="33.5" class="three-three-join" />
+  </g>
+
+</svg>

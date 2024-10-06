@@ -1,0 +1,72 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Pull Requests
+
+on: [pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [16.0.0, 16.x, 18.x, 20.x]
+        os: [windows-2019, ubuntu-20.04, ubuntu-22.04, macos-12]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Add msbuild to PATH
+        # we need msbuild tools for the `bcrypto` module
+        if: startsWith(matrix.os, 'windows-')
+        uses: microsoft/setup-msbuild@v1.1
+
+      - run: npm ci
+      - run: npm run tsc
+      - run: npm test
+        env:
+          FORCE_COLOR: 1
+          INFURA_KEY: ${{ secrets.TEST_INFURA_KEY }}
+
+      - name: Check bundle size
+        # this should match the os and version used in the release.yml
+        if: startsWith(matrix.os, 'ubuntu-22.04') && startsWith(matrix.node, '20.') && matrix.node != '20.0.0'
+        # 1. build ganache
+        # 2. pack it into a tarball
+        # 3. measure the _unpacked_ tarball's size
+        # 4. test to make sure the tarball is less than 99MB because jsDelivr
+        #    CDN doesn't allow bundles greater than 100MB.
+        # 5. exit with non-zero exit code if the test fails.
+        run: |
+          npm run build &&
+          npm run prepublishOnly &&
+          cd ./packages/ganache &&
+          npm pack &&
+          size="$(zcat ganache-*.tgz | wc -c)" &&
+          echo "Bundle size: $size" &&
+          echo "Bundle size is $([[ "$size" -lt 99000000 ]] && echo "ok" || echo "not ok")" &&
+          test "$size" -lt 99000000
+        env:
+          # use a fake infura key for the bundle size check so this test will
+          # run successfully on external contributor Pull Requests
+          INFURA_KEY: "badc0de0deadc0debadc0de0deadc0de"
+      - name: Upload artifact
+        # this should match the os and version used in the release.yml
+        if: startsWith(matrix.os, 'ubuntu-22.04') && startsWith(matrix.node, '20.') && matrix.node != '20.0.0'
+        uses: actions/upload-artifact@v3
+        with:
+          name: Candidate
+          path: ./packages/ganache/ganache-*.tgz

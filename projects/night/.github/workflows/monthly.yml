@@ -1,0 +1,19 @@
+name: auto_monthly_recommend
+
+on:
+  schedule:
+  - cron: "0 12 1 * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.5.3
+      - name: build-go
+        run: |
+          go env -w GO111MODULE=on
+          cd actions && go build -o monthly monthly.go
+      - name: create-issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        run: cd actions &&./monthly -c ./issuesinfo.json

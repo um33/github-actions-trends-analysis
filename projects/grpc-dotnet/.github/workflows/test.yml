@@ -1,0 +1,39 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ '**' ]
+  schedule:
+    - cron: 0 0 * * * # daily at 00:00
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+
+  build:
+    name: Basic Tests
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code
+      uses: actions/checkout@v2
+    
+    - name: Install dotnet
+      run: ./build/get-dotnet.sh
+
+    - name: Build and run tests
+      run: ./build_and_test.sh
+
+  grpc_web:
+    name: gRPC-Web Tests
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Run interop tests
+      run: ./grpcweb_interoptests.sh

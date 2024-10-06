@@ -1,0 +1,52 @@
+---
+# yamllint disable rule:comments rule:line-length
+name: Trigger Release
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+    inputs:
+      releaseVersion:
+        description: Version of the next release
+        required: true
+      developmentVersion:
+        description: Version of the next development cycle (must end in "-SNAPSHOT")
+        required: true
+jobs:
+  trigger-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      JAVA_OPTS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
+    steps:
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Set up JDK
+        uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: maven
+          server-id: ossrh
+          server-username: ${{ secrets.CI_DEPLOY_USERNAME }}
+          server-password: ${{ secrets.CI_DEPLOY_PASSWORD }}
+      - name: Set up Git
+        run: |
+          git config --global committer.email "48418865+dropwizard-committers@users.noreply.github.com"
+          git config --global committer.name "Dropwizard Release Action"
+          git config --global author.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git config --global author.name "${GITHUB_ACTOR}"
+      - name: Prepare release
+        run: ./mvnw -V -B -ntp -Prelease -DreleaseVersion=${{ inputs.releaseVersion }} -DdevelopmentVersion=${{ inputs.developmentVersion }} release:prepare
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          MAVEN_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ./mvnw -B release:rollback -Prelease
+          echo "You may need to manually delete the GitHub tag, if it was created."

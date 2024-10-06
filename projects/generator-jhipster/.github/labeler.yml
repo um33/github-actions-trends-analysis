@@ -1,0 +1,115 @@
+#
+# Copyright the original author or authors from the JHipster project.
+#
+# This file is part of the JHipster project, see https://www.jhipster.tech/
+# for more information.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+'theme: cli':
+  - changed-files:
+      - any-glob-to-any-file:
+          - cli/*
+
+'theme: CI Builds':
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**/*
+          - azure-pipelines.yml
+
+'theme: dependencies':
+  - changed-files:
+      - any-glob-to-any-file:
+          - package.json
+          - '**/package.json'
+          - package-lock.json
+
+'theme: front':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/common/**
+          - generators/client/**
+
+'theme: angular':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/angular/**
+
+'theme: react':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/react/**
+
+'theme: vue':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/vue/**
+
+'theme: jhipster-internals':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/*.*
+          - generators/app/**
+          - generators/base/**
+          - generators/base-application/**
+          - generators/bootstrap/**
+          - generators/bootstrap-*/**
+
+'theme: i18n':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/languages/**/*
+
+'theme: java':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/common/**
+          - generators/server/**/*
+
+'theme: upgrade':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/upgrade/**/*
+
+'theme: docker :whale:':
+  - changed-files:
+      - any-glob-to-any-file:
+          - Dockerfile
+          - generators/docker/**/*
+          - generators/docker-compose/**/*
+
+'theme: maven':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/maven/**/*
+          - '**/pom.xml*'
+
+'theme: gradle':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/gradle/**/*
+          - '**/*.gradle'
+          - '**/gradle/**/*'
+
+'theme: Heroku':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/heroku/**/*
+
+'theme: kubernetes':
+  - changed-files:
+      - any-glob-to-any-file:
+          - generators/kubernetes/**/*
+          - generators/kubernetes-helm/**/*
+          - generators/kubernetes-knative/**/*

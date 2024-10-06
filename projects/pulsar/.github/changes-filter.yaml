@@ -1,0 +1,23 @@
+# contains pattern definitions used in workflows "changes" step
+# pattern syntax: https://github.com/micromatch/picomatch
+all:
+  - '**'
+docs:
+  - '*.md'
+  - '**/*.md'
+  - '.asf.yaml'
+  - '.github/changes-filter.yaml'
+  - '.github/ISSUE_TEMPLATE/**'
+  - '.idea/**'
+  - 'deployment/**'
+  - 'wiki/**'
+  - 'pip/**'
+java_non_tests:
+  - '**/src/main/java/**/*.java'
+tests:
+  - added|modified: '**/src/test/java/**/*.java'
+need_owasp:
+  - 'pom.xml'
+  - '**/pom.xml'
+  - 'src/owasp-dependency-check-false-positives.xml'
+  - 'src/owasp-dependency-check-suppressions.xml'

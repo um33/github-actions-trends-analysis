@@ -1,0 +1,92 @@
+name: pry
+
+on: [push, pull_request]
+
+jobs:
+  rubocop:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.2
+
+    - name: Install dependencies
+      run: bundle install
+
+    - name: Rubocop lint
+      run: rubocop --parallel
+
+  test:
+    strategy:
+      matrix:
+        os: ['ubuntu-20.04', windows-latest]
+        ruby:
+          - '2.0'
+          - 2.1
+          - 2.2
+          - 2.3
+          - 2.4
+          - 2.5
+          - 2.6
+          - 2.7
+          # Due to https://github.com/actions/runner/issues/849,
+          # we have to use quotes for '3.0'
+          - '3.0'
+          - 3.1
+          - 3.2
+          - 3.3
+          - head
+          - jruby-9.3.3.0
+          # - jruby-head
+        exclude:
+          - os: windows-latest
+            ruby: jruby-9.3.3.0
+          - os: windows-latest
+            ruby: '2.0'
+          - os: windows-latest
+            ruby: '2.1'
+          - os: windows-latest
+            ruby: '2.2'
+          - os: windows-latest
+            ruby: '2.3' # Intermittent failing Expression: RBASIC_CLASS(ret) == rb_cString
+          - os: windows-latest
+            ruby: '3.1'
+          - os: windows-latest
+            ruby: '3.2'
+          - os: windows-latest
+            ruby: '3.3'
+          - os: windows-latest
+            ruby: 'head'
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby }}
+
+    # Run manually, don't cache deps due to a bug with Ruby 2.4 and Ruby 2.5
+    # https://github.com/pry/pry/actions/runs/1016360216
+    - name: Install dependencies
+      run: bundle install
+
+    - name: YARD lint
+      run: |
+        touch README # Workaround for "incorrect" links in README.md
+        bundle exec yardoc --fail-on-warning --no-progress --readme=README
+
+    - name: Display Ruby version
+      run: ruby -v
+
+    - name: Test
+      run: bundle exec rake
+      env:
+        # Make sure TERM is set so Pry can indent correctly inside tests.
+        TERM: screen-256color
+        ROWS: 40
+        COLUMNS: 160

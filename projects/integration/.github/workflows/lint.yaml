@@ -1,0 +1,57 @@
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    name: Run ${{ matrix.check }}
+    strategy:
+      matrix:
+        check:
+          - pyupgrade
+          - black
+          - codespell
+          - check-executables-have-shebangs
+          - check-json
+          - requirements-txt-fixer
+          - check-ast
+          - mixed-line-ending
+          - isort
+    steps:
+      - name: 📥 Checkout the repository
+        uses: actions/checkout@v4.1.1
+
+      - name: 🛠️ Set up Python
+        uses: actions/setup-python@v5.1.0
+        id: python
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install pre-commit
+        run: |
+          scripts/install/pip_packages pre-commit
+          pre-commit install-hooks --config .github/pre-commit-config.yaml
+
+      - name: 🏃 Run the check (${{ matrix.check }})
+        run: pre-commit run --hook-stage manual ${{ matrix.check }} --all-files --config .github/pre-commit-config.yaml
+
+  lint-json:
+    runs-on: ubuntu-latest
+    name: With JQ
+    steps:
+    - name: 📥 Checkout the repository
+      uses: actions/checkout@v4.1.1
+
+    - name: 🏃 Run validation
+      run: jq -r -e -c . tests/fixtures/*.json

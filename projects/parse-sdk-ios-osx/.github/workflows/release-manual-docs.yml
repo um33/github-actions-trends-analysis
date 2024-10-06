@@ -1,0 +1,47 @@
+name: release-manual-docs
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        default: ''
+        description: 'Version tag:' 
+env:
+  CI_XCODE_14: '/Applications/Xcode_14.2.app/Contents/Developer'
+
+jobs:
+  publish-docs:
+    if: github.event.inputs.tag != ''
+    runs-on: macos-13
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.tag }}
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@359bebbc29cbe6c87da6bc9ea3bc930432750108
+      - name: Cache Gems
+        id: cache-gems
+        uses: actions/cache@v3
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gem-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gem-
+      - name: Submodules
+        run: |
+          git submodule update --init --recursive
+          sudo gem install bundler -v 2.4.22
+          bundle config path vendor/bundle
+      - name: Bundle Install
+        if: steps.cache-gems.outputs.cache-hit != 'true'
+        run: bundle install
+      - name: Create Jazzy Docs
+        run: |
+          ./Scripts/jazzy.sh
+        env:
+          DEVELOPER_DIR: ${{ env.CI_XCODE_14 }}
+      - name: Deploy Jazzy Docs
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs

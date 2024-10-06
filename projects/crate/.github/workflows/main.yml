@@ -1,0 +1,72 @@
+---
+name: CrateDB SQL
+on:
+  pull_request:
+    paths:
+      - '**.java'
+      - 'pom.xml'
+      - '**/pom.xml'
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test CrateDB SQL on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Maven Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: "22"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Run tests on ${{ matrix.os }}
+        env:
+          CRATE_TESTS_SQL_REQUEST_TIMEOUT: "20"
+        run: |
+          mvn test \
+            -Dtests.crate.run-windows-incompatible=true \
+            -DforkCount=2 \
+            -DthreadCount=2 \
+            -Dcheckstyle.skip \
+            -Dforbiddenapis.skip=true \
+            -Dmaven.javadoc.skip=true \
+            -Djacoco.skip=true
+
+  forbiddenApis:
+    name: forbiddenApis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Maven Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: "22"
+          distribution: "temurin"
+          cache: maven
+      - name: Run forbiddenapis:check
+        run: |
+          mvn compile forbiddenapis:check
+
+  checkstyle:
+    name: checkstyle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Maven Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: "temurin"
+      - name: Run checkstyle
+        run: mvn compile checkstyle:checkstyle

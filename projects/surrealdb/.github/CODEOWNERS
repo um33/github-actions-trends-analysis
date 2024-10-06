@@ -1,0 +1,37 @@
+# Default owners for the repository
+* @tobiemh @surrealdb/surrealdb
+
+# Configuration for CI
+/.github/ @surrealdb/ci
+
+# Configuration for deployment
+.dockerignore @surrealdb/ci
+build.rs @surrealdb/ci
+*.nix @surrealdb/ci
+flake.lock @surrealdb/ci
+/.cargo/ @surrealdb/ci
+/.config/ @surrealdb/ci
+/dev/ @surrealdb/ci
+/pkg/ @surrealdb/ci
+Makefile @surrealdb/ci
+Makefile.* @surrealdb/ci
+
+# Configuration for Rust dependencies
+Cargo.lock @surrealdb/security
+Cargo.toml @surrealdb/security
+core/Cargo.toml @surrealdb/security
+lib/Cargo.toml @surrealdb/security
+cackle.toml @surrealdb/security
+supply-chain/* @surrealdb/security
+deny.toml @surrealdb/security
+
+# Code for fuzzing configuration
+/lib/fuzz/ @surrealdb/security
+SECURITY.md @surrealdb/security
+
+# Code and tests for indexing
+/core/src/idx/ @surrealdb/ix
+
+# Tests related to the storage
+/core/src/key/ @surrealdb/kv
+/core/src/kvs/ @surrealdb/kv

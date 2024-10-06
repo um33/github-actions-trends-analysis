@@ -1,0 +1,70 @@
+name: create-spectacle
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/create-spectacle.yml'
+      - 'packages/create-spectacle/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/create-spectacle.yml'
+      - 'packages/create-spectacle/**'
+
+jobs:
+  build:
+    name: Create, build, and install
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+        create-type: ['tsx', 'onepage']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 7
+
+      - uses: actions/setup-node@v4
+        with:
+          cache: 'pnpm'
+          node-version: ${{ matrix.node-version }}
+
+      # Wireit cache
+      - uses: google/wireit@setup-github-actions-caching/v1
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Copy Spectacle package
+        run: pnpm run --filter ./packages/create-spectacle copy-spectacle-package
+
+      - name: Build create-spectacle
+        run: pnpm run --filter ./packages/create-spectacle build
+
+      # Create, build, isntall a full example.
+      # Then, start a background dev server.
+      - name: Create example - ${{ matrix.create-type }}
+        working-directory: ./packages/create-spectacle
+        run: pnpm run examples:${{ matrix.create-type }}:create
+
+      - name: Install example - ${{ matrix.create-type }}
+        working-directory: ./packages/create-spectacle
+        run: pnpm run examples:${{ matrix.create-type }}:install
+
+      - name: Build example - ${{ matrix.create-type }}
+        working-directory: ./packages/create-spectacle
+        run: pnpm run examples:${{ matrix.create-type }}:build
+
+      # Wait until the dev server is full up and running and then test.
+      - name: Start and test example - ${{ matrix.create-type }}
+        working-directory: ./packages/create-spectacle
+        run: |
+          pnpm run examples:${{ matrix.create-type }}:start & \
+          pnpm exec wait-on http-get://localhost:3000 && \
+          pnpm run examples:test

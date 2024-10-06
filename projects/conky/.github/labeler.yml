@@ -1,0 +1,53 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - doc/*
+          - doc/**/*
+
+extras:
+  - changed-files:
+      - any-glob-to-any-file:
+          - extras/*
+          - extras/**/*
+
+sources:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/*
+          - src/**/*
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**/*
+          - tests/*
+
+web:
+  - changed-files:
+      - any-glob-to-any-file:
+          - web/*
+          - web/**/*
+
+appimage:
+  - changed-files:
+      - any-glob-to-any-file:
+          - appimage/*
+          - appimage/**/*
+
+3rdparty:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 3rdparty/*
+          - 3rdparty/**/*
+
+gh-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/*
+          - .github/workflows/**/*
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - web/package-lock.json
+          - cmake/ConkyPlatformChecks.cmake

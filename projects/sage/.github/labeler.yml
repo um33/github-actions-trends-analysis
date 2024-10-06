@@ -1,0 +1,27 @@
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .eslintrc.js
+          - .prettierrc
+          - .stylelintrc
+          - bud.config.js
+          - tsconfig.json
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - yarn.lock
+javascript:
+  - changed-files:
+      - any-glob-to-any-file:
+          - resources/scripts/**/*.js
+php:
+  - changed-files:
+      - any-glob-to-any-file:
+          - functions.php
+          - app/**/*.php
+          - resources/views/**/*.php
+views:
+  - changed-files:
+      - any-glob-to-any-file:
+          - index.php
+          - resources/views/**/*.php

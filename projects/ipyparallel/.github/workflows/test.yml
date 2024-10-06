@@ -1,0 +1,168 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - "pre-commit-ci*"
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-
+    ${{ github.ref_type }}-
+    ${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  # UTF-8 content may be interpreted as ascii and causes errors without this.
+  LANG: C.UTF-8
+  IPP_DISABLE_JS: "1"
+  JUPYTER_PLATFORM_DIRS: "1"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.runs_on || 'ubuntu-20.04' }}
+    timeout-minutes: 20
+
+    strategy:
+      # Keep running even if one variation of the job fail
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.9"
+            cluster_type: ssh
+          - python: "3.8"
+            cluster_type: mpi
+          - python: "3.10"
+            cluster_type: slurm
+            container: slurmctld
+          - python: "3.8"
+          - python: "3.10"
+            env:
+              IPP_CONTROLLER_IP: "*"
+          - python: "3.9"
+            env:
+              IPP_ENABLE_CURVE: "1"
+          - python: "3.8"
+            runs_on: windows-2019
+          - python: "3.9"
+            runs_on: macos-11
+          - python: "3.11"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache conda environment
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/conda
+          key: conda
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Set environment variables
+        if: ${{ matrix.env }}
+        env:
+          MATRIX_ENV: ${{ toJSON(matrix.env) }}
+        run: |
+          python3 <<EOF
+          import json
+          import os
+          matrix_env = json.loads(os.environ["MATRIX_ENV"])
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              for key, value in matrix_env.items():
+                  f.write(f"{key}={value}\n")
+          EOF
+
+      - name: Set up docker-compose for ssh launcher
+        if: ${{ matrix.cluster_type == 'ssh' }}
+        run: |
+          export DOCKER_BUILDKIT=1
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          cd ci/ssh
+          docker-compose up -d --build
+
+      - name: Set up slurm
+        if: ${{ matrix.cluster_type == 'slurm' }}
+        run: |
+          export DOCKER_BUILDKIT=1
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          cd ci/slurm
+          docker-compose up -d --build
+
+      - name: Install Python (conda) ${{ matrix.python }}
+        if: ${{ matrix.cluster_type == 'mpi' }}
+        run: |
+          export MAMBA_ROOT_PREFIX=$HOME/conda
+          test -d $MAMBA_ROOT_PREFIX || mkdir $MAMBA_ROOT_PREFIX
+          wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+          eval "$(./bin/micromamba shell hook -s posix)"
+          micromamba activate
+          micromamba install -y -c conda-forge mpich mpi4py python=${{ matrix.python }}
+          echo "PATH=$MAMBA_ROOT_PREFIX/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install Python ${{ matrix.python }}
+        if: ${{ matrix.cluster_type != 'mpi' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install ipyparallel itself
+        run: |
+          pip install --upgrade pip
+          pip install --no-deps .
+
+      - name: Install Python dependencies
+        run: |
+          pip install --pre --upgrade ipyparallel[test]
+
+      - name: Install extra Python packages
+        if: ${{ ! startsWith(matrix.python, '3.11') }}
+        run: |
+          pip install distributed joblib
+          pip install --only-binary :all: matplotlib || echo "no matplotlib"
+
+      - name: Show environment
+        run: pip freeze
+
+      - name: Run tests in container ${{ matrix.container }}
+        if: ${{ matrix.container }}
+        run: echo "EXEC=docker exec -i ${{ matrix.container }}" >> $GITHUB_ENV
+
+      - name: Run ${{ matrix.cluster_type }} tests
+        if: ${{ matrix.cluster_type }}
+        run: |
+          ${EXEC:-} pytest -v --maxfail=2 --cov=ipyparallel ipyparallel/tests/test_${{ matrix.cluster_type }}.py
+
+      - name: Run tests
+        if: ${{ ! matrix.cluster_type }}
+        run: |
+          pytest -v --maxfail=3 --cov=ipyparallel
+
+      - name: Fixup coverage permissions ${{ matrix.container }}
+        if: ${{ matrix.container }}
+        run: |
+          ls -l .coverage*
+          ${EXEC} chmod -R a+rw .coverage*
+
+      - name: Submit codecov report
+        uses: codecov/codecov-action@v4
+
+      - name: Report on slurm
+        if: ${{ matrix.cluster_type == 'slurm' && failure() }}
+        run: |
+          set -x
+          docker ps -a
+          docker logs slurmctld
+          docker exec -i slurmctld squeue --states=all
+          docker exec -i slurmctld sinfo
+          docker logs c1
+          docker logs c2

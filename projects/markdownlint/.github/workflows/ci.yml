@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+  schedule:
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        node-version: [ 18, 20 ]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Install Dependencies
+      run: npm install --no-package-lock
+    - name: Run CI Tests
+      run: npm run ci
+    - name: Install markdownlint-micromark Dependencies
+      run: npm run install-micromark
+    - name: Build markdownlint-micromark
+      run: npm run build-micromark
+    - name: Install local markdownlint-micromark
+      run: npm install --no-package-lock ./micromark
+    - name: Test with local markdownlint-micromark
+      run: npm test

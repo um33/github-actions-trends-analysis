@@ -1,0 +1,50 @@
+name: Python CI
+
+on:
+  push: {}
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "pypy-3.9"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        exclude:
+        - os: windows-latest
+          python-version: "pypy-3.9"
+        - os: macos-latest
+          python-version: "pypy-3.9"
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip twine
+        pip install poetry
+        poetry install
+    - name: Run test suite
+      run: |
+        poetry run py.test -v --cov=tinydb
+    - name: Perform type check
+      run: |
+        poetry run pip install pytest-mypy
+        poetry run pytest --mypy -m mypy tinydb tests
+    - name: Verify dist package format
+      run: |
+        poetry build
+        twine check dist/*
+      if: ${{ contains(matrix.python-version, '3.10') }}
+    - name: Upload coverage result
+      if: ${{ env.COVERALLS_REPO_TOKEN != 'windows-latest' }}
+      env:
+        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+      run: |
+         poetry run coveralls

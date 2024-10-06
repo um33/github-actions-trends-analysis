@@ -1,0 +1,23 @@
+name: Helper (Rebase)
+
+on:
+  issue_comment:
+    types: [created]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.ACTIVE_TOKEN }}
+  
+jobs:
+  rebase:
+    name: Rebase
+    if: github.event.issue.pull_request && (contains(github.event.comment.body, '/rebase') || contains(github.event.comment.body, '\rebase'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the latest code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.ACTIVE_TOKEN }}
+          fetch-depth: 0 # otherwise, you will fail to push refs to dest repo
+      - name: Automatic Rebase
+        uses: cirrus-actions/rebase@1.4
+        

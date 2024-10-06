@@ -1,0 +1,39 @@
+on:
+  workflow_call:
+
+env:
+  DOTNET_INSTALL_DIR: "./.dotnet"
+  DOTNET_ROLL_FORWARD: "Major"
+  
+jobs:
+  unit_test:
+    name: ${{ matrix.os }} - ${{ matrix.targetFramework }}
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-13, macos-14]
+        targetFramework: [ 'net8.0', 'net7.0', 'net6.0' ]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    -
+      name: Restore State
+      uses: ./.github/actions/artifacts-restore
+    -
+      name: '[Unit Test]'
+      shell: pwsh
+      run: dotnet run/build.dll --target=Test --dotnet_target=${{ matrix.targetFramework }}
+
+    -
+      name: Test Summary
+      uses: test-summary/action@v2.3
+      if: matrix.targetFramework == 'net8.0'
+      with:
+        paths: artifacts/test-results/*.results.xml

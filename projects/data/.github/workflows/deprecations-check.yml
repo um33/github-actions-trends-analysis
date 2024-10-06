@@ -1,0 +1,48 @@
+name: 'Check Deprecations'
+
+on:
+  workflow_dispatch:
+
+env:
+  TURBO_API: http://127.0.0.1:9080
+  TURBO_TOKEN: this-is-not-a-secret
+  TURBO_TEAM: myself
+
+jobs:
+  test-all-deprecations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 19.x
+          cache: 'pnpm'
+      - name: Install dependencies for main
+        run: pnpm install
+      - name: Basic Tests
+        env:
+          CI: true
+          ASSERT_ALL_DEPRECATIONS: true
+        run: pnpm test
+
+  test-all-deprecations-releases:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ember-beta, ember-canary]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 19.x
+          cache: 'pnpm'
+      - name: Install dependencies for ${{ matrix.scenario }}
+        run: pnpm install
+      - name: Basic Tests
+        env:
+          CI: true
+          ASSERT_ALL_DEPRECATIONS: true
+        run: pnpm test:try-one ${{ matrix.scenario }} -- ember test --test-port=0

@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    name: Build binary
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: ${{ github.event.repository.name }}-${{ github.ref_name }}-ubuntu-amd64.tar.gz
+          - os: macos-latest
+            name: ${{ github.event.repository.name }}-${{ github.ref_name }}-macos-amd64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Release build os - ${{ matrix.os }}
+        run: |
+          chmod +x ci/release-build.sh
+          ./ci/release-build.sh install ${{ matrix.os }} ${{ env.BUILD_TYPE }}
+
+      - name: Calculate checksum and rename binary
+        run: |
+          chmod +x ci/release-build.sh
+          ./ci/release-build.sh checksum ${{ github.event.repository.name }} ${{ matrix.name }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.name }}
+          path: build/${{ matrix.name }}
+
+      - name: Upload checksum of artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.name }}.sha256sum
+          path: build/${{ matrix.name }}.sha256sum
+
+  centos:
+    runs-on: ubuntu-latest
+    container:
+      image: centos:7
+    env:
+      name: ${{ github.event.repository.name }}-${{ github.ref_name }}-centos-amd64.tar.gz
+    steps:
+      - name: Install deps
+        run: |
+          yum install -y wget git autoconf centos-release-scl gcc perl-Digest-SHA
+          yum install -y devtoolset-10-gcc devtoolset-10-gcc-c++ devtoolset-10-make devtoolset-10-bin-util
+          yum install -y llvm-toolset-7 llvm-toolset-7-clang tcl which 
+
+      - name: Install cmake
+        run: |
+          wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.sh
+          bash ./cmake-3.26.4-linux-x86_64.sh --skip-license --prefix=/usr
+
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Release build os - centos
+        run: |
+          chmod +x ci/release-build.sh
+          ./ci/release-build.sh install centos ${{ env.BUILD_TYPE }} -xe
+
+      - name: Calculate checksum and rename binary
+        shell: bash
+        run: ./ci/release-build.sh checksum ${{ github.event.repository.name }} ${{ env.name }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.name }}
+          path: build/${{ env.name }}
+
+      - name: Upload checksum of artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.name }}.sha256sum
+          path: build/${{ env.name }}.sha256sum
+
+  release:
+    name: Release artifacts
+    needs: [ build,centos ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            **/${{ github.event.repository.name }}-*

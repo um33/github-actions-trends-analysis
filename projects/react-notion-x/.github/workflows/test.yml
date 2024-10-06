@@ -1,0 +1,78 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: yarn test
+
+  build-minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+
+      - name: Build minimal example
+        run: |
+          cd examples/minimal
+          yarn build
+
+  build-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+
+      - name: Build full example
+        run: |
+          cd examples/full
+          yarn build
+
+  # TODO: using the official API with GitHub Actions results in too much rate
+  # limiting and false negative build failures, so we're disabling it for now.
+  # build-full-official-api:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+
+  #     - uses: actions/setup-node@v3
+  #       with:
+  #         node-version: 16
+  #         cache: yarn
+
+  #     - run: yarn install --frozen-lockfile
+  #     - run: yarn build
+
+  #     - name: Build full example using the official Notion API
+
+  #       env:
+  #         USE_OFFICIAL_NOTION_API: true
+  #         NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+
+  #       run: |
+  #         cd examples/full
+  #         yarn build

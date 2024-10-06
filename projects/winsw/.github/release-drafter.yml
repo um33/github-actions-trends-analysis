@@ -1,0 +1,45 @@
+# Configuration for Release Drafter: https://github.com/release-drafter/release-drafter
+
+name-template: WinSW v$NEXT_PATCH_VERSION
+tag-template: v$NEXT_PATCH_VERSION
+
+# This repo follows the Semantic Versioning 2.0.0 convention: https://semver.org/spec/v2.0.0.html
+version-template: $MAJOR.$MINOR.$PATCH
+
+template: $CHANGES
+
+# Emoji reference: https://gitmoji.carloscuesta.me/
+categories:
+  - title: 🚨 Removed
+    label: removed
+  - title: ⚠️ Deprecated
+    label: deprecated
+  - title: 🎉 New features
+    label: new-feature
+  - title: 🚀 Enhancements
+    label: enhancement
+  - title: 🐛 Bug fixes
+    label: bug
+  - title: 📦 Packaging changes
+    label: packaging
+  - title: 📝 Documentation updates
+    label: documentation
+  # Default label used by Dependabot
+  - title: ⬆️ Dependency updates
+    label: dependencies
+  - title: 👻 Maintenance
+    labels: 
+      - internal
+      - build-flow
+  - title: 🚦 Tests
+    label: tests
+exclude-labels:
+  - reverted
+  - skip-changelog
+  - invalid
+
+replacers:
+  - search: '/CVE-(\d{4})-(\d+)/g'
+    replace: 'https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-$1-$2'
+  - search: 'WinSW'
+    replace: 'Windows Service Wrapper'

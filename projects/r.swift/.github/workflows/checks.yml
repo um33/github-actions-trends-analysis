@@ -1,0 +1,135 @@
+name: Checks
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: '*'
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_14.0.app/Contents/Developer
+
+jobs:
+  unit-tests:
+    runs-on: macos-12
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Pull cache
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}spm${{ hashFiles('**/Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}spm
+    - name: Test
+      run: swift test -v
+
+  test-iOS-ResourceApp:
+    runs-on: macos-12
+    needs: build-rswift
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download build
+      uses: actions/download-artifact@v1
+      with:
+        name: rswift-dev
+    - name: Put build into place
+      run: |
+        mkdir -p .build/release
+        mv rswift-dev/rswift .build/release/rswift
+        chmod +x .build/release/rswift
+    - name: Pull cache
+      uses: actions/cache@v3
+      id: podcache-ios
+      with:
+        path: Examples/ResourceApp/Pods
+        key: ${{ runner.os }}pods${{ hashFiles('**/Podfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}pods
+    - name: Install pods
+      if: steps.podcache-ios.outputs.cache-hit != 'true'
+      run: pod install --project-directory=Examples/ResourceApp
+    - name: Test
+      #run: fastlane scan --workspace "Examples/ResourceApp/ResourceApp.xcworkspace" --scheme "ResourceApp"
+      run: xcodebuild -workspace Examples/ResourceApp/ResourceApp.xcworkspace -scheme ResourceApp -destination 'platform=iOS Simulator,name=iPhone 14,OS=16.0' test
+
+  test-iOS-StaticFrameworks:
+    runs-on: macos-12
+    needs: build-rswift
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download build
+      uses: actions/download-artifact@v1
+      with:
+        name: rswift-dev
+    - name: Put build into place
+      run: |
+        mkdir -p .build/release
+        mv rswift-dev/rswift .build/release/rswift
+        chmod +x .build/release/rswift
+    - name: Test
+      #run: fastlane scan --project "Examples/RswiftAppWithStaticFrameworks/RswiftAppWithStaticFrameworks.xcodeproj" --scheme "App"
+      run: xcodebuild -project Examples/RswiftAppWithStaticFrameworks/RswiftAppWithStaticFrameworks.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 14,OS=16.0' test
+
+  test-iOS-LocalizedStringApp:
+    runs-on: macos-12
+    needs: build-rswift
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download build
+      uses: actions/download-artifact@v1
+      with:
+        name: rswift-dev
+    - name: Put build into place
+      run: |
+        mkdir -p .build/release
+        mv rswift-dev/rswift .build/release/rswift
+        chmod +x .build/release/rswift
+    - name: Test
+      run: xcodebuild -project Examples/LocalizedStringApp/LocalizedStringApp.xcodeproj -scheme LocalizedStringApp -destination 'platform=iOS Simulator,name=iPhone 14,OS=16.0' test
+
+  test-tvOS:
+    runs-on: macos-12
+    needs: build-rswift
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download build
+      uses: actions/download-artifact@v1
+      with:
+        name: rswift-dev
+    - name: Put build into place
+      run: |
+        mkdir -p .build/release
+        mv rswift-dev/rswift .build/release/rswift
+        chmod +x .build/release/rswift
+    - name: Test
+      #run: fastlane scan --project "Examples/RtvApp/RtvApp.xcodeproj" --scheme "ResourceApp-tvOS"
+      run: xcodebuild -project Examples/RtvApp/RtvApp.xcodeproj -scheme ResourceApp-tvOS -destination 'platform=tvOS Simulator,name=Apple TV,OS=16.0' test
+
+  build-rswift:
+    runs-on: macos-12
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Pull cache
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}spm${{ hashFiles('**/Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}spm
+    - name: Set version
+      run: |
+        sed -i "" "s/\(static let version = \"\)Unknown\(\"\)/\1Development build: ${GITHUB_SHA}\2/" Sources/rswift/Config.swift
+    - name: Build
+      run: swift build -v -c release
+    - name: Store artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rswift-dev
+        path: .build/release/rswift

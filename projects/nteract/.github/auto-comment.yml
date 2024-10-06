@@ -1,0 +1,9 @@
+issueOpened: >
+  Thanks for opening this issue! A member of the nteract community will triage this issue as soon as possible.
+  
+  In the mean time, please help us out by ensuring that you're bug report or feature request is complete and detailed.
+
+pullRequestOpened: >
+  Thanks for opening this issue! A member of the nteract community will review this pull request as soon as possible.
+
+  In the mean time, be sure that you've followed the contribution guidelines, updated the changelog template, and added tests for your change.

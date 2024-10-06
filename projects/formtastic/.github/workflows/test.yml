@@ -1,0 +1,61 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v2
+  test:
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        gemfile:
+          - gemfiles/rails_6.0/Gemfile
+          - gemfiles/rails_6.1/Gemfile
+          - gemfiles/rails_7.0/Gemfile
+          - gemfiles/rails_7.1/Gemfile
+          - gemfiles/rails_edge/Gemfile
+
+        ruby:
+          - 2.6.6
+          - 2.7.2
+          - 3.0.0
+
+        exclude:
+          - ruby: 2.6.6
+            gemfile: gemfiles/rails_7.0/Gemfile
+          - ruby: 2.6.6
+            gemfile: gemfiles/rails_7.1/Gemfile
+          - ruby: 2.6.6
+            gemfile: gemfiles/rails_edge/Gemfile
+
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 11
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          bundler: latest
+
+      - name: Run tests
+        run: |
+          bundle exec rake spec
+          script/integration.sh
+        continue-on-error: ${{ matrix.gemfile == 'gemfiles/rails_edge/Gemfile' }}

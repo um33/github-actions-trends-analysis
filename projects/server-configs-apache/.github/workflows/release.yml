@@ -1,0 +1,34 @@
+# https://docs.github.com/actions
+
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./bin/build.sh dist/.htaccess bin/htaccess.conf
+      - name: Deploy to NPM
+        uses: JS-DevTools/npm-publish@v3.1.1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+
+  github:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./bin/build.sh dist/h5bp.htaccess bin/htaccess.conf
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/h5bp.htaccess
+          asset_name: h5bp.htaccess
+          asset_content_type: application/octet-stream

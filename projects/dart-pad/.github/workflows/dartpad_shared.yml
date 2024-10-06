@@ -1,0 +1,40 @@
+name: package:dartpad_shared
+
+permissions: read-all
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/dartpad_shared.yml'
+      - 'pkgs/dartpad_shared/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/dartpad_shared.yml'
+      - 'pkgs/dartpad_shared/**'
+  schedule:
+    - cron: '0 0 * * 0' # weekly
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkgs/dartpad_shared/
+
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+      - uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3
+
+      - name: Install dart dependencies
+        run: dart pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Regenerate model classes
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze project source
+        run: dart analyze --fatal-infos

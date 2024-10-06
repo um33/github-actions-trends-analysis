@@ -1,0 +1,91 @@
+name: Examples
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: set-matrix
+        run: echo "::set-output name=matrix::$(ls packages/create-sst/bin/presets/examples/ | jq -R -s -c 'split("\n")[:-1]')"
+  generate:
+    needs: list
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: ${{ fromJson(needs.list.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Generate
+        run: |
+          rm -rf ./examples/${{ matrix.example }}
+          ./packages/create-sst/bin/create-sst.mjs --template=examples/${{ matrix.example }} ./examples/${{ matrix.example }}
+          find ./examples/${{ matrix.example }}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.example }}
+          path: |
+            examples/${{ matrix.example}}
+            !examples/${{ matrix.example}}/node_modules
+            !examples/${{ matrix.example}}/package-lock.json
+  commit:
+    needs: generate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Clear
+        run: rm -rf examples/*
+
+      - uses: actions/download-artifact@v3
+        with:
+          path: examples/
+
+      - name: Commit files
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          git commit --allow-empty -m "Generated Examples"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          branch: ${{ github.ref }}

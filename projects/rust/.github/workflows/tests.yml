@@ -1,0 +1,161 @@
+name: CI
+
+# Run this workflow every time a new commit is pushed to the repository
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly.
+    - cron: "0 0 * * 0"
+
+jobs:
+  configlet:
+    name: configlet lint
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Fetch configlet
+        run: ./bin/fetch-configlet
+
+      - name: Lint configlet
+        run: ./bin/configlet lint
+
+  markdownlint:
+    name: markdown lint
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Run markdown lint
+        run: ./bin/lint_markdown.sh
+
+  # stolen from https://raw.githubusercontent.com/exercism/github-actions/main/.github/workflows/shellcheck.yml
+  shellcheck:
+    name: Run shellcheck on scripts
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # v2.0.0
+
+  compilation:
+    name: Check compilation
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        rust: ["stable", "beta"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Fetch origin/main
+        run: git fetch --depth=1 origin main
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Check exercises
+        env:
+          DENYWARNINGS: "1"
+        run: ./bin/check_exercises.sh
+
+      - name: Ensure stubs compile
+        env:
+          DENYWARNINGS: "1"
+        run: ./bin/ensure_stubs_compile.sh
+
+  tests:
+    name: Run repository tests
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8
+        with:
+          toolchain: stable
+
+      - name: Run tests
+        run: cd rust-tooling/ci-tests && cargo test
+
+  rustformat:
+    name: Check Rust Formatting
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8
+        with:
+          toolchain: stable
+
+      - name: Format
+        run: ./bin/format_exercises.sh
+
+      - name: Diff
+        run: |
+          if ! git diff --color --exit-code; then
+            echo "Please run cargo fmt, or see the diff above:"
+            exit 1
+          fi
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Clippy tests
+        env:
+          CLIPPY: true
+        run: ./bin/check_exercises.sh
+
+      - name: Clippy stubs
+        env:
+          CLIPPY: true
+        run: ./bin/ensure_stubs_compile.sh
+
+  nightly-compilation:
+    name: Check exercises on nightly (benchmark enabled)
+    runs-on: ubuntu-22.04
+    continue-on-error: true # It's okay if the nightly job fails
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Setup nightly toolchain
+        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8
+        with:
+          toolchain: nightly
+
+      - name: Check exercises
+        env:
+          BENCHMARK: "1"
+        run: ./bin/check_exercises.sh

@@ -1,0 +1,153 @@
+name: test
+on:
+  push:
+    branches:
+      - "master"
+      - "release-*"
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  codegen:
+    name: Codegen
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: "1.20"
+      - name: Restore go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Install protoc
+        run: |
+          set -eux -o pipefail
+          PROTOC_VERSION=3.11.1
+          PROTOC_ZIP=protoc-$PROTOC_VERSION-linux-x86_64.zip
+          curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.11.1/$PROTOC_ZIP
+          sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
+          sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
+          sudo chmod +x /usr/local/bin/protoc
+          sudo find /usr/local/include -type f | xargs sudo chmod a+r
+          sudo find /usr/local/include -type d | xargs sudo chmod a+rx
+          rm -f $PROTOC_ZIP
+          ls /usr/local/include/google/protobuf/
+      - name: Install pandoc
+        run: |
+          set -eux -o pipefail
+          PANDOC_VERSION=2.17.1
+          PANDOC_ZIP=pandoc-$PANDOC_VERSION-linux-amd64.tar.gz
+          curl -OL https://github.com/jgm/pandoc/releases/download/$PANDOC_VERSION/$PANDOC_ZIP
+          sudo tar xvzf $PANDOC_ZIP --strip-components 1 -C /usr/local
+          rm -f $PANDOC_ZIP
+          echo /usr/local/pandoc-$PANDOC_VERSION/bin >> $GITHUB_PATH
+      - name: Get dependencies
+        run: go mod download
+      - name: Make codegen
+        run: make -B codegen
+      - name: Ensure nothing changed
+        run: git diff --exit-code
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: "1.20"
+      - name: Restore go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Get dependencies
+        run: go mod download
+      - name: Run tests
+        run: make test
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOPATH: /home/runner/go
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: "1.20"
+      - name: Restore go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: make lint
+      - run: git diff --exit-code
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KUBECONFIG: /home/runner/.kubeconfig
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - driver: stan
+          - driver: jetstream
+          - driver: kafka
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v4.1.0
+        with:
+          go-version: "1.20"
+      - name: Restore go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Install k3d
+        run: curl -sfL https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash &
+      - name: Create k3d registry and cluster
+        run: |
+          k3d registry create e2e-registry --port 5111
+          k3d cluster create e2e -i rancher/k3s:v1.21.7-k3s1 --registry-use k3d-e2e-registry:5111
+          echo '127.0.0.1 k3d-e2e-registry' | sudo tee -a /etc/hosts
+      - name: Run tests
+        run: |
+          IMAGE_NAMESPACE=k3d-e2e-registry:5111 VERSION=${{ github.sha }} DOCKER_PUSH=true make start
+          EventBusDriver=${{ matrix.driver }} make test-functional

@@ -1,0 +1,32 @@
+name: unstable
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_WITHOUT: "benchmark"
+      JRUBY_OPTS: "--debug"
+    strategy:
+      fail-fast: false
+
+      matrix:
+        ruby-version:
+          - ruby-head
+          - jruby-head
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+        continue-on-error: ${{ (matrix.ruby-version == 'ruby-head') || (matrix.ruby-version == 'jruby-head') }}
+
+      - run: |
+          bundle exec rake
+        continue-on-error: ${{ (matrix.ruby-version == 'ruby-head') || (matrix.ruby-version == 'jruby-head') }}

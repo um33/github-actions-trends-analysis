@@ -1,0 +1,3 @@
+## Need Help?
+
+If you have any questions please start with [Stack Overflow](https://stackoverflow.com/questions/tagged/botframework) where we're happy to help. Please use this GitHub Repos issue tracking capability to raise [issues](https://github.com/microsoft/botframework-solutions/issues/new?assignees=&labels=Needs+Triage%2C+Type%3A+Bug&template=bug_report.md&title=) or [feature requests](https://github.com/microsoft/botframework-solutions/issues/new?assignees=&labels=Needs+Triage&template=feature_request.md&title=).

@@ -1,0 +1,40 @@
+name: "Test Stateless Standalone"
+description: "Running stateless tests in standalone mode"
+inputs:
+  target:
+    description: ""
+    required: true
+    default: "x86_64-unknown-linux-gnu"
+runs:
+  using: "composite"
+  steps:
+    - uses: ./.github/actions/setup_bendsql
+
+    - name: Download artifact
+      uses: ./.github/actions/artifact_download
+      with:
+        sha: ${{ github.sha }}
+        target: ${{ inputs.target }}
+
+    - name: Test setup
+      shell: bash
+      run: |
+        bash ./scripts/setup/dev_setup.sh -yd
+
+    - name: Start UDF Server
+      shell: bash
+      run: |
+        pip install databend-udf
+        python3 tests/udf/udf_server.py &
+        sleep 2
+
+    - name: Run Stateless Tests with Standalone mode
+      shell: bash
+      run: |
+        bash ./scripts/ci/ci-run-stateless-tests-standalone.sh
+
+    - name: Upload failure
+      if: failure()
+      uses: ./.github/actions/artifact_failure
+      with:
+        name: test-stateless-standalone-linux

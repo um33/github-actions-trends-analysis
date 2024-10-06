@@ -1,0 +1,49 @@
+name: 'Setup Postgresql and Postgis'
+
+inputs:
+    postgresql-version:
+        description: 'Version of PostgreSQL to install'
+        required: true
+    postgis-version:
+        description: 'Version of Postgis to install'
+        required: true
+
+runs:
+    using: "composite"
+
+    steps:
+        - name: Remove existing PostgreSQL
+          run: |
+              sudo apt-get purge -yq postgresql*
+              sudo apt install curl ca-certificates gnupg
+              curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/apt.postgresql.org.gpg >/dev/null
+              sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+              sudo apt-get update -qq
+
+          shell: bash
+
+        - name: Install PostgreSQL
+          run: |
+              sudo apt-get install -y -qq --no-install-suggests --no-install-recommends postgresql-client-${PGVER} postgresql-${PGVER}-postgis-${POSTGISVER} postgresql-${PGVER}-postgis-${POSTGISVER}-scripts postgresql-contrib-${PGVER} postgresql-${PGVER}
+          shell: bash
+          env:
+              PGVER: ${{ inputs.postgresql-version }}
+              POSTGISVER: ${{ inputs.postgis-version }}
+
+        - name: Adapt postgresql configuration
+          run: |
+              echo 'fsync = off' | sudo tee /etc/postgresql/${PGVER}/main/conf.d/local.conf
+              echo 'synchronous_commit = off' | sudo tee -a /etc/postgresql/${PGVER}/main/conf.d/local.conf
+              echo 'full_page_writes = off' | sudo tee -a /etc/postgresql/${PGVER}/main/conf.d/local.conf
+              echo 'shared_buffers = 1GB' | sudo tee -a /etc/postgresql/${PGVER}/main/conf.d/local.conf
+              echo 'port = 5432' | sudo tee -a /etc/postgresql/${PGVER}/main/conf.d/local.conf
+          shell: bash
+          env:
+              PGVER: ${{ inputs.postgresql-version }}
+
+        - name: Setup database
+          run: |
+              sudo systemctl restart postgresql
+              sudo -u postgres createuser -S www-data
+              sudo -u postgres createuser -s runner
+          shell: bash

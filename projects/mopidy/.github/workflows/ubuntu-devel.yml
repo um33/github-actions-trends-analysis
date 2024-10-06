@@ -1,0 +1,33 @@
+name: "Ubuntu devel"
+
+on:
+  schedule:
+    # Every Friday at 18:20 UTC, so we can fix the issue over the weekend
+    - cron: "20 18 * * 5"
+  workflow_dispatch:
+
+jobs:
+  main:
+    name: "Test: Python 3.12"
+    runs-on: ubuntu-22.04
+
+    # The container should be automatically updated from time to time.
+    container: ubuntu:devel
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            git \
+            python3 \
+            tox \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-ugly \
+            python3-gst-1.0 \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            libglib2.0-dev
+      - uses: actions/checkout@v4
+      - run: tox -e py312

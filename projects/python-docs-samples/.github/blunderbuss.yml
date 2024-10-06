@@ -1,0 +1,346 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+###
+# Updates should be made to both assign_issues_by & assign_prs_by sections
+###
+assign_issues_by:
+  # DEE teams
+  - labels:
+      - "api: appengine"
+      - "api: cloudbuild"
+      - "api: cloudscheduler"
+      - "api: cloudtasks"
+      - "api: containeranalysis"
+      - "api: eventarc"
+      - "api: functions"
+      - "api: run"
+      - "api: workflows"
+    to:
+      - GoogleCloudPlatform/torus-dpe
+  - labels:
+      - "api: batch"
+      - "api: compute"
+      - "api: cloudkms"
+      - "api: iam"
+      - "api: kms"
+      - "api: privateca"
+      - "api: recaptchaenterprise"
+      - "api: secretmanager"
+      - "api: securitycenter"
+      - "api: vmwareengine"
+    to:
+      - GoogleCloudPlatform/dee-infra
+  - labels:
+      - "api: clouderrorreporting"
+      - "api: cloudtrace"
+      - "api: container"
+      - "api: logging"
+      - "api: monitoring"
+      - "api: trace"
+    to:
+      - GoogleCloudPlatform/dee-platform-ops
+  - labels:
+      - "api: people-and-planet-ai"
+    to:
+      - davidcavazos
+  - labels:
+      - "api: datacatalog"
+      - 'api: dataflow'
+      - "api: datalabeling"
+      - "api: dataproc"
+      - "api: dialogflow"
+      - "api: enterpriseknowledgegraph"
+      - "api: language"
+      - "api: ml"
+      - "api: notebooks"
+      - "api: optimization"
+      - "api: talent"
+      - "api: texttospeech"
+      - "api: translate"
+      - "api: vision"
+    to:
+      - GoogleCloudPlatform/dee-data-ai
+
+  # AppEco teams
+  - labels:
+      - "api: cloudsql"
+    to:
+      - GoogleCloudPlatform/infra-db-sdk
+  - labels:
+      - "api: bigtable"
+      - "api: datastore"
+      - "api: firestore"
+    to:
+      - GoogleCloudPlatform/cloud-native-db-dpes
+  - labels:
+      - "api: spanner"
+    to:
+      - GoogleCloudPlatform/api-spanner-python
+  - labels:
+      - "api: storage"
+      - "api: storagecontrol"
+      - "api: storagetransfer"
+    to:
+      - GoogleCloudPlatform/cloud-storage-dpes
+  - labels:
+      - "api: pubsub"
+      - "api: pubsublite"
+    to:
+      - GoogleCloudPlatform/api-pubsub-and-pubsublite
+  - labels:
+      - "api: composer"
+    to:
+      - GoogleCloudPlatform/cloud-dpes-composer
+  - labels:
+      - "api: bigquery"
+    to:
+      - GoogleCloudPlatform/api-bigquery
+
+  # AppEco individuals
+  - labels:
+      - "api: bigquery"
+    to:
+      - shollyman
+  - labels:
+      - "api: datascienceonramp"
+    to:
+      - leahecole
+      - bradmiro
+
+  # Self-service teams
+  - labels:
+      - "api: asset"
+    to:
+      - GoogleCloudPlatform/cloud-asset-analysis-team
+      - GoogleCloudPlatform/cloud-asset-platform-team
+  - labels:
+      - "api: contentwarehouse"
+      - "api: documentai"
+    to:
+      - GoogleCloudPlatform/document-ai-samples-contributors
+  - labels:
+      - "api: dlp"
+    to:
+      - GoogleCloudPlatform/googleapis-dlp
+  - labels:
+      - "api: functions"
+    to:
+      - GoogleCloudPlatform/functions-framework-google
+  - labels:
+      - "api: billingbudgets"
+      - "api: cloudbilling"
+    to:
+      - GoogleCloudPlatform/billing-samples-maintainers
+  - labels:
+      - "api: healthcare"
+    to:
+      - GoogleCloudPlatform/healthcare-life-sciences
+  - labels:
+      - "api: retail"
+    to:
+      - GoogleCloudPlatform/cloud-retail-team
+  - labels:
+      - "api: cloudmedia"
+    to:
+      - GoogleCloudPlatform/cloud-media-team
+  - labels:
+      - "api: speech"
+    to:
+      - GoogleCloudPlatform/cloud-speech-eng
+      - GoogleCloudPlatform/dee-data-ai
+  - labels:
+      - "api: serviceextensions"
+    to:
+      - GoogleCloudPlatform/service-extensions-samples-reviewers
+
+  # Self-service individuals
+  - labels:
+      - "api: auth"
+    to:
+      - arithmetic1728
+  - labels:
+      - "api: appengine"
+    to:
+      - jinglundong
+
+
+###
+# Updates should be made to both assign_issues_by & assign_prs_by sections
+###
+assign_prs_by:
+  # DEE teams
+  - labels:
+      - "api: cloudbuild"
+      - "api: cloudscheduler"
+      - "api: cloudtasks"
+      - "api: containeranalysis"
+      - "api: eventarc"
+      - "api: functions"
+      - "api: run"
+      - "api: workflows"
+    to:
+      - GoogleCloudPlatform/torus-dpe
+  - labels:
+      - "api: batch"
+      - "api: compute"
+      - "api: cloudkms"
+      - "api: iam"
+      - "api: kms"
+      - "api: privateca"
+      - "api: recaptchaenterprise"
+      - "api: secretmanager"
+      - "api: securitycenter"
+    to:
+      - GoogleCloudPlatform/dee-infra
+  - labels:
+      - "api: clouderrorreporting"
+      - "api: cloudtrace"
+      - "api: container"
+      - "api: logging"
+      - "api: monitoring"
+      - "api: trace"
+    to:
+      - GoogleCloudPlatform/dee-platform-ops
+  - labels:
+      - "api: people-and-planet-ai"
+    to:
+      - davidcavazos
+  - labels:
+      - "api: datacatalog"
+      - 'api: dataflow'
+      - "api: datalabeling"
+      - "api: dataproc"
+      - "api: dialogflow"
+      - "api: enterpriseknowledgegraph"
+      - "api: discoveryengine"
+      - "api: language"
+      - "api: ml"
+      - "api: notebooks"
+      - "api: optimization"
+      - "api: talent"
+      - "api: texttospeech"
+      - "api: transcoder"
+      - "api: translate"
+      - "api: vision"
+      - "api: videointelligence"
+    to:
+      - GoogleCloudPlatform/dee-data-ai
+
+  # AppEco teams
+  - labels:
+      - "api: cloudsql"
+    to:
+      - GoogleCloudPlatform/infra-db-sdk
+  - labels:
+      - "api: bigtable"
+      - "api: datastore"
+      - "api: firestore"
+    to:
+      - GoogleCloudPlatform/cloud-native-db-dpes
+  - labels:
+      - "api: spanner"
+    to:
+      - GoogleCloudPlatform/api-spanner-python
+  - labels:
+      - "api: storage"
+    to:
+      - GoogleCloudPlatform/cloud-storage-dpes
+  - labels:
+      - "api: pubsub"
+      - "api: pubsublite"
+    to:
+      - GoogleCloudPlatform/api-pubsub-and-pubsublite
+  - labels:
+      - "api: composer"
+    to:
+      - GoogleCloudPlatform/cloud-dpes-composer
+
+  # AppEco individuals
+  - labels:
+      - "api: bigquery"
+    to:
+      - shollyman
+  - labels:
+      - "api: datascienceonramp"
+    to:
+      - leahecole
+      - bradmiro
+
+  # Self-service teams
+  - labels:
+      - "api: asset"
+    to:
+      - GoogleCloudPlatform/cloud-asset-analysis-team
+      - GoogleCloudPlatform/cloud-asset-platform-team  
+  - labels:
+      - "api: contentwarehouse"
+      - "api: documentai"
+    to:
+      - GoogleCloudPlatform/document-ai-samples-contributors
+  - labels:
+      - "api: dlp"
+    to:
+      - GoogleCloudPlatform/googleapis-dlp
+  - labels:
+      - "api: functions"
+    to:
+      - GoogleCloudPlatform/functions-framework-google
+  - labels:
+      - "api: billingbudgets"
+      - "api: cloudbilling"
+    to:
+      - GoogleCloudPlatform/billing-samples-maintainers
+  - labels:
+      - "api: healthcare"
+    to:
+      - GoogleCloudPlatform/healthcare-life-sciences
+  - labels:
+      - "api: retail"
+    to:
+      - GoogleCloudPlatform/cloud-retail-team
+  - labels:
+      - "api: cloudmedia"
+      - "api: videostitcher"
+      - "api: videolivestream"
+    to:
+      - GoogleCloudPlatform/cloud-media-team
+  - labels:
+      - "api: speech"
+    to:
+      - GoogleCloudPlatform/cloud-speech-eng
+      - GoogleCloudPlatform/dee-data-ai
+  - labels:
+      - "api: serviceextensions"
+    to:
+      - GoogleCloudPlatform/service-extensions-samples-reviewers
+      - GoogleCloudPlatform/dee-infra
+  # Self-service individuals
+  - labels:
+      - "api: auth"
+    to:
+      - arithmetic1728
+  - labels:
+      - "api: appengine"
+    to:
+      - jinglundong
+assign_issues:
+  - GoogleCloudPlatform/python-samples-owners
+
+assign_prs:
+  - GoogleCloudPlatform/python-samples-owners
+
+###
+# Updates should be made to both assign_issues_by & assign_prs_by sections
+###

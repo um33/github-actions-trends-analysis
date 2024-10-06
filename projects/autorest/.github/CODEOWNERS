@@ -1,0 +1,6 @@
+# Default owners
+* @daviwil @timotheeguerin
+
+# Git Hub bot rules
+/.github/CODEOWNERS  @jsquire @ronniegeraghty
+/.github/fabricbot.json  @jsquire @ronniegeraghty

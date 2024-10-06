@@ -1,0 +1,639 @@
+name: Release
+
+on:
+  schedule:
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tags to be released
+        required: false
+        type: string
+      stable:
+        description: Make a stable release
+        required: false
+        type: boolean
+
+permissions:
+  id-token: write
+  pull-requests: write
+  checks: write
+  statuses: write
+  contents: write
+
+env:
+  BUILD_PROFILE: release
+
+jobs:
+  create_release:
+    name: create release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.tag }}
+      sha: ${{ steps.bump.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bump version
+        id: bump
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.ref.startsWith("refs/tags/")) {
+              let tag = context.ref.replace("refs/tags/", "");
+              core.setOutput('tag', tag);
+              core.info(`Tag event triggered by ${tag}.`);
+              return
+            }
+            if ("${{ inputs.stable }}" == "true") {
+              if ("${{ inputs.tag }}") {
+                // trigger stable release by workflow_dispatch with a tag
+                let tag = "${{ inputs.tag }}";
+                let result = /v(\d+)\.(\d+)\.(\d+)-nightly/g.exec(tag);
+                if (result === null) {
+                  core.setFailed(`The tag ${tag} to stablize is invalid, ignoring`);
+                  return
+                }
+                let major = result[1];
+                let minor = result[2];
+                let patch = result[3];
+                let stable_tag = `v${major}.${minor}.${patch}`;
+                core.setOutput('tag', stable_tag);
+                let ref = await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${tag}`,
+                });
+                core.setOutput('sha', ref.data.object.sha);
+                core.info(`Stable release ${stable_tag} from ${tag} (${ref.data.object.sha})`);
+              } else {
+                core.setFailed("Stable release must be triggered with a nightly tag")
+              }
+            } else {
+              if ("${{ inputs.tag }}") {
+                let tag = "${{ inputs.tag }}";
+                core.setOutput('tag', tag);
+                core.info(`Release create manually with tag ${tag}`);
+              } else {
+                let releases = await github.rest.repos.listReleases({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 1,
+                });
+                let tag = releases.data[0].tag_name;
+                let result = /v(\d+)\.(\d+)\.(\d+)/g.exec(tag);
+                if (result === null) {
+                  core.setFailed(`The previous tag ${tag} is invalid, ignoring`);
+                  return
+                }
+                let major = result[1];
+                let minor = result[2];
+                let patch = (parseInt(result[3]) + 1).toString();
+                let next_tag = `v${major}.${minor}.${patch}-nightly`;
+                core.setOutput('tag', next_tag);
+                core.setOutput('sha', context.sha);
+                core.info(`Nightly release ${next_tag} from ${tag} (${context.sha})`);
+              }
+            }
+      - name: Create release
+        env:
+          # we need workflow:write permission to create release if there were any workflow changes
+          # which is not possible for github actions token
+          GH_TOKEN: ${{ secrets.DATABEND_BOT_TOKEN }}
+        run: |
+          echo "Creating release ${{ steps.bump.outputs.tag }} from ${{ steps.bump.outputs.sha }}"
+          if [[ "${{ inputs.stable }}" == "true" ]]; then
+            echo "Stable release"
+            previous=$(gh release list --limit 1 --exclude-pre-releases | cut -f 1)
+            gh release create ${{ steps.bump.outputs.tag }} --target ${{ steps.bump.outputs.sha }} --generate-notes --notes-start-tag $previous --latest
+          else
+            echo "Nightly release"
+            previous=$(gh release list --limit 1 | cut -f 1)
+            gh release create ${{ steps.bump.outputs.tag }} --target ${{ steps.bump.outputs.sha }} --generate-notes --notes-start-tag $previous --prerelease
+          fi
+
+  changelog:
+    runs-on: ubuntu-latest
+    if: inputs.stable
+    needs: create_release
+    steps:
+      - name: Checkout Docs
+        uses: actions/checkout@v4
+        with:
+          repository: datafuselabs/databend-docs
+          ref: main
+      - name: Get date
+        shell: bash
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+      - name: Generate Release Note
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p docs/release-stable
+          df="docs/release-stable/${{ env.DATE }}_${{ needs.create_release.outputs.version }}.md"
+          echo "---" > $df
+          gh release view --repo datafuselabs/databend ${{ needs.create_release.outputs.version }} >> $df
+          sed -i -E 's/^--$/---/g' $df
+          sed -i -E '/^asset:/d' $df
+          sed -i -E 's_https://github.com/datafuselabs/databend/pull/([0-9]+)_[#\1](https://github.com/datafuselabs/databend/pull/\1)_g' $df
+          git add docs/release-stable
+          git status
+      - uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.DATABEND_BOT_TOKEN }}
+          title: "chore(docs): Update Release Notes - ${{ env.DATE }}"
+          base: main
+          commit-message: "chore(docs): Update Release Notes - ${{ env.DATE }}"
+          branch-suffix: random
+          delete-branch: true
+
+  linux:
+    runs-on: [self-hosted, "${{ matrix.runner }}", Linux, 16c32g, gcp]
+    needs: create_release
+    env:
+      RUNNER_PROVIDER: gcp
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: x86_64-unknown-linux-gnu, runner: X64}
+          - {target: aarch64-unknown-linux-gnu, runner: ARM64}
+          - {target: x86_64-unknown-linux-musl, runner: X64}
+          - {target: aarch64-unknown-linux-musl, runner: X64}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Build Release
+        uses: ./.github/actions/build_linux
+        with:
+          sha: ${{ github.sha }}
+          target: ${{ matrix.target }}
+          artifacts: sqllogictests,sqlsmith,metactl,meta,query
+          upload: false
+      - name: Basic Sqllogic Test
+        if: matrix.target != 'aarch64-unknown-linux-musl'
+        shell: bash
+        env:
+          TEST_HANDLERS: http
+        run: |
+          mkdir -p target/release
+          cp ./target/${{ matrix.target }}/release/databend-{meta,query,sqllogictests} ./target/release/
+          bash ./scripts/ci/ci-run-sqllogic-tests.sh base
+      - name: Pack Binaries
+        run: |
+          target=${{ matrix.target }}
+          version=${{ needs.create_release.outputs.version }}
+          mkdir -p release/${target}/{bin,configs,systemd,scripts}
+          cp ./target/${target}/release/databend-{query,meta,metactl} release/${target}/bin/
+          rm -f release/${target}/bin/*.d
+          cp ./scripts/distribution/systemd/databend-* release/${target}/systemd/
+          cp ./scripts/distribution/configs/databend-* release/${target}/configs/
+          cp ./scripts/distribution/release-readme.txt release/${target}/readme.txt
+          cp -r ./scripts/distribution/local-scripts/* release/${target}/scripts/
+          cp -r ./scripts/distribution/package-scripts/* release/${target}/scripts/
+          tar -C ./release/${target} -czvf databend-${version}-${target}.tar.gz bin configs systemd scripts readme.txt
+          sha256sum databend-${version}-${target}.tar.gz >> sha256-${version}-${target}.txt
+      - name: Pack Testsuite
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          target=${{ matrix.target }}
+          version=${{ needs.create_release.outputs.version }}
+          mkdir -p release/testsuite/bin
+          cp -r ./tests/sqllogictests/suites ./release/testsuite/
+          cp ./target/${target}/release/databend-{sqllogictests,sqlsmith} release/testsuite/bin/
+          tar -C ./release/testsuite -czvf databend-testsuite-${version}-${target}.tar.gz bin suites
+          sha256sum databend-testsuite-${version}-${target}.tar.gz >> sha256-testsuite-${version}-${target}.txt
+      - name: post sha256
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256sums-${{ matrix.target }}
+          path: sha256-*.txt
+          retention-days: 1
+      - name: Publish Binaries
+        uses: ./.github/actions/publish_binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+        with:
+          version: ${{ needs.create_release.outputs.version }}
+          target: ${{ matrix.target }}
+      - name: Publish Testsuite
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        uses: ./.github/actions/publish_binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          version: ${{ needs.create_release.outputs.version }}
+          target: ${{ matrix.target }}
+          category: testsuite
+
+  hdfs:
+    runs-on: [self-hosted, "${{ matrix.runner }}", Linux, 16c32g, gcp]
+    needs: create_release
+    env:
+      RUNNER_PROVIDER: gcp
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: x86_64-unknown-linux-gnu, runner: X64}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Setup Build Tool
+        uses: ./.github/actions/setup_build_tool
+        with:
+          target: ${{ matrix.target }}
+      - name: Build Release
+        uses: ./.github/actions/build_linux
+        with:
+          sha: ${{ github.sha }}
+          target: ${{ matrix.target }}
+          artifacts: meta,query
+          category: hdfs
+          features: storage-hdfs
+          upload: false
+      - name: Pack binaries
+        run: |
+          target=${{ matrix.target }}
+          version=${{ needs.create_release.outputs.version }}
+          mkdir -p release/${target}/{bin,configs,systemd,scripts}
+          cp ./target/${target}/release/databend-* release/${target}/bin/
+          rm -f release/${target}/bin/*.d
+          cp ./scripts/distribution/systemd/databend-* release/${target}/systemd/
+          cp ./scripts/distribution/configs/databend-* release/${target}/configs/
+          cp ./scripts/distribution/release-readme.txt release/${target}/readme.txt
+          cp -r ./scripts/distribution/local-scripts/* release/${target}/scripts/
+          cp -r ./scripts/distribution/package-scripts/* release/${target}/scripts/
+          tar -C ./release/${target} -czvf databend-hdfs-${version}-${target}.tar.gz bin configs systemd scripts readme.txt
+          sha256sum databend-hdfs-${version}-${target}.tar.gz >> sha256-hdfs-${version}-${target}.txt
+      - name: post sha256
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256sums-hdfs-${{ matrix.target }}
+          path: sha256-*.txt
+          retention-days: 1
+      - name: Publish Binaries
+        uses: ./.github/actions/publish_binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+        with:
+          version: ${{ needs.create_release.outputs.version }}
+          target: ${{ matrix.target }}
+          category: hdfs
+
+  docker_combined:
+    name: docker combined
+    runs-on: ubuntu-latest
+    needs: [create_release, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Download binaries for usage
+        id: download_binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.create_release.outputs.version }}"
+          declare -A platform_targets=( ["arm64"]="aarch64-unknown-linux-gnu" ["amd64"]="x86_64-unknown-linux-gnu")
+          mkdir -p ./distro/
+          for platform in ${!platform_targets[@]}; do
+              target=${platform_targets[$platform]}
+              gh release download ${version} --pattern "databend-${version}-${target}.tar.gz" --dir distro/
+              mkdir -p ./target/${target}/release
+              tar x -C ./target/${target}/release -f ./distro/databend-${version}-${target}.tar.gz --strip-components 1 bin/
+              mkdir -p ./distro/linux/${platform}
+              cp ./target/${target}/release/databend-* ./distro/linux/${platform}
+          done
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - uses: ./.github/actions/setup_docker
+        id: login
+        with:
+          repo: databend
+          ecr_role_arn: ${{ secrets.ECR_ROLE_ARN }}
+          dockerhub_user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get Image Tags
+        id: tags
+        uses: actions/github-script@v7
+        env:
+          REPO_DOCKERHUB: ${{ steps.login.outputs.dockerhub_repo }}
+          REPO_ECR: ${{ steps.login.outputs.ecr_repo }}
+          VERSION: ${{ needs.create_release.outputs.version }}
+          STABLE: ${{ inputs.stable }}
+        with:
+          script: |
+            const version = process.env.VERSION;
+            const repos = [process.env.REPO_DOCKERHUB, process.env.REPO_ECR];
+            const stable = process.env.STABLE;
+            let tags = [];
+            for (const repo of repos) {
+              tags.push(`${repo}:${version}`);
+              if (stable === 'true') {
+                tags.push(`${repo}:latest`);
+              } else {
+                tags.push(`${repo}:nightly`);
+              }
+            }
+            core.setOutput('tags', tags.join(','));
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
+          context: .
+          file: ./docker/Dockerfile
+      - name: Update repo description
+        continue-on-error: true
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.login.outputs.dockerhub_repo }}
+          short-description: "A modern cloud data warehouse. Also available in the cloud: https://app.databend.com."
+          readme-filepath: ./docker/README.md
+
+  docker_separate:
+    name: docker separate
+    runs-on: ubuntu-latest
+    needs: [create_release, linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - meta
+          - query
+        distro:
+          - debian
+          - distroless
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Download binaries for usage
+        id: download_binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.create_release.outputs.version }}"
+          declare -A platform_targets=( ["arm64"]="aarch64-unknown-linux-gnu" ["amd64"]="x86_64-unknown-linux-gnu")
+          mkdir -p ./distro/
+          for platform in ${!platform_targets[@]}; do
+              target=${platform_targets[$platform]}
+              gh release download ${version} --pattern "databend-${version}-${target}.tar.gz" --dir distro/
+              mkdir -p ./target/${target}/release
+              tar x -C ./target/${target}/release -f ./distro/databend-${version}-${target}.tar.gz --strip-components 1 bin/
+              mkdir -p ./distro/linux/${platform}
+              cp ./target/${target}/release/databend-* ./distro/linux/${platform}
+          done
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - uses: ./.github/actions/setup_docker
+        id: login
+        with:
+          repo: databend-${{ matrix.service }}
+          ecr_role_arn: ${{ secrets.ECR_ROLE_ARN }}
+          dockerhub_user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get Image Tags
+        id: tags
+        uses: actions/github-script@v7
+        env:
+          DISTRO: ${{ matrix.distro }}
+          REPO_DOCKERHUB: ${{ steps.login.outputs.dockerhub_repo }}
+          REPO_ECR: ${{ steps.login.outputs.ecr_repo }}
+          VERSION: ${{ needs.create_release.outputs.version }}
+          STABLE: ${{ inputs.stable }}
+        with:
+          script: |
+            const version = process.env.VERSION;
+            const distro = process.env.DISTRO;
+            const repos = [process.env.REPO_DOCKERHUB, process.env.REPO_ECR];
+            const stable = process.env.STABLE;
+            let tags = [];
+            for (const repo of repos) {
+              tags.push(`${repo}:${version}-${distro}`);
+              if (distro === 'debian') {
+                tags.push(`${repo}:${version}`);
+                if (stable === 'true') {
+                  tags.push(`${repo}:latest`);
+                } else {
+                  tags.push(`${repo}:nightly`);
+                }
+              }
+            }
+            core.setOutput('tags', tags.join(','));
+      - name: push service image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
+          context: .
+          file: ./docker/${{ matrix.distro }}/${{ matrix.service }}.Dockerfile
+
+  distribution:
+    runs-on: ubuntu-latest
+    needs: [create_release, linux]
+    strategy:
+      matrix:
+        arch:
+          - x86_64
+          - aarch64
+        packager:
+          - deb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Install nfpm@latest
+        run: |
+          curl -sSLo nfpm.tar.gz https://github.com/goreleaser/nfpm/releases/download/v2.26.0/nfpm_2.26.0_Linux_x86_64.tar.gz
+          tar xf nfpm.tar.gz
+          sudo mv nfpm /usr/local/bin
+          sudo chmod a+x /usr/local/bin/nfpm
+          rm nfpm.tar.gz
+      - name: Get target
+        id: target
+        run: |
+          echo 'target=${{ matrix.arch }}-unknown-linux-gnu' >> $GITHUB_OUTPUT
+      - name: Download binaries for usage
+        id: download_binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          target=${{ steps.target.outputs.target }}
+          version="${{ needs.create_release.outputs.version }}"
+          mkdir -p ./distro/
+          gh release download ${version} --pattern "databend-${version}-${target}.tar.gz" --dir distro/
+          tar x -C distro -f ./distro/databend-${version}-${target}.tar.gz
+      - name: Build Packages
+        id: build_packages
+        run: |
+          export name="databend"
+          export version="${{ needs.create_release.outputs.version }}"
+          export path="distro"
+          case "${{ matrix.arch }}" in
+            x86_64)
+              export arch="amd64"
+              ;;
+            aarch64)
+              export arch="arm64"
+              ;;
+          esac
+          nfpm pkg --packager ${{ matrix.packager }} -f <(envsubst '${name} ${version} ${path} ${arch}' < scripts/distribution/nfpm.yaml)
+      - name: Update release to github
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Reference: https://cli.github.com/manual/gh_release_upload
+        run: |
+          version="${{ needs.create_release.outputs.version }}"
+          # name looks like: `databend_0.8.144~nightly_amd64.deb`
+          gh release upload ${version} databend_*.${{ matrix.packager }} --clobber
+
+  deb:
+    runs-on: ubuntu-latest
+    if: inputs.stable
+    needs: [create_release, distribution]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - uses: ./.github/actions/publish_deb
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+        with:
+          version: ${{ needs.create_release.outputs.version }}
+          gpg_signing_key: ${{ secrets.GPG_KEY_DEB }}
+
+  sha256sums:
+    needs: [create_release, linux, distribution]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: download sha256sums
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sha256sums-*
+          merge-multiple: true
+      - shell: bash
+        run: |
+          for file in *.txt
+          do
+            cat ${file} >> sha256sums.txt
+          done
+      - name: Upload checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.create_release.outputs.version }}"
+          gh release upload ${version} sha256sums.txt --clobber
+
+  benchmark:
+    needs: [create_release, docker_separate]
+    uses: ./.github/workflows/reuse.benchmark.yml
+    secrets: inherit
+    with:
+      sha: ${{ github.sha }}
+      run_id: ${{ github.run_id }}
+      source: release
+      source_id: ${{ needs.create_release.outputs.version }}
+      version: ${{ needs.create_release.outputs.version }}
+      runner_provider: gcp
+      target: all
+
+  sqlsmith:
+    needs: [create_release, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - name: Download artifact for release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${{ needs.create_release.outputs.version }}
+          target=x86_64-unknown-linux-gnu
+          mkdir -p ./distro/
+          mkdir -p ./target/release/
+          gh release download ${version} --pattern "databend-${version}-${target}.tar.gz" --dir distro/
+          gh release download ${version} --pattern "databend-testsuite-${version}-${target}.tar.gz" --dir distro/
+          tar x -C ./target/release -f ./distro/databend-${version}-${target}.tar.gz --strip-components 1 bin/
+          tar x -C ./target/release -f ./distro/databend-testsuite-${version}-${target}.tar.gz --strip-components 1 bin/
+          chmod +x ./target/release/databend-*
+      - name: Run sqlsmith
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          bash ./scripts/ci/ci-run-sqlsmith-tests.sh
+      - name: Upload failure
+        if: failure()
+        uses: ./.github/actions/artifact_failure
+        with:
+          name: test-sqlsmith
+
+  bindings_python:
+    if: inputs.stable
+    needs: create_release
+    uses: ./.github/workflows/bindings.python.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.create_release.outputs.version }}
+
+  notify:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - create_release
+      - linux
+      - docker_combined
+      - docker_separate
+      - distribution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create_release.outputs.version }}
+      - run: |
+          status="${{ (contains(needs.*.result, 'failure') && 'failure') || (contains(needs.*.result, 'cancelled') && 'cancelled') || 'success' }}"
+          jq -n -f .github/release-report.jq \
+            --arg title "[Release] ${{ needs.create_release.outputs.version }}" \
+            --arg content "Build result: ${status}" \
+            --arg link "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg page "https://github.com/datafuselabs/databend/releases/tag/${{ needs.create_release.outputs.version }}" \
+            > /tmp/release-report.json
+          curl -X POST "${{ secrets.RELEASE_REPORT_WEBHOOK }}" \
+            -H 'Content-Type: application/json' \
+            -H 'cache-control: no-cache' \
+            -d @/tmp/release-report.json

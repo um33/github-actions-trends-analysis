@@ -1,0 +1,111 @@
+name: Test Authentication/Authorization backends via mutiple messaging protocols
+on:
+  push:
+    branches:
+      - main
+      - v3.12.x
+      - v3.11.x
+    paths:
+      - 'deps/rabbit/**'
+      - 'deps/rabbitmq_auth_**'
+      - 'deps/rabbitmq_management/selenium/**'
+      - 'scripts/**'
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-authnz.yaml
+  pull_request:
+    paths:
+      - 'deps/rabbit/**'
+      - 'deps/rabbitmq_auth_/**'
+      - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
+      - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
+      - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
+      - .github/workflows/test-authnz.yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  selenium:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - "26.2"
+        browser:
+        - chrome
+        include:
+        - erlang_version: "26.2"
+          elixir_version: 1.15.7
+    env:
+      SELENIUM_DIR: deps/rabbitmq_management/selenium
+      DOCKER_NETWORK: rabbitmq_net
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: 'Login to GitHub Container Registry'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Configure OTP & Elixir
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+
+    - name: Configure Bazel
+      run: |
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --color=yes
+        EOF
+
+    - name: Build & Load RabbitMQ OCI
+      run: |
+        bazelisk run packaging/docker-image:rabbitmq-amd64 \
+          --config=buildbuddy
+
+    - name: Configure Docker Network
+      run: |
+        docker network create ${DOCKER_NETWORK}
+
+    - name: Build Test Runner Image
+      run: |
+        cd ${SELENIUM_DIR}
+        docker build -t mocha-test --target test .
+
+    - name: Run Suites
+      run: |
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
+
+    - name: Upload Test Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4.3.2
+      with:
+        name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
+        path: |
+          logs/*
+          screens/*
+          /tmp/selenium/*
+
+  summary-selenium:
+    needs:
+    - selenium
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

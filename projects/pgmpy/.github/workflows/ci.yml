@@ -1,0 +1,35 @@
+name: pgmpy
+on: [push, pull_request]
+jobs:
+  build:
+    name: Running tests - OS - ${{ matrix.os }}; Python - ${{ matrix.python-version}}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{matrix.python-version}}
+          cache: 'pip'
+      - name: Print python info
+        run: |
+          which python
+          python --version
+      - name: Install dependencies
+        run: |
+          pip install pip -U
+          pip install black -U
+          pip install -r requirements.txt -U
+      - name: Check formatting
+        run: |
+          black --diff .
+          black --check .
+      - name: Print package versions
+        run: |
+          pip freeze
+      - name: Run tests
+        run: pytest --cov-config .coveragerc --cov-report html --cov-report term --cov=pgmpy --verbose

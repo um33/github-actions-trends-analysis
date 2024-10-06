@@ -1,0 +1,66 @@
+---
+name: localization
+
+# always run on the default branch: main
+on:
+  # schedule is used to fetch new, async, translations
+  schedule:
+    - cron: '24 02 * * *'
+  # push is used to upload new system strings
+  push:
+    branches:
+      - main
+    paths:
+      - '**/res/values/strings.xml'
+      - '.github/workflows/localization_update.yml'
+      - 'crowdin.yml'
+
+env:
+  TERM: dumb
+  TMPDIR: "/tmp"
+  CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_API_PERSONAL_TOKEN }}
+
+jobs:
+  localization-update:
+    runs-on: ubuntu-22.04
+    container: ghcr.io/menny/android_ndk:1.20.0
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+      - name: Crowdin push
+        uses: crowdin/github-action@v1.20.2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: false
+          config: crowdin.yml
+      - name: Crowdin pull
+        uses: crowdin/github-action@v1.20.2
+        with:
+          upload_sources: false
+          upload_translations: false
+          download_translations: true
+          create_pull_request: false
+          push_translations: false
+          config: crowdin.yml
+      - name: Update force-locale list
+        run: ./gradlew :ime:app:generateForceLocaleArrayResourceFile
+      - name: Fix resource files special characters
+        run: |
+          echo "fixing ellipsis character..."
+          find . -type f -name "strings.xml" -exec sed -i 's/\.\.\./…/g' {} \;
+      - name: fix git safe dir
+        run: git config --global --add safe.directory "${PWD}"
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated Localization Update from crowdin'
+          title: 'Automated Localization Update from crowdin'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          body: 'Generated from latest _main_ strings and crowdin data.'
+          team-reviewers: add-on-maintainers
+          branch: 'bot-pr/localization-update'
+          delete-branch: true

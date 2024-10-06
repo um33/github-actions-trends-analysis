@@ -1,0 +1,22 @@
+---
+name: Documentation
+about: Suggest an improvement to our documentation at material.angularjs.org
+labels: "type: docs, needs triage"
+---
+<!--
+
+-------------------------------------------------------------------------
+This repo is for AngularJS Material, not Angular Material or Angular CDK.
+-------------------------------------------------------------------------
+
+Please submit Angular Material and Angular CDK questions
+[here](https://groups.google.com/forum/#!forum/angular-material2)
+and issues [here](https://github.com/angular/components/issues).
+-->
+# AngularJS Material has reached end-of-life
+
+We are no longer accepting changes into this project as
+**AngularJS Material support has officially ended as of January 2022.**
+[See what ending support means](https://docs.angularjs.org/misc/version-support-status)
+and [read the end of life announcement](https://goo.gle/angularjs-end-of-life). Visit
+[material.angular.io](https://material.angular.io) for the actively supported Angular Material.

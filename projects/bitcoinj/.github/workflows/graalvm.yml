@@ -1,0 +1,35 @@
+name: GraalVM Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        java-version: [ '17', '21' ]
+        distribution: [ 'graalvm-community' ]
+        gradle: ['8.6']
+      fail-fast: false
+    name: ${{ matrix.os }} JDK ${{ matrix.java-version }}.${{ matrix.distribution }}
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: ${{ matrix.distribution }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build with Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: ${{ matrix.gradle }}
+          arguments: test nativeCompile --init-script build-scan-agree.gradle --scan --info --stacktrace
+      - name: Upload wallet-tool as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallet-tool-${{ matrix.os }}-${{ matrix.java-version }}
+          path: wallettool/build/native/nativeCompile/wallet-tool

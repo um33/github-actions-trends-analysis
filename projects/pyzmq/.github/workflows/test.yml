@@ -1,0 +1,194 @@
+name: Test
+
+on:
+  push:
+    branches-ignore:
+      - "dependabot/**"
+      - "pre-commit-ci-update-config"
+    paths-ignore:
+      - "docs/**"
+      - "tools/**"
+      - ".github/workflows/*"
+      - "!.github/workflows/test.yml"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "tools/**"
+      - ".github/workflows/*"
+      - "!.github/workflows/test.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  # only affects Windows, but easiest to set here for now
+  SETUPTOOLS_ENABLE_FEATURES: "legacy-editable"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.zmq == 'head' }}
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.7"
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-13
+            python: 3.7
+
+          - os: macos-14
+            python: 3.12
+            zmq: bundled
+
+          - os: macos-13
+            python: pypy-3.9
+            zmq: bundled
+
+          - os: ubuntu-20.04
+            python: 3.7
+            zmq: bundled
+            tornado: none
+
+          - os: ubuntu-22.04
+            python: pypy-3.9
+            zmq: bundled
+
+          - os: ubuntu-22.04
+            python: pypy-3.7
+
+          - os: ubuntu-22.04
+            python: 3.9
+            tornado: head
+
+          - os: ubuntu-22.04
+            python: "3.10"
+
+          - os: ubuntu-22.04
+            python: "3.11"
+
+          - os: ubuntu-22.04
+            python: "3.8"
+            zmq: head
+
+          - os: ubuntu-22.04
+            python: "3.12"
+
+          - os: windows-2022
+            python: "3.7"
+            arch: x86
+
+          - os: windows-2022
+            python: "3.9"
+            arch: x64
+
+          - os: windows-2022
+            python: "3.11"
+            arch: x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.arch || 'x64' }}
+          # allows us to use '3.12' and get '-dev' while we wait
+          allow-prereleases: true
+          cache: pip
+
+      - name: setup coverage
+        if: startsWith(matrix.python, 'pypy') || startsWith(matrix.python, '3.12')
+        run: |
+          grep -v plugins .coveragerc > .coveragerc-save
+          mv .coveragerc-save .coveragerc
+
+      # - name: enable Cython coverage
+      #   if: "! (startsWith(matrix.python, 'pypy') || startsWith(matrix.python, '3.12'))"
+      #   run: |
+      #     echo "PYZMQ_CYTHON_COVERAGE=1" >> "$GITHUB_ENV"
+
+      - name: install dependencies
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r test-requirements.txt
+
+      - name: remove tornado
+        if: matrix.tornado == 'none'
+        run: |
+          pip uninstall -y tornado
+
+      - name: install tornado-head
+        if: matrix.tornado == 'head'
+        run: |
+          pip install https://github.com/tornadoweb/tornado/archive/HEAD.zip
+
+      - name: install pinned tornado
+        if: matrix.tornado && matrix.tornado != 'none' && matrix.tornado != 'head'
+        run: |
+          pip install tornado=="${{ matrix.tornado }}"
+
+      - name: show environment
+        run: |
+          pip freeze
+
+      - name: install mac dependencies
+        if: startsWith(matrix.os, 'mac') && matrix.zmq != 'bundled'
+        run: |
+          brew install libsodium zeromq
+
+      - name: install linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get -y remove libzmq5 || true # workaround https://github.com/actions/virtual-environments/issues/3317
+          sudo apt-get -y install libzmq3-dev libsodium-dev
+
+      - name: set $ZMQ_PREFIX
+        if: matrix.zmq
+        run: |
+          echo "ZMQ_PREFIX=${{ matrix.zmq }}" >> "$GITHUB_ENV"
+
+      - name: install libzmq-dev
+        if: matrix.zmq == 'head'
+        run: |
+          wget https://github.com/zeromq/libzmq/archive/HEAD.zip -O libzmq.zip
+          unzip libzmq.zip
+          pushd libzmq-*
+          ./autogen.sh
+          ./configure --enable-drafts
+          make -j4
+          sudo make install
+          sudo ldconfig
+          popd
+          echo "ZMQ_PREFIX=/usr/local" >> "$GITHUB_ENV"
+          echo ZMQ_DRAFT_API=1 >> "$GITHUB_ENV"
+
+      - name: build pyzmq
+        run: |
+          pip install -v -e .
+
+      - name: import zmq
+        run: |
+          python -c "import zmq"
+
+      - name: run tests
+        run: |
+          python -m pytest --maxfail 2 --cov zmq -m "not wheel and not new_console" -v zmq/tests
+
+      - name: upload coverage
+        run: codecov
+
+      # FIXME: what's the right incantation to call this?
+      # the same line from appveyor doesn't work here
+      # - name: run extra windows tests
+      #   if: startsWith(matrix.os, 'win')
+      #   run: |
+      #     cmd /c start /wait test pytest -vsx -m new_console --pyargs zmq.tests --junit-xml=./results.xml
+      #     python tools/check_junit_result.py ./results.xml

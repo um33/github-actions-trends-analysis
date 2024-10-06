@@ -1,0 +1,25 @@
+name: 'Minikube setup action'
+description: 'Sets up minikube on the github runner'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v4.0.0
+      with:
+        version: 'v1.27.4'
+
+    - name: Setup Minikube
+      uses: medyagh/setup-minikube@latest
+      with:
+        minikube-version: '1.32.0'
+        kubernetes-version: 'v1.27.4'
+        driver: 'none'
+        network-plugin: 'cni'
+        cni: 'calico'
+        wait: 'all'
+        start-args: --wait-timeout=6m0s
+
+    - name: Check Kubernetes pods
+      shell: bash
+      run: kubectl get pods -n kube-system

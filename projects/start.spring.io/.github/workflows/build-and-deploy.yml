@@ -1,0 +1,60 @@
+name: Build and deploy
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'liberica'
+          cache: 'maven'
+
+      - name: Cache Maven/Gradle repositories for tests
+        uses: actions/cache@v4
+        with:
+          path: /tmp/start-spring-io-cache
+          # See https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+          key: test-repositories-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: test-repositories-${{ runner.os }}-
+
+      - name: Build with Maven
+        env:
+          START_SPRING_IO_TMPDIR: /tmp/start-spring-io-cache
+        run: ./mvnw --batch-mode --update-snapshots verify
+
+      - name: Set up Azure
+        uses: azure/login@8c334a195cbb38e46038007b304988d888bf676a
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_SPRING_IO }}
+
+      - name: Set up Azure Spring Extension
+        run: az extension add --name spring
+
+      - name: Deploy
+        run: |
+          az spring app deploy \
+            --name start-spring-io \
+            --service spring-io \
+            --resource-group spring-io \
+            --artifact-path start-site/target/start-site-exec.jar
+
+      - name: Send notification
+        uses: ./.github/actions/send-notification
+        if: always()
+        with:
+          webhook-url: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+          status: ${{ job.status }}
+          run-name: ${{ format('start.spring.io | {0}', github.ref_name) }}

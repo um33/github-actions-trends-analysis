@@ -1,0 +1,41 @@
+name: stale-issues
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale-awaiting-answer:
+    if: github.repository == 'mistic100/Photo-Sphere-Viewer'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/stale@v9
+        with:
+          any-of-labels: 'awaiting answer'
+          days-before-stale: 7
+          days-before-close: 7
+          stale-issue-message: |
+            This issue has been automatically marked as stale because not enough information was provided. It will be closed if no further activity occurs.
+          stale-pr-message: |
+            This pulll request has been automatically marked as stale because not enough information was provided. It will be closed if no further activity occurs.
+  
+  stale-help-wanted:
+    if: github.repository == 'mistic100/Photo-Sphere-Viewer'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/stale@v9
+        with:
+          any-of-labels: 'help wanted'
+          days-before-stale: 30
+          days-before-close: 14
+          stale-issue-message: |
+            This issue has been automatically marked as stale because I do not have the tools/knowledge/time to address it. It will be closed if no one can provide help.

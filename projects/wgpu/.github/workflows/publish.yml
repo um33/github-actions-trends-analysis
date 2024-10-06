@@ -1,0 +1,51 @@
+name: Publish
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish.yml'
+  push:
+    branches:
+      - trunk
+
+env:
+  CARGO_INCREMENTAL: false
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+  RUSTFLAGS:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Get wasm-bindgen version
+        run: |
+          WASM_BINDGEN_VERSION=$(cargo metadata --format-version 1 --all-features | jq '.packages[] | select(.name == "wasm-bindgen") | .version' | tr -d '"')
+
+          echo $WASM_BINDGEN_VERSION
+
+          echo "WASM_BINDGEN_VERSION=$WASM_BINDGEN_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install wasm-bindgen
+        run: cargo +stable install wasm-bindgen-cli --version=$WASM_BINDGEN_VERSION
+
+      - name: Build examples
+        run: cargo xtask run-wasm --no-serve
+
+      - name: Deploy WebGPU examples
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        if: github.ref == 'refs/heads/trunk'
+        with:
+          token: ${{ secrets.WEB_DEPLOY }}
+          folder: target/generated
+          repository-name: gfx-rs/wgpu-rs.github.io
+          branch: master
+          target-folder: examples/

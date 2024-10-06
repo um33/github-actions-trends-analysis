@@ -1,0 +1,148 @@
+name: unity unittest
+
+on: 
+  workflow_dispatch:
+  push:
+    paths: 
+      - unity/Assets/**
+      - unity/test/**
+      - unity/native_src/**
+      - unity/native_src_il2cpp/**
+      - unity/cli/**
+      - unreal/Puerts/Source/JsEnv/Private/V8InspectorImpl.cpp
+      - unreal/Puerts/Source/JsEnv/Private/V8InspectorImpl.h
+      - unreal/Puerts/Source/JsEnv/Private/PromiseRejectCallback.hpp
+      - .github/workflows/unity_unittest.yml
+  
+env:
+  RUNID: 613573412
+
+jobs:
+  unittest-win-unity:
+    runs-on: windows-2019
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Unity
+        uses: ./.github/workflows/composites/unity-setup/
+        with:
+          os: 'win'
+          version: '2021.3.16f1'
+          cachekey: '2021'
+          UNITY_USERNAME: ${{ secrets.UNITY_USERNAME }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+      - name: UnitTest
+        run: |
+          cd unity
+          npm i
+          cd test/unity
+          node ../../cli unity-test --unity C:/UNITY/2021.3.16f1/Editor/Unity.exe
+      - name: TestResult
+        if: always()
+        shell: bash
+        run: |
+          cd unity/test/unity
+          echo "testresult in v1"
+          cat log1.txt | grep "Failed\|Passed" 
+          echo "testresult in v2"
+          cat log2.txt | grep "Failed\|Passed" 
+  unittest-win-dotnet:
+    runs-on: windows-2019
+
+    steps:
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.x.x'
+      - uses: actions/checkout@v3
+      - name: UnitTest-v8
+        run: |
+          cd unity
+          npm i
+          cd test/dotnet
+          node ../../cli dotnet-test v8_9.4
+      - name: UnitTest-nodejs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test nodejs_16
+      - name: UnitTest-quickjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test quickjs
+      - name: UnitTest-mult-v8
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult
+      - name: UnitTest-mult-v8-qjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult -sq
+          
+  unittest-osx-dotnet:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.x.x'
+      - uses: actions/checkout@v3
+      - name: UnitTest-v8
+        run: |
+          cd unity
+          npm i
+          cd test/dotnet
+          node ../../cli dotnet-test v8_9.4
+      - name: UnitTest-nodejs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test nodejs_16
+      - name: UnitTest-quickjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test quickjs
+      - name: UnitTest-mult-v8
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult
+      - name: UnitTest-mult-v8-qjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult -sq
+          
+  unittest-linux-dotnet:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.x.x'
+      - uses: actions/checkout@v3
+      - name: Install LibC++
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang
+          sudo apt-get install build-essential
+          sudo apt-get install libc++-dev
+          sudo apt-get install libc++abi-dev
+      - name: UnitTest-v8
+        run: |
+          cd unity
+          npm i
+          cd test/dotnet
+          node ../../cli dotnet-test v8_9.4
+      - name: UnitTest-nodejs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test nodejs_16
+      - name: UnitTest-quickjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test quickjs
+      - name: UnitTest-mult-v8
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult
+      - name: UnitTest-mult-v8-qjs
+        run: |
+          cd unity/test/dotnet
+          node ../../cli dotnet-test mult -sq

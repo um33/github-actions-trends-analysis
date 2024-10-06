@@ -1,0 +1,31 @@
+name: release
+on:
+  push:
+    branches:
+      - 'master'
+      - 'beta'
+      - 'alpha'
+      - 'canary-*'
+  pull_request: {}
+
+# Cancel any previous run (see: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          cache: 'yarn'
+      - run: yarn install
+      - run: yarn build-storybook
+      - run: yarn test
+      # semantic-release skips not configured branches(see: release.config.js) or pull-requests
+      - run: yarn release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

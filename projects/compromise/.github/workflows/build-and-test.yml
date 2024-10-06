@@ -1,0 +1,53 @@
+name: Build and test
+
+on: [pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        node-version: [14.x, 18.x]
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: use node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: install
+        run: |
+          npm ci
+          npm run plugins:ci
+
+      - name: static checks
+        run: |
+          npm i --no-save eslint 
+          npm run lint
+
+      - name: build
+        run: |
+          npm run build
+          npm run plugins:build
+
+      - name: test
+        run: |
+          npm run test:smoke
+          npm run test
+          npm run test:one
+          npm run test:two
+          npm run test:three
+          npm run testb
+          npm run test:plugins
+          # npm run perf
+          # npm run test:types
+          # npm run test:stress

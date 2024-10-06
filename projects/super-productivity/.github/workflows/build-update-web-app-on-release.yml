@@ -1,0 +1,69 @@
+name: Web App on Release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs: null
+
+jobs:
+  upload-to-app-super-productivity:
+    runs-on: ubuntu-latest
+
+    if: '!github.event.release.prerelease'
+
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # work around for npm installs from git+https://github.com/johannesjo/J2M.git
+      - name: Reconfigure git to use HTTP authentication
+        run: >
+          git config --global url."https://github.com/".insteadOf
+          ssh://git@github.com/
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "::set-output name=dir::$(npm config get cache)"
+      - uses: actions/cache@v4
+        id: npm-cache # use this to check for `cache-hit` ==> if: steps.npm-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.npm-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install npm Packages
+        #  if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm i
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test Unit
+        run: npm run test
+
+      - name: Test E2E
+        run: npm run e2e
+
+      - name: Build Frontend & Electron
+        run: npm run buildFrontend:prodWeb
+
+      - name: Deploy to Web Server
+        uses: easingthemes/ssh-deploy@v5.0.3
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.WEB_SERVER_SSH_KEY }}
+          ARGS: '-rltgoDzvO --delete --exclude "news.json"'
+          SOURCE: 'dist/'
+          REMOTE_HOST: ${{ secrets.WEB_REMOTE_HOST }}
+          REMOTE_USER: ${{ secrets.WEB_REMOTE_USER }}
+          TARGET: ${{ secrets.WEB_REMOTE_TARGET }}

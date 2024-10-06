@@ -1,0 +1,94 @@
+name: 报告 bug
+description: 报告 ddns-go 的 bug
+labels: ['bug']
+
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+      description: 阐述 记录/问题/事件/... 发生的背景，如何重现此 bug，哪个功能出现的 bug
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: DNS服务商
+      description: 请选择您正在使用的 DNS服务商
+      multiple: true
+      options:
+        - Alidns(阿里云)
+        - 腾讯云
+        - DnsPod
+        - Cloudflare
+        - 华为云
+        - Callback
+        - 百度云
+        - Porkbun
+        - GoDaddy
+        - Google Domain
+        - Namecheap
+        - 其它
+
+  - type: dropdown
+    attributes:
+      label: 是否已搜索同类问题
+      options:
+        - 未搜索
+        - 已搜索，但未能解决
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 操作系统
+      description: 运行 ddns-go 的操作系统
+      options:
+        - Linux
+        - Windows
+        - macOS (Darwin)
+        - FreeBSD
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 架构
+      description: 运行 ddns-go 的架构
+      options:
+        - i386
+        - x86_64
+        - armv5
+        - armv6
+        - armv7
+        - arm64
+        - mips
+        - mipsle
+        - mips64
+        - mips64le
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: 版本
+      description: ddns-go 的版本或 commit（可在网页右上角找到，或运行 `ddns-go -v` 查看版本）
+      placeholder: v0.0.1
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 安装方式
+      options:
+        - Docker
+        - 服务
+        - 其它
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 额外信息
+      description: |
+        截图、日志、报错等。
+        如果是 Webhook 的 bug，请在这里填入 Webhook 的 URL、RequestBody、Headers

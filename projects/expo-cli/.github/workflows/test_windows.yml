@@ -1,0 +1,57 @@
+name: Test Packages Windows
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  lint:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node: ['16']
+    name: Build with Node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - run: yarn install --frozen-lockfile --network-timeout 120000
+      - run: yarn lint --max-warnings=0
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['16']
+        package:
+          [
+            dev-tools,
+            babel-preset-cli,
+            expo-cli,
+            expo-codemod,
+            xdl,
+          ]
+    name: Test ${{ matrix.package }} on Node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install packages
+        run: yarn install --frozen-lockfile --check-files
+      - name: Build packages
+        run: yarn lerna run prepare --stream
+      - name: Test ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: yarn test
+        # run: cd packages/${{ matrix.package }} && yarn test --coverage
+        env:
+          CI: true
+          EXPO_DEBUG: true

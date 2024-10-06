@@ -1,0 +1,17 @@
+name: release
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  stable:
+    uses: the-guild-org/shared-config/.github/workflows/release-stable.yml@main
+    if: ${{ github.event.pull_request.title != 'Upcoming Release Changes' }}
+    with:
+      releaseScript: release
+      nodeVersion: 20
+      packageManager: pnpm
+    secrets:
+      githubToken: ${{ secrets.GUILD_BOT_TOKEN }}
+      npmToken: ${{ secrets.NODE_AUTH_TOKEN }}

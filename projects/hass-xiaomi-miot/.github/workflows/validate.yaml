@@ -1,0 +1,56 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate-hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout the repository
+        uses: actions/checkout@v3.5.3
+
+      - name: 🏃 Hassfest validation
+        uses: home-assistant/actions/hassfest@master
+
+  validate-hacs:
+    runs-on: ubuntu-latest
+    name: With HACS Action
+    steps:
+      - name: 📥 Checkout the repository
+        uses: actions/checkout@v3.5.3
+
+      - name: 🏃 HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: hacs
+
+  validate-homeassistant:
+    name: With Home Assistant
+    strategy:
+      matrix:
+        channel: [stable, dev, "2023.1.0"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout the repository
+        uses: actions/checkout@v3.5.3
+
+      - name: 🛠️ Home Assistant configuration
+        run: |
+          mkdir ./test_configuration
+          cp -r ./custom_components ./test_configuration
+          echo "default_config:" >> ./test_configuration/configuration.yaml
+          echo "xiaomi_miot:" >> ./test_configuration/configuration.yaml
+          echo "  language: zh" >> ./test_configuration/configuration.yaml
+          echo "  device_customizes:" >> ./test_configuration/configuration.yaml
+          echo "    brand.device.model:" >> ./test_configuration/configuration.yaml
+          echo "      miot_local: true" >> ./test_configuration/configuration.yaml
+
+      - name: 🏡 Home Assistant validation
+        id: homeassistant
+        uses: ludeeus/setup-homeassistant@main
+        with:
+          tag: ${{ matrix.channel }}
+          config-dir: test_configuration

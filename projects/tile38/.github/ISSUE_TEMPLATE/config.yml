@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Community Support
+    url: https://tile38.com/slack/
+    about: Please ask and answer questions here.
+  - name: Documenation Issues
+    url: https://github.com/tile38/tile38.github.io/issues
+    about: Please documenation related issues here.
+ 

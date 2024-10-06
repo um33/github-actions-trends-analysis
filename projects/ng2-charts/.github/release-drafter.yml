@@ -1,0 +1,13 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+template: |
+  ## What’s Changed
+
+  $CHANGES
+
+  # Essential Links
+
+    * [npm](https://www.npmjs.com/package/ng2-charts)
+    * [Docs & Samples](https://valor-software.com/ng2-charts/)
+
+  Thanks to $CONTRIBUTORS

@@ -1,0 +1,173 @@
+name: Bug report 🐞
+description: Report a bug found in Eclipse Che
+labels: [kind/bug]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Creating a new Bug 🐞 
+        🔍  Before opening a new issue please search existing issues at https://github.com/eclipse/che/issues
+
+        🤔  To make it easier for us to help you, please include as much useful information as possible.
+        
+        Useful Links:
+        
+          - 📄  Documentation: https://eclipse.dev/che/docs
+          - 📝  Contributing: https://github.com/eclipse/che/blob/master/CONTRIBUTING.md
+      
+        💬  Eclipse Che has public chat on:
+          - Eclipse Cloud Dev Tools Slack: https://communityinviter.com/apps/ecd-tools/join-the-community
+
+  - type: textarea
+    id: describe-bug
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug
+    validations:
+      required: true
+  - type: dropdown
+    id: version
+    attributes:
+      label: Che version
+      description: if workspace is running, version can be obtained with help/about menu
+      options:
+        - "7.84@latest"
+        - "next (development version)"
+        - "7.83"
+        - "7.82"
+        - "7.81"
+        - "7.80"
+        - "7.79"
+        - "7.78"
+        - "7.77"
+        - "7.75"
+        - "7.74"
+        - "7.73"
+        - "7.72"
+        - "7.71"
+        - "7.70"
+        - "7.69"
+        - "7.68"
+        - "7.67"
+        - "7.66"
+        - "7.65"
+        - "7.64"
+        - "7.63"
+        - "7.61"
+        - "7.60"
+        - "7.59"
+        - "7.58"
+        - "7.57"
+        - "7.56"
+        - "7.55"
+        - "7.54"
+        - "7.53"
+        - "7.52"
+        - "7.51"
+        - "7.50"
+        - "7.49"
+        - "7.48"
+        - "7.47"
+        - "7.46"
+        - "7.45"
+        - "7.44"
+        - "7.43"
+        - "7.42"
+        - "7.41"
+        - "7.40"
+        - "7.39"
+        - "other (please specify in additional context)"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What are the steps to reproduce this bug ?
+      placeholder: |
+        1. Do '...'
+        2. Click on '....'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder:  
+    validations:
+      required: true      
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      description: What is the kubernetes flavor ?
+      multiple: true
+      options:
+        - Kubernetes (vanilla)
+        - OpenShift
+        - minikube
+        - CodeReady Container
+        - Docker Desktop
+        - other (please specify in additional context)
+    validations:
+      required: true
+      
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem.
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      multiple: true
+      options:
+        - chectl/latest
+        - chectl/next
+        - OperatorHub
+        - other (please specify in additional context)
+    validations:
+      required: true        
+        
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      multiple: true
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Amazon
+        - Azure
+        - GCE
+        - "Dev Sandbox (workspaces.openshift.com)"
+        - other (please specify in additional context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Eclipse Che Logs
+      placeholder: |
+        Please copy and paste any relevant log output.
+        
+        This will be automatically formatted into code, so no need for backticks
+      description: "How to collect logs: https://eclipse.dev/che/docs/stable/administration-guide/collecting-logs-using-chectl/"
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem here.
+      placeholder: 

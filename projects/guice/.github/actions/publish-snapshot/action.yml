@@ -1,0 +1,30 @@
+name: 'Publish Snapshot'
+description: 'Publish snapshot artifacts and latest API doc.'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: ${{ env.USE_JAVA_DISTRIBUTION }}
+        java-version: ${{ env.USE_JAVA_VERSION }}
+        server-id: google-snapshots
+        server-username: MAVEN_USERNAME
+        server-password: MAVEN_PASSWORD
+    - name: 'Cache local Maven repository'
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - name: Publish Javadoc
+      run: |
+        chmod +x util/publish-latest-docs.sh
+        ./util/publish-latest-docs.sh
+      shell: bash
+    - name: Publish Snapshot
+      run: mvn clean deploy -DskipTests=true -Dmaven.javadoc.skip=true
+      shell: bash
+

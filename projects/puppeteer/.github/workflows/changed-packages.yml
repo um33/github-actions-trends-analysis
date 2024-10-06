@@ -1,0 +1,58 @@
+name: Check which packages changed
+
+permissions: read-all
+
+on:
+  workflow_call:
+    inputs:
+      check-mergeable-state:
+        default: false
+        type: boolean
+    outputs:
+      changes:
+        description: 'The packages that were changed for this PR'
+        value: ${{ jobs.check-changes.outputs.changes }}
+jobs:
+  check-changes:
+    name: Check which packages changed
+    runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.changes.outputs.changes }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+        with:
+          fetch-depth: 2
+      - name: Check if branch is out of date
+        if: ${{ inputs.check-mergeable-state &&  github.base_ref == 'main' }}
+        run: |
+          git fetch origin main --depth 1 &&
+          git merge-base --is-ancestor origin/main @;
+      - name: Detect changed packages
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: changes
+        with:
+          filters: |
+            puppeteer:
+              - '.github/workflows/ci.yml'
+              - 'packages/browsers/src/browser-data/firefox.ts'
+              - 'packages/puppeteer/**'
+              - 'packages/puppeteer-core/**'
+              - 'packages/testserver/**'
+              - 'docker/**'
+              - 'test/**'
+              - 'test-d/**'
+              - 'tools/mocha-runner/**'
+              - '.mocharc.cjs'
+              - 'tools/doctest/**'
+            website:
+              - '.github/workflows/ci.yml'
+              - 'docs/**'
+              - 'website/**'
+              - 'README.md'
+            ng-schematics:
+              - '.github/workflows/ci.yml'
+              - 'packages/ng-schematics/**'
+            browsers:
+              - '.github/workflows/ci.yml'
+              - 'packages/browsers/**'

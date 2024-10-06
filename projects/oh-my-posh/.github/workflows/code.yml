@@ -1,0 +1,34 @@
+on:
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'COPYING'
+      - 'website/**'
+      - '.github/*.md'
+      - '.github/FUNDING.yml'
+
+name: Validate Code
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/src
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491
+      with:
+        go-version: 1.21
+        cache-dependency-path: src/go.sum
+    - name: Checkout code
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: Golang CI
+      uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804
+      with:
+        working-directory: src
+    - name: Unit Tests
+      run: go test -v ./...

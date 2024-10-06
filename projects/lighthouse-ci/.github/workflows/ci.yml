@@ -1,0 +1,103 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  basics:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    env:
+      YARN_GPG: 'no'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 18.16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.16
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+      - run: yarn test:unit:ci || yarn test:unit:ci --onlyFailures --maxWorkers=1 || yarn test:unit:ci --onlyFailures --maxWorkers=1
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenshots
+          path: packages/server/test/ui/__image_snapshots__/__diff_output__/*.png
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenshots
+          path: packages/server/test/e2e/__image_snapshots__/__diff_output__/*.png
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenshots
+          path: packages/viewer/test/e2e/__image_snapshots__/__diff_output__/*.png
+  complete:
+    name: Linux
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: test
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 33306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 18.16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.16
+          cache: yarn
+      - name: Configure Environment
+        run: |-
+          echo "CHROME_PATH=$(which google-chrome-stable)" >> $GITHUB_ENV
+          echo "POSTGRES_DB_URL=postgres://postgres:postgres@localhost/lighthouse_ci_test" >> $GITHUB_ENV
+          echo "MYSQL_DB_URL=mysql://root:mysql@127.0.0.1:33306/lighthouse_ci_test" >> $GITHUB_ENV
+
+          export PGPASSWORD="postgres"
+          export MYSQL_PWD="mysql"
+          psql -h localhost -p 5432 -c 'create database lighthouse_ci_test;' -U postgres
+          mysql --host=127.0.0.1 --port=33306 -e 'create database lighthouse_ci_test;' -u root
+
+          google-chrome-stable --version
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+      - run: yarn test:typecheck
+      - run: yarn test:lint
+      - name: Run yarn test:unit
+        run: yarn test:unit:ci || yarn test:unit:ci --onlyFailures --maxWorkers=1 || yarn test:unit:ci --onlyFailures --maxWorkers=1
+      - run: yarn test:docker
+      # TODO: re-enable, once we have canary server up again
+      # - run: yarn ci:dogfood
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     LHCI_CANARY_SERVER_URL: https://lhci-canary.herokuapp.com/
+      #     LHCI_CANARY_SERVER_TOKEN: ${{ secrets.LHCI_CANARY_SERVER_TOKEN }}

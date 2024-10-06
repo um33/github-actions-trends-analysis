@@ -1,0 +1,185 @@
+name: Run tests
+
+on:
+  # run on push in main or rel_* branches excluding changes are only on doc or example folders
+  push:
+    branches:
+      - main
+      - "rel_*"
+      # branches used to test the workflow
+      - "workflow_test_*"
+    paths-ignore:
+      - "examples/**"
+
+env:
+  # global env to all steps
+  TOX_WORKERS: -n2
+
+permissions:
+  contents: read
+
+jobs:
+  run-test:
+    name: test-${{ matrix.python-version }}-${{ matrix.build-type }}-${{ matrix.architecture }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # run this job using this matrix, excluding some combinations below.
+      matrix:
+        os:
+          - "ubuntu-latest"
+          - "windows-latest"
+          - "macos-latest"
+        python-version:
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "pypy-3.10"
+        build-type:
+          - "cext"
+          - "nocext"
+        architecture:
+          - x64
+          - x86
+
+        include:
+          # autocommit tests fail on the ci for some reason
+          - python-version: "pypy-3.10"
+            pytest-args: "-k 'not test_autocommit_on and not test_turn_autocommit_off_via_default_iso_level and not test_autocommit_isolation_level'"
+          - os: "ubuntu-latest"
+            pytest-args: "--dbdriver pysqlite --dbdriver aiosqlite"
+
+        exclude:
+          # linux and osx do not have x86 python
+          - os: "ubuntu-latest"
+            architecture: x86
+          - os: "macos-latest"
+            architecture: x86
+          # pypy does not have cext or x86
+          - python-version: "pypy-3.10"
+            build-type: "cext"
+          - os: "windows-latest"
+            python-version: "pypy-3.10"
+            architecture: x86
+
+      fail-fast: false
+
+    # steps to run in each job. Some are github actions, others run shell commands
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Remove greenlet
+        if: ${{ matrix.no-greenlet == 'true' }}
+        shell: pwsh
+        run: |
+          (cat setup.cfg) | %{$_ -replace "^\s*greenlet.+",""} | set-content setup.cfg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade tox setuptools
+          pip list
+
+      - name: Run tests
+        run: tox -e github-${{ matrix.build-type }} -- -q --nomemory --notimingintensive ${{ matrix.pytest-args }}
+        continue-on-error: ${{ matrix.python-version == 'pypy-3.10' }}
+
+  run-test-arm64:
+    name: test-arm64-${{ matrix.python-version }}-${{ matrix.build-type }}-${{ matrix.os }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - cp38-cp38
+          - cp39-cp39
+          - cp310-cp310
+          - cp311-cp311
+          - cp312-cp312
+        build-type:
+          - "cext"
+          - "nocext"
+
+      fail-fast: false
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up emulation
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: Run tests
+        uses: docker://quay.io/pypa/manylinux2014_aarch64
+        with:
+          args: |
+            bash -c "
+            export PATH=/opt/python/${{ matrix.python-version }}/bin:$PATH &&
+            python --version &&
+            python -m pip install --upgrade pip &&
+            pip install --upgrade tox setuptools &&
+            pip list &&
+            tox -e github-${{ matrix.build-type }} -- -q --nomemory --notimingintensive ${{ matrix.pytest-args }}
+            "
+
+  run-tox:
+    name: ${{ matrix.tox-env }}-${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # run this job using this matrix, excluding some combinations below.
+      matrix:
+        os:
+          - "ubuntu-latest"
+        python-version:
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+        tox-env:
+          - mypy
+          - lint
+          - pep484
+
+        exclude:
+          # run lint only on 3.11
+          - tox-env: lint
+            python-version: "3.8"
+          - tox-env: lint
+            python-version: "3.9"
+          - tox-env: lint
+            python-version: "3.10"
+          # run pep484 only on 3.10+
+          - tox-env: pep484
+            python-version: "3.8"
+          - tox-env: pep484
+            python-version: "3.9"
+
+      fail-fast: false
+
+    # steps to run in each job. Some are github actions, others run shell commands
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade tox setuptools
+          pip list
+
+      - name: Run tox
+        run: tox -e ${{ matrix.tox-env }} ${{ matrix.pytest-args }}

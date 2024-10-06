@@ -1,0 +1,97 @@
+name: Overall Test Workflow
+
+on:
+  push:
+    branches: [ develop, dev/*, release/* ]
+  pull_request:
+    branches: [ develop, dev/*, release/* ]
+  workflow_dispatch:
+
+jobs:
+  partial-tests:
+    uses: ./.github/workflows/partial-tests.yml
+
+  coverage:
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        id: install-dependencies
+        uses: ./.github/actions/install
+        with:
+          python-version: '3.11'
+          os: 'ubuntu-latest'
+          pipfile-version: 'min'
+
+      - name: Pytest
+        run: |
+          pipenv run pytest --cov=taipy --cov-report="xml:overall-coverage.xml" tests
+
+      - name: Coverage
+        uses: orgoro/coverage@v3.1
+        with:
+          coverageFile: overall-coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  overall-tests:
+    needs: [coverage, partial-tests]
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        pipfile-version: ['min', 'max']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python-version}}
+
+      - name: Install dependencies
+        id: install-dependencies
+        uses: ./.github/actions/install
+        with:
+          python-version: ${{ matrix.python-version }}
+          os: ${{ matrix.os }}
+          pipfile-version: ${{ matrix.pipfile-version }}
+
+      - name: Pytest
+        run: |
+          pipenv run pytest -m "not orchestrator_dispatcher and not standalone and not teste2e" tests
+
+  intermittent-tests:
+    needs: [coverage, partial-tests]
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        orchestrator: ['orchestrator_dispatcher', 'standalone']
+        pipfile-version: ['min', 'max']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python-version}}
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+        with:
+          os: ${{ matrix.os }}
+          install-gui: false
+          python-version: ${{ matrix.python-version }}
+          pipfile-version: ${{ matrix.pipfile-version }}
+
+      - name: Pytest Core orchestrator_dispatcher
+        run: pipenv run pytest -m "${{ matrix.orchestrator }}" tests/core

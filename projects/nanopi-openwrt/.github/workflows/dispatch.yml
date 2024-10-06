@@ -1,0 +1,37 @@
+name: Repo Dispatcher
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        type: choice
+        description: 'debug?'
+        options:
+        - true
+        - false
+        default: 'false'
+        required: true
+      package_clean:
+        type: choice
+        description: 'check to make clean package'
+        options:
+        - true
+        - false
+        default: 'true'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [r1p, r1p-lts, r1s, r1s-h3, r2c, r2s, r4s, r4se, r5s, r5c, r6s, r6c, x86]
+    steps:
+        - name: Trigger Compile
+          run: |
+            branch='master';
+            curl \
+            -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -H "Accept: application/vnd.github.everest-preview+json" \
+            -H "Authorization: token ${{ secrets.SEC_TOKEN }}" \
+            -d '{"event_type": "${{ matrix.device }}", "client_payload": {"branch": "'$branch'", "device": "${{ matrix.device }}", "package_clean": "${{ github.event.inputs.package_clean }}", "debug": "${{ github.event.inputs.debug }}" }}'

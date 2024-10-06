@@ -1,0 +1,211 @@
+name: Build Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ubuntu:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Ubuntu 20.04 / Qt 5",
+              os: ubuntu-20.04,
+              qt_packages: "libqt5x11extras5-dev qt5-default qtwebengine5-dev",
+              configurePreset: "ninja-multi",
+              buildPreset: "ninja-multi-release"
+            }
+          - {
+              name: "Ubuntu 20.04 / Qt 5 / Portable",
+              os: ubuntu-20.04,
+              qt_packages: "libqt5x11extras5-dev qt5-default qtwebengine5-dev",
+              configurePreset: "ninja-multi-portable",
+              buildPreset: "ninja-multi-portable-release"
+            }
+          - {
+              name: "Ubuntu 22.04 / Qt 6",
+              os: ubuntu-22.04,
+              qt_packages: "libgl1-mesa-dev libqt6opengl6-dev qt6-base-private-dev qt6-webengine-dev qt6-webengine-dev-tools",
+              configurePreset: "ninja-multi",
+              buildPreset: "ninja-multi-release"
+            }
+          - {
+              name: "Ubuntu 22.04 / Qt 6 / Portable",
+              os: ubuntu-22.04,
+              qt_packages: "libgl1-mesa-dev libqt6opengl6-dev qt6-base-private-dev qt6-webengine-dev qt6-webengine-dev-tools",
+              configurePreset: "ninja-multi-portable",
+              buildPreset: "ninja-multi-portable-release"
+            }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get -y -qq update
+          sudo apt-get -y -qq --no-install-recommends install \
+            cmake \
+            extra-cmake-modules \
+            libarchive-dev \
+            libsqlite3-dev \
+            libvulkan-dev \
+            libxcb-keysyms1-dev \
+            ninja-build \
+            ${{ matrix.config.qt_packages }}
+
+      - name: Configure & Build
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ${{ matrix.config.configurePreset }}
+          buildPreset: ${{ matrix.config.buildPreset }}
+
+  build-windows:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Windows Server 2019 / Qt 5",
+              os: windows-2019,
+              qt_modules: "qtwebengine",
+              qt_version: "5.15.2",
+              configurePreset: "ninja-multi-vcpkg",
+              buildPreset: "ninja-multi-vcpkg-release",
+              publishArtifacts: false
+            }
+          - {
+              name: "Windows Server 2019 / Qt 5 / Portable",
+              os: windows-2019,
+              qt_modules: "qtwebengine",
+              qt_version: "5.15.2",
+              configurePreset: ninja-multi-vcpkg-portable,
+              buildPreset: ninja-multi-vcpkg-portable-release,
+              publishArtifacts: false
+            }
+          - {
+              name: "Windows Server 2022 / Qt 6",
+              os: windows-2022,
+              qt_modules: "qtwebengine qtwebchannel qtpositioning",
+              qt_version: "6.6.3",
+              configurePreset: ninja-multi-vcpkg,
+              buildPreset: ninja-multi-vcpkg-release,
+              publishArtifacts: true
+            }
+          - {
+              name: "Windows Server 2022 / Qt 6 / Portable",
+              os: windows-2022,
+              qt_modules: "qtwebengine qtwebchannel qtpositioning",
+              qt_version: "6.6.3",
+              configurePreset: ninja-multi-vcpkg-portable,
+              buildPreset: ninja-multi-vcpkg-portable-release,
+              publishArtifacts: true
+            }
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ runner.workspace }}/vcpkg
+          vcpkgGitCommitId: fba75d09065fcc76a25dcf386b1d00d33f5175af # 2024.02.14
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          arch: win64_msvc2019_64
+          modules: ${{ matrix.config.qt_modules }}
+          version: ${{ matrix.config.qt_version }}
+          cache: true
+          extra: --external 7z
+
+      - name: Configure & Build
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ${{ matrix.config.configurePreset }}
+          buildPreset: ${{ matrix.config.buildPreset }}
+
+      - name: Retrieve Application Version
+        run: |
+          $zeal_version = Get-Content build/${{ matrix.config.configurePreset }}/zeal_version
+          Write-Output "Zeal Version: $zeal_version"
+          "ZEAL_VERSION=$zeal_version" >> $env:GITHUB_ENV
+
+      - name: Package
+        if: matrix.config.publishArtifacts
+        run: cmake --build build --preset ${{ matrix.config.buildPreset }} --target package
+        env:
+          CODESIGN_CERTIFICATE_BASE64: ${{ secrets.CODESIGN_CERTIFICATE_BASE64 }}
+          CODESIGN_PASSWORD: ${{ secrets.CODESIGN_PASSWORD }}
+
+      - name: Upload ZIP Artifacts
+        if: matrix.config.publishArtifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal-${{ env.ZEAL_VERSION }}${{ matrix.config.configurePreset == 'ninja-multi-vcpkg-portable' &&  '-portable' || '' }}-windows-x64.zip
+          path: |
+            build/${{ matrix.config.configurePreset }}/zeal-*.zip
+            build/${{ matrix.config.configurePreset }}/zeal-*.zip.sha256
+
+      - name: Upload MSI Artifacts
+        if: matrix.config.publishArtifacts && matrix.config.configurePreset == 'ninja-multi-vcpkg'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal-${{ env.ZEAL_VERSION }}-windows-x64.msi
+          path: |
+            build/${{ matrix.config.configurePreset }}/zeal-*.msi
+            build/${{ matrix.config.configurePreset }}/zeal-*.msi.sha256
+
+  build-appimage:
+    name: AppImage
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build AppImage
+        uses: ./.github/workflows/appimage/
+        with:
+          recipe: pkg/appimage/appimage-amd64.yaml
+          apt_dependencies: >-
+            build-essential
+            cmake extra-cmake-modules
+            libappindicator-dev
+            libarchive-dev
+            libqt5x11extras5-dev
+            libsqlite3-dev
+            libxcb-keysyms1-dev
+            ninja-build
+            qtbase5-dev
+            qtwebengine5-dev
+            appstream
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal-dev-x86_64.AppImage # TODO: Provide real version.
+          path: zeal-*.AppImage

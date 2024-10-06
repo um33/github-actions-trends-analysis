@@ -1,0 +1,87 @@
+# Add 'source' label to any change to src files within the source dir EXCEPT for the docs sub-folder
+# source:
+# - any: ['src/**/*', '!src/docs/*']
+
+Core:
+- changed-files:
+  - any-glob-to-any-file: ['src/App/**/*', 'src/Base/**/*', 'src/Gui/**/*']
+
+:octocat::
+- changed-files:
+  - any-glob-to-any-file:  ['.github/**/*']
+
+Addon Manager:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/AddonManager/**/*']
+
+Materials:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Material/**/*']
+
+WB Arch:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Arch/**/*']
+
+WB Assembly:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Assembly/**/*']
+
+WB Draft:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Draft/**/*']
+
+WB FEM:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Fem/**/*']
+
+WB Mesh:
+- changed-files:
+  - any-glob-to-any-file: ['src/Mod/Mesh/**/*']
+
+WB MeshPart:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/MeshPart/**/*']
+
+WB OpenSCAD:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/OpenSCAD/**/*']
+
+WB Part:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Part/**/*']
+
+WB Part Design:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/PartDesign/**/*']
+
+WB CAM:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/CAM/**/*']
+
+WB Points:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Points/**/*']
+
+WB ReverseEngineering:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/ReverseEngineering/**/*']
+
+WB Sketcher:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Sketcher/**/*']
+
+WB Spreadsheet:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Spreadsheet/**/*']
+
+WB Surface:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Surface/**/*/']
+
+WB TechDraw:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/TechDraw/**/*']
+
+WB Test:
+- changed-files:
+  - any-glob-to-any-file:  ['src/Mod/Test/**/*']

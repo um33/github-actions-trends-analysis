@@ -1,0 +1,91 @@
+name: Release Chart
+
+on:
+  push:
+    branches:
+      - release-*
+    paths:
+      - charts/metrics-server/Chart.yaml
+
+jobs:
+  release:
+    name: Release
+    if: github.repository == 'kubernetes-sigs/metrics-server'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 #v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Get chart version
+        id: chart_version
+        uses: mikefarah/yq@9adde1ac14bb283b8955d2b0d567bcaf3c69e639 # v4.42.1
+        with:
+          cmd: yq eval '.version' './charts/metrics-server/Chart.yaml'
+
+      - name: Get chart app version
+        id: chart_app_version
+        uses: mikefarah/yq@9adde1ac14bb283b8955d2b0d567bcaf3c69e639 # v4.42.1
+        with:
+          cmd: yq eval '.appVersion' './charts/metrics-server/Chart.yaml'
+
+      - name: Check can release
+        id: check_can_release
+        run: |
+          set -euo pipefail
+
+          branch_name="${GITHUB_REF##*/}"
+          app_version_prefix="${branch_name##*-}"
+
+          app_version_regex="^${app_version_prefix//./\.}"
+
+          chart_version_match="$(echo "${{ steps.chart_version.outputs.result }}" | grep -Po "^\d+\.\d+\.\d+$" || true)"
+          app_version_match="$(echo "${{ steps.chart_app_version.outputs.result }}" | grep -Po "^${app_version_prefix//./\.}" || true)"
+
+          if [[ -z "${chart_version_match}" ]] || [[ -z "${app_version_match}" ]]
+          then
+            echo "continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "continue=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set-up Helm
+        if: steps.check_can_release.outputs.continue == 'true'
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+
+      - name: Get CHANGELOG entry
+        id: changelog_reader
+        if: steps.check_can_release.outputs.continue == 'true'
+        uses: mindsers/changelog-reader-action@32aa5b4c155d76c94e4ec883a223c947b2f02656 # v2.2.3
+        with:
+          path: charts/metrics-server/CHANGELOG.md
+          version: ${{ steps.chart_version.outputs.result }}
+
+      - name: Create release notes
+        if: steps.check_can_release.outputs.continue == 'true'
+        run: |
+          set -euo pipefail
+          cat <<"EOF" > charts/metrics-server/RELEASE.md
+          ${{ steps.changelog_reader.outputs.changes }}
+          EOF
+
+      - name: Run chart-releaser
+        if: steps.check_can_release.outputs.continue == 'true'
+        uses: helm/chart-releaser-action@a917fd15b20e8b64b94d9158ad54cd6345335584 # v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_RELEASE_NAME_TEMPLATE: "metrics-server-helm-chart-{{ .Version }}"
+          CR_RELEASE_NOTES_FILE: RELEASE.md
+          CR_MAKE_RELEASE_LATEST: false

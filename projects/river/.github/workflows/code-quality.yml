@@ -1,0 +1,24 @@
+name: code-quality
+
+on:
+  pull_request:
+    branches:
+      - "*"
+  push:
+    branches:
+      - main
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build River
+        uses: ./.github/actions/install-env
+        with:
+          python-version: "3.12"
+          build-root: false
+
+      - name: Run pre-commit on all files
+        run: poetry run pre-commit run --all-files

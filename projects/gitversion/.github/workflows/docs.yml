@@ -1,0 +1,157 @@
+name: Verify & Publish Docs
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [ publish-release ]
+  push:
+    branches:
+    - main
+    paths:
+    - docs/**
+    - package*.json
+    - markdownlint.json
+    - .remarkrc.yaml
+    - mkdocs.yml
+    - .github/workflows/docs.yml
+  pull_request:
+    branches:
+    - main
+    paths:
+    - docs/**
+    - package*.json
+    - markdownlint.json
+    - .remarkrc.yaml
+    - mkdocs.yml
+    - .github/workflows/docs.yml
+env:
+  DOTNET_ROLL_FORWARD: "Major"
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  prepare:
+    name: Prepare Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    -
+      name: Cache cake frosting
+      id: cache-cake
+      uses: actions/cache@v4
+      with:
+        path: run
+        key: run-${{ runner.os }}-${{ hashFiles('./build/**') }}
+    -
+      name: Use cached tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: tools
+        key: tools-${{ runner.os }}-${{ hashFiles('./build/**') }}
+    -
+      name: Get npm cache directory
+      shell: bash
+      id: cache-node-dir
+      run: |
+        cacheDir=$(npm config get cache)
+        echo "dir=$cacheDir" >> $GITHUB_OUTPUT
+    -
+      name: Cache Node Modules
+      id: cache-node
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.cache-node-dir.outputs.dir }}
+        key: node-${{ runner.os }}-${{ hashFiles('./package-lock.json') }}
+        restore-keys: node-${{ runner.os }}
+    -
+      name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: global.json
+    -
+      name: '[Build]'
+      if: steps.cache-cake.outputs.cache-hit != 'true'
+      run: dotnet build build/CI.sln --configuration=Release
+    -
+      name: '[Prepare]'
+      shell: pwsh
+      run: dotnet run/build.dll --target=BuildPrepare
+
+  validate:
+    name: Validates Html
+    needs: [ prepare ]
+    runs-on: ubuntu-latest
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    -
+      name: Restore State
+      uses: ./.github/actions/artifacts-restore
+    -
+      name: '[Build Documentation]'
+      shell: pwsh
+      run: dotnet run/docs.dll --target=BuildDocs
+    -
+      name: '[HTMLProofer]'
+      uses: chabad360/htmlproofer@master
+      with:
+        directory: ./artifacts/docs/preview
+        arguments: --ignore-urls /api/,/docs/ --allow-hash-href --assume-extension --disable-external --no-check_external_hash
+    -
+      name: '[Reviewdog Reporter]'
+      id: reporter
+      run: |
+        value=$([ ${{ github.event_name == 'pull_request' }} ] && echo "github-pr-review" || echo "github-check")
+        echo "value=$value" >> $GITHUB_OUTPUT
+    -
+      name: '[Remark Lint]'
+      uses: reviewdog/action-remark-lint@v5
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        reporter: ${{ steps.reporter.outputs.value }}
+
+  publish:
+    name: Publish docs
+    needs: [ validate ]
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+      GITHUB_USERNAME: ${{ github.actor }}
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    -
+      name: Restore State
+      uses: ./.github/actions/artifacts-restore
+    -
+      name: '[Build Schemas]'
+      shell: pwsh
+      run: |
+        dotnet run/docs.dll --target=GenerateSchemas
+    -
+      name: '[Publish Documentation]'
+      if: ${{ github.event_name == 'repository_dispatch' }}
+      shell: pwsh
+      run: dotnet run/docs.dll --target=PublishDocs
+    -
+      name: '[Publish Documentation]'
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      shell: pwsh
+      run: dotnet run/docs.dll --target=PublishDocs --force

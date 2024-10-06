@@ -1,0 +1,42 @@
+name: Build bindings for macOS releases
+
+on:
+  push:
+    branches-ignore:
+      - "dependabot/**"
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 16
+          - 18
+          - 19
+          - 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install packages
+        run: npm install --unsafe-perm
+        env:
+          SKIP_SASS_BINARY_DOWNLOAD_FOR_CI: true
+
+      - name: Run tests
+        run: npm test
+
+      - uses: actions/upload-artifact@v3
+        if: github.repository_owner == 'sass' && github.event_name != 'pull_request'
+        with:
+          name: ${{ matrix.node }}
+          path: vendor/

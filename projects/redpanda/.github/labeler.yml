@@ -1,0 +1,23 @@
+area/k8s:
+- src/go/k8s/**/*
+
+k8s/tests:
+- src/go/k8s/**/*
+
+area/build:
+- cmake/**/*
+- .github/**/*
+
+area/docs:
+- docs/**/*
+
+area/rpk:
+- src/go/rpk/**/*
+
+area/redpanda:
+- src/v/**/*
+
+area/wasm:
+- src/transform-sdk/**/*
+- src/v/transform/**/*
+- src/v/wasm/**/*

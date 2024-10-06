@@ -1,0 +1,127 @@
+name: Standalone
+
+on:
+  push:
+    branches:
+      - master
+      - 'releases/**'
+  pull_request:
+    branches:
+      - '*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build_vendor_linux:
+    name: core-cli.${{ matrix.os }}.amd64.${{ matrix.build_type }}.${{ matrix.compiler.cxx }}.standalone
+    strategy:
+      matrix:
+        os: ["ubuntu-22.04", "ubuntu-20.04"]
+        build_type: ["Debug", "Release"]
+        compiler:
+        - { cc: "gcc", cxx: "g++"}
+        - { cc: "clang", cxx: "clang++"}
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Install requirements
+        run: sudo apt-get install -y ninja-build libboost-test-dev
+      - name: Configure
+        env:
+          CC: ${{matrix.compiler.cc}}
+          CXX: ${{matrix.compiler.cxx}}
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+          -DVW_FEAT_FLATBUFFERS=Off
+          -DVW_FEAT_CSV=On
+          -DVW_FEAT_CB_GRAPH_FEEDBACK=On
+          -DRAPIDJSON_SYS_DEP=Off
+          -DFMT_SYS_DEP=Off
+          -DSPDLOG_SYS_DEP=Off
+          -DVW_ZLIB_SYS_DEP=Off
+          -DVW_BOOST_MATH_SYS_DEP=Off
+          -DVW_INSTALL=Off
+          -DWARNINGS=On
+          -DWARNING_AS_ERROR=On
+          -DVW_CXX_STANDARD=17
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error --label-regex VWTestList --parallel 2
+      - name: Test
+        run: python3 test/run_tests.py -f --clean_dirty -E 0.001
+  build_vendor_windows:
+    name: core-cli.${{ matrix.os }}.amd64.${{ matrix.build_type }}.msvc.standalone
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: ["windows-2019", "windows-2022"]
+        build_type: ["Debug", "Release"]
+    env:
+      CMAKE_BUILD_DIR: ${{ github.workspace }}/vw/build
+      SOURCE_DIR: ${{ github.workspace }}/vw
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: 'vw'
+          submodules: 'recursive'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: >
+          cmake -S "${{ env.SOURCE_DIR }}" -B "${{ env.CMAKE_BUILD_DIR }}" -A "x64"
+          -DUSE_LATEST_STD=On
+          -DVW_FEAT_FLATBUFFERS=Off
+          -DVW_FEAT_CSV=On
+          -DVW_FEAT_CB_GRAPH_FEEDBACK=On
+          -DRAPIDJSON_SYS_DEP=Off
+          -DFMT_SYS_DEP=Off
+          -DSPDLOG_SYS_DEP=Off
+          -DVW_ZLIB_SYS_DEP=Off
+          -DVW_BOOST_MATH_SYS_DEP=Off
+          -DVW_INSTALL=Off
+      - name: Build
+        run: cmake --build "${{ env.CMAKE_BUILD_DIR }}" --config ${{ matrix.build_type }}
+      - name: Test run_tests.py
+        run: python3 ${{ env.SOURCE_DIR }}/test/run_tests.py -f --clean_dirty -E 0.01 --skip_spanning_tree_tests --vw_bin_path ${{ env.CMAKE_BUILD_DIR }}/vowpalwabbit/cli/${{ matrix.build_type }}/vw.exe
+      - name: Test unit tests
+        working-directory: ${{ github.workspace }}/vw/build
+        run: ctest --output-on-failure --no-tests=error --label-regex VWTestList --build-config ${{ matrix.build_type }} --parallel 2
+  build_vendor_macos:
+    runs-on: ${{matrix.os}}
+    name: core-cli.${{ matrix.os }}.amd64.${{ matrix.build_type }}.AppleClang.standalone
+    strategy:
+      matrix:
+        os: [macos-11]
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Install dependencies
+        run: brew install cmake ninja
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+          -DVW_FEAT_FLATBUFFERS=Off
+          -DVW_FEAT_CSV=On
+          -DVW_FEAT_CB_GRAPH_FEEDBACK=On
+          -DRAPIDJSON_SYS_DEP=Off
+          -DFMT_SYS_DEP=Off
+          -DSPDLOG_SYS_DEP=Off
+          -DVW_ZLIB_SYS_DEP=Off
+          -DVW_BOOST_MATH_SYS_DEP=Off
+          -DVW_INSTALL=Off
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error --label-regex VWTestList --parallel 2
+      - name: Test
+        run: python3 test/run_tests.py -f --clean_dirty -E 0.001

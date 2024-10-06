@@ -1,0 +1,403 @@
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - master
+      - darktable-**
+    paths-ignore:
+        - "po/**"
+        - "packaging/**"
+        - "data/latex/**"
+        - "data/lua/**"
+        - "data/pixmaps/**"
+        - "data/pswp/**"
+        - "data/style/**"
+        - "data/themes/**"
+        - "data/watermarks/**"
+        - "tools/*"
+        - "**.md"
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+        - "po/**"
+        - "packaging/**"
+        - "data/latex/**"
+        - "data/lua/**"
+        - "data/pixmaps/**"
+        - "data/pswp/**"
+        - "data/style/**"
+        - "data/themes/**"
+        - "data/watermarks/**"
+        - "tools/*"
+        - "**.md"
+
+permissions:
+  contents: read
+
+jobs:
+
+  Linux:
+    name: Linux.${{ matrix.distro }}.${{ matrix.compiler.compiler }}.${{ matrix.btype }}
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.distro }}
+      options: --tmpfs /tmp:exec --tmpfs /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}:exec
+    strategy:
+      fail-fast: true
+      matrix:
+        distro:
+          - "debian:trixie-slim"
+        compiler:
+          - { compiler: GNU13,  CC: gcc-13,   CXX: g++-13,     packages: gcc-13 g++-13 }
+          - { compiler: LLVM16, CC: clang-16, CXX: clang++-16, packages: clang-16 libomp-16-dev llvm-16-dev libc++-16-dev libc++abi1-16 lld-16 clang-tools-16 mlir-16-tools libmlir-16-dev}
+        btype:
+          - Release
+        target:
+          - skiptest
+        generator:
+          - Ninja
+        include:
+          # We want one run in CI to be Debug to make sure the Debug build isn't broken
+          - distro: "debian:trixie-slim"
+            btype: Debug
+            compiler: { compiler: GNU13, CC: gcc-13, CXX: g++-13, packages: gcc-13 g++-13 }
+            target: skiptest
+            generator: Ninja
+    env:
+      DISTRO: ${{ matrix.distro }}
+      CC: ${{ matrix.compiler.CC }}
+      CXX: ${{ matrix.compiler.CXX }}
+      SRC_DIR: ${{ github.workspace }}/src
+      BUILD_DIR: ${{ github.workspace }}/build
+      INSTALL_PREFIX: ${{ github.workspace }}/install
+      ECO: -DTEMPORAIRLY_ALLOW_OLD_TOOCHAIN=OFF
+      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
+      GENERATOR: ${{ matrix.generator }}
+      TARGET: ${{ matrix.target }}
+      DARKTABLE_CLI: ${{ github.workspace }}/install/bin/darktable-cli
+    steps:
+      - name: Configure APT
+        timeout-minutes: 1
+        run: |
+          set -xe
+          tee /etc/dpkg/dpkg.cfg.d/force-unsafe-io > /dev/null <<EOT
+          force-unsafe-io
+          EOT
+          tee /etc/apt/apt.conf.d/tmpfs > /dev/null <<EOT
+          Dir::Cache::Archives "/tmp/apt/archives";
+          APT::ExtractTemplates::TempDir "/tmp/apt/temp";
+          EOT
+          mkdir -p /tmp/apt/archives
+          tee /etc/apt/apt.conf.d/80retry > /dev/null <<EOT
+          Acquire::Retries "10";
+          EOT
+          tee /etc/apt/apt.conf.d/80recommends > /dev/null <<EOT
+          APT::Install-Recommends "false";
+          EOT
+          tee /etc/apt/apt.conf.d/80suggests > /dev/null <<EOT
+          APT::Install-Suggests "false";
+          EOT
+          tee /etc/apt/apt.conf.d/80forceyes > /dev/null <<EOT
+          APT::Get::Assume-Yes "true";
+          EOT
+          tee /etc/apt/apt.conf.d/80fixmissing > /dev/null <<EOT
+          APT::Get::Fix-Missing "true";
+          EOT
+          rm -rf /etc/apt/sources.list*
+          if [ "${DISTRO}" = "debian:trixie-slim" ]; then
+          tee /etc/apt/sources.list > /dev/null <<EOT
+          deb http://debian-archive.trafficmanager.net/debian trixie main
+          deb http://debian-archive.trafficmanager.net/debian trixie-updates main
+          deb http://debian-archive.trafficmanager.net/debian-security trixie-security main
+          deb http://debian-archive.trafficmanager.net/debian trixie-backports main
+          EOT
+          elif [ "${DISTRO}" = "debian:bookworm-slim" ]; then
+          tee /etc/apt/sources.list > /dev/null <<EOT
+          deb http://debian-archive.trafficmanager.net/debian bookworm main
+          deb http://debian-archive.trafficmanager.net/debian bookworm-updates main
+          deb http://debian-archive.trafficmanager.net/debian-security bookworm-security main
+          deb http://debian-archive.trafficmanager.net/debian bookworm-backports main
+          EOT
+          fi
+      - name: Update base packages
+        timeout-minutes: 1
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -xe
+          rm -rf /var/lib/apt/lists/*
+          apt-get update
+          apt-get install eatmydata
+          eatmydata apt-get upgrade
+      - name: Install compiler ${{ matrix.compiler.compiler }}
+        run: |
+          eatmydata apt-get -y install ${{ matrix.compiler.packages }}
+      - name: Install Base Dependencies
+        run: |
+          eatmydata apt-get -y install \
+            build-essential \
+            cmake \
+            appstream-util \
+            desktop-file-utils \
+            gettext \
+            git \
+            gdb \
+            intltool \
+            libatk1.0-dev \
+            libavif-dev \
+            libcairo2-dev \
+            libcolord-dev \
+            libcolord-gtk-dev \
+            libcups2-dev \
+            libcurl4-gnutls-dev \
+            libexiv2-dev \
+            libgdk-pixbuf2.0-dev \
+            libglib2.0-dev \
+            libgmic-dev \
+            libgphoto2-dev \
+            libgraphicsmagick1-dev \
+            libgtk-3-dev \
+            libheif-dev \
+            libjpeg-dev \
+            libjson-glib-dev \
+            liblcms2-dev \
+            liblensfun-dev \
+            liblua5.4-dev \
+            libopenexr-dev \
+            libopenjp2-7-dev \
+            libosmgpsmap-1.0-dev \
+            libpango1.0-dev \
+            libpng-dev \
+            libportmidi-dev \
+            libpugixml-dev \
+            librsvg2-dev \
+            libsaxon-java \
+            libsdl2-dev \
+            libsecret-1-dev \
+            libsqlite3-dev \
+            libtiff5-dev \
+            libwebp-dev \
+            libx11-dev \
+            libxml2-dev \
+            libxml2-utils \
+            ninja-build \
+            perl \
+            po4a \
+            python3-jsonschema \
+            xsltproc \
+            zlib1g-dev;
+      - name: Checkout darktable master branch
+        run: |
+          # For speed (and saving traffic), we make a shallow clone with a history truncated to 1 commit
+          git clone --depth 1 https://github.com/darktable-org/darktable src
+          cd src
+          git submodule init
+          git config submodule.src/tests/integration.update none
+          git submodule update
+          cd -
+      - name: Build and Install
+        run: |
+          cmake -E make_directory "${BUILD_DIR}";
+          cmake -E make_directory "${INSTALL_PREFIX}";
+          ./src/.ci/ci-script.sh;
+      - name: Check if it runs
+        run: |
+          ${INSTALL_PREFIX}/bin/darktable --version || true
+          ${INSTALL_PREFIX}/bin/darktable-cli \
+                 --width 1000 --height 1000 \
+                 --hq true --apply-custom-presets false \
+                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
+                 output.png \
+                 --core --disable-opencl --conf host_memory_limit=8192 \
+                 --conf worker_threads=4 -t 4 \
+                 --conf plugins/lighttable/export/force_lcms2=FALSE \
+                 --conf plugins/lighttable/export/iccintent=0
+      - name: Run Integration test suite
+        #integration test can get "stuck" plus there are couple of errors here, so it needs to be addressed first
+        if: ${{ false }}
+        run: |
+          cd "${SRC_DIR}/src/tests/integration/"
+          ./run.sh --no-opencl --no-deltae --fast-fail
+
+  Windows:
+    name: Windows.${{ matrix.msystem }}.${{ matrix.btype }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        btype:
+          - Release
+        msystem:
+          #- CLANG64
+          - UCRT64
+        target:
+          - skiptest
+        generator:
+          - Ninja
+        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON]
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      SRC_DIR: ${{ github.workspace }}/src
+      BUILD_DIR: ${{ github.workspace }}/build
+      INSTALL_PREFIX: ${{ github.workspace }}/install
+      ECO: ${{ matrix.eco }}
+      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
+      TARGET: ${{ matrix.target }}
+      GENERATOR: ${{ matrix.generator }}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: >-
+            git
+            intltool
+            po4a
+          pacboy: >-
+            cc:p
+            cmake:p
+            libxslt:p
+            ninja:p
+            nsis:p
+            python-jsonschema:p
+            curl:p
+            drmingw:p
+            exiv2:p
+            gcc-libs:p
+            gettext:p
+            gmic:p
+            graphicsmagick:p
+            gtk3:p
+            icu:p
+            imath:p
+            iso-codes:p
+            lcms2:p
+            lensfun:p
+            libavif:p
+            libgphoto2:p
+            libheif:p
+            libjpeg-turbo:p
+            libjxl:p
+            libpng:p
+            libraw:p
+            librsvg:p
+            libsecret:p
+            libtiff:p
+            libwebp:p
+            libxml2:p
+            lua:p
+            omp:p
+            openexr:p
+            openjpeg2:p
+            osm-gps-map:p
+            portmidi:p
+            pugixml:p
+            SDL2:p
+            sqlite3:p
+            zlib:p
+          update: false
+      - run: git config --global core.autocrlf input
+        shell: bash
+      - name: Checkout darktable master branch
+        run: |
+          # For speed (and saving traffic), we make a shallow clone with a history truncated to 1 commit
+          git clone --depth 1 https://github.com/darktable-org/darktable src
+          pushd src
+          git submodule init
+          git config submodule.src/tests/integration.update none
+          git submodule update
+          popd
+      - name: Build and Install
+        run: |
+          cmake -E make_directory "${BUILD_DIR}"
+          cmake -E make_directory "${INSTALL_PREFIX}"
+          $(cygpath ${SRC_DIR})/.ci/ci-script.sh
+      - name: Check if it runs
+        run: |
+          $(cygpath ${INSTALL_PREFIX})/bin/darktable.exe --version || true
+          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe --version || true
+          echo "Testing RUN!"
+          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe \
+                 --width 1000 --height 1000 \
+                 --hq true --apply-custom-presets false \
+                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/darktable.png \
+                 output.png \
+                 --core --disable-opencl --conf host_memory_limit=8192 \
+                 --conf worker_threads=4 -t 4 \
+                 --conf plugins/lighttable/export/force_lcms2=FALSE \
+                 --conf plugins/lighttable/export/iccintent=0
+
+  macOS:
+    name: macOS.${{ matrix.build.os }}.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.btype }}
+    runs-on: ${{ matrix.build.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        build:
+          - { os: macos-13,    xcode: 15.2,   deployment: 13.5 } # LLVM16, x86_64
+          - { os: macos-14,    xcode: 15.3,   deployment: 14.0 } # LLVM16, arm64
+        compiler:
+          - { compiler: XCode,   CC: cc, CXX: c++ }
+        btype: [ Release ]
+        target:
+          - skiptest
+        generator:
+          - Ninja
+        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON -DUSE_GRAPHICSMAGICK=OFF -DUSE_IMAGEMAGICK=ON]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
+      CC: ${{ matrix.compiler.CC }}
+      CXX: ${{ matrix.compiler.CXX }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.build.deployment }}
+      SRC_DIR: ${{ github.workspace }}/src
+      BUILD_DIR: ${{ github.workspace }}/build
+      INSTALL_PREFIX: ${{ github.workspace }}/install
+      ECO: ${{ matrix.eco }}
+      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
+      GENERATOR: ${{ matrix.generator }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout darktable master branch
+        run: |
+          # For speed (and saving traffic), we make a shallow clone with a history truncated to 1 commit
+          git clone --depth 1 https://github.com/darktable-org/darktable src
+          pushd src
+          git submodule init
+          git config submodule.src/tests/integration.update none
+          git submodule update
+          popd
+      - name: Install Base Dependencies
+        run: |
+          brew update > /dev/null || true
+          # brew upgrade || true        # no need for a very time-consuming upgrade of ALL packages
+          brew tap Homebrew/bundle
+          cd src/.ci
+          export HOMEBREW_NO_INSTALL_UPGRADE=1
+          brew bundle --verbose || true
+          # handle keg-only libs
+          brew link --force libomp
+          brew link --force libsoup@2
+      - name: Build and Install
+        run: |
+          cmake -E make_directory "${BUILD_DIR}";
+          cmake -E make_directory "${INSTALL_PREFIX}";
+          ./src/.ci/ci-script.sh;
+      - name: Check if it runs
+        run: |
+          ${INSTALL_PREFIX}/bin/darktable --version || true
+          ${INSTALL_PREFIX}/bin/darktable-cli \
+                 --width 1000 --height 1000 \
+                 --hq true --apply-custom-presets false \
+                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
+                 output.png \
+                 --core --disable-opencl --conf host_memory_limit=8192 \
+                 --conf worker_threads=4 -t 4 \
+                 --conf plugins/lighttable/export/force_lcms2=FALSE \
+                 --conf plugins/lighttable/export/iccintent=0

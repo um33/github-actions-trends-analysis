@@ -1,0 +1,10 @@
+query-filters:
+  - exclude:
+      # complains about `...` method bodies and `await`, i.e. mostly false positives
+      id: py/ineffectual-statement
+  - exclude:
+      # TODO: these are nice to fix, but not that important
+      id: py/empty-except
+  - exclude:
+      # this is a matter of taste
+      id: py/redundant-else

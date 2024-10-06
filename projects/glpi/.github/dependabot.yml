@@ -1,0 +1,99 @@
+version: 2
+
+updates:
+  # Keep Github Actions dependencies up-to-date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+
+  # Update development dependencies on current release branch (10.0/bugfixes).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    allow:
+      - dependency-type: "development"
+    open-pull-requests-limit: 100
+    target-branch: "10.0/bugfixes"
+    versioning-strategy: "increase"
+    rebase-strategy: "disabled"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    allow:
+      - dependency-type: "development"
+    open-pull-requests-limit: 100
+    target-branch: "10.0/bugfixes"
+    versioning-strategy: "increase"
+    rebase-strategy: "disabled"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "*"
+
+
+  # Update production dependencies on future release branch (main).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    allow:
+      - dependency-type: "production"
+    open-pull-requests-limit: 100
+    target-branch: "main"
+    versioning-strategy: "increase"
+    rebase-strategy: "disabled"
+    groups:
+      cytoscape:
+        patterns:
+          - "cytoscape"
+          - "cytoscape-*"
+      leaflet:
+        patterns:
+          - "leaflet"
+          - "leaflet-*"
+          - "leaflet.*"
+      fullcalendar:
+        patterns:
+          - "@fullcalendar/*"
+      tabler:
+        patterns:
+          - "@tabler/*"
+          - "bootstrap"
+
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    allow:
+      - dependency-type: "production"
+    open-pull-requests-limit: 100
+    target-branch: "main"
+    versioning-strategy: "increase"
+    rebase-strategy: "disabled"
+    groups:
+      guzzlehttp:
+        patterns:
+          - "guzzlehttp/*"
+      sabre:
+        patterns:
+          - "sabre/*"
+      symfony:
+        patterns:
+          - "symfony/*"
+        exclude-patterns:
+          - "symfony/polyfill-*"
+      symfony-polyfills:
+        patterns:
+          - "symfony/polyfill-*"
+      twig:
+        patterns:
+          - "twig/*"

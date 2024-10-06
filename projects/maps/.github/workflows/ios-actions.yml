@@ -1,0 +1,140 @@
+name: iOS Build & Detox
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        default: default
+        type: string
+      ref:
+        required: false
+        type: string 
+      NVMRC:
+        required: true
+        type: string
+      MAP_IMPL:
+        description: "The map implementation to use (mapbox,mapbox11)"
+        default: mapbox
+        required: false
+        type: string
+      NEW_ARCH:
+        description: "If build with new architecture or not"
+        default: false
+        required: false
+        type: boolean
+    secrets:
+      MAPBOX_ACCESS_TOKEN:
+        required: true
+      MAPBOX_DOWNLOAD_TOKEN:
+        required: true
+      ENV_MAPBOX_ACCESS_TOKEN:
+        required: false
+      ENV_MAPBOX_DOWNLOAD_TOKEN:
+        required: false
+
+jobs:
+  build:
+    name: iOS Example Build ${{ inputs.NEW_ARCH && 'Fabric' || 'Paper' }} ${{ inputs.MAP_IMPL }}
+    runs-on: macos-13
+    timeout-minutes: 55
+    environment: ${{ inputs.env_name }}
+
+    defaults:
+      run:
+        working-directory: ./example
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: ${{ inputs.ref == '' }}
+      
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        if: ${{ inputs.ref != '' }}
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Access Token
+        run: echo $MAPBOX_ACCESS_TOKEN > ./accesstoken
+        env:
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN || secrets.ENV_MAPBOX_ACCESS_TOKEN }}
+
+      - name: Setup .netrc with MAPBOX_DOWNLOAD_TOKEN
+        run: |
+          echo 'machine api.mapbox.com' >> ~/.netrc
+          echo 'login mapbox' >> ~/.netrc
+          echo "password $MAPBOX_DOWNLOAD_TOKEN" >> ~/.netrc
+          chmod 0600 ~/.netrc
+        if: "${{ env.MAPBOX_DOWNLOAD_TOKEN != '' }}"
+        env:
+          MAPBOX_DOWNLOAD_TOKEN: ${{ secrets.MAPBOX_DOWNLOAD_TOKEN || secrets.ENV_MAPBOX_DOWNLOAD_TOKEN }}
+
+      - name: Setup node ${{ inputs.NVMRC }}
+        uses: actions/setup-node@v3.5.1
+        with:
+          node-version: ${{ inputs.NVMRC }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v3
+        id: yarn-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('**/yarn.lock') }}
+
+      - name: Install Yarn Dependencies
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn install --network-timeout 1000000
+
+      - run: yarn postinstall
+        working-directory: example
+
+      - name: Cache Pods
+        uses: actions/cache@v3
+        id: pods-cache
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('**/Podfile.lock') }}-${{ inputs.MAP_IMPL }}-${{ inputs.NEW_ARCH }}}
+
+      - name: Check CocoaPods version
+        id: cocoapods-version
+        run: |
+          pod --version > version.txt
+          cat version.txt
+          echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
+
+      - name: Upgrade CocoaPods
+        if: steps.cocoapods-version.outputs.version == '1.15.0'
+        run: sudo gem install cocoapods -v 1.15.2
+
+      - name: Install Pod Dependencies
+        if: steps.pods-cache.outputs.cache-hit != 'true'
+        run: cd ios && pod --version && pod update MapboxMaps hermes-engine RCT-Folly && pod install
+        env:
+          CI_MAP_IMPL: ${{ inputs.MAP_IMPL }}
+          RCT_NEW_ARCH_ENABLED: ${{ inputs.NEW_ARCH && 1 || 0 }}
+          NO_FLIPPER: 1
+
+      - name: Install Detox Dependencies
+        run: |
+          brew tap wix/brew
+          brew install applesimutils
+          brew install xcbeautify
+
+      - name: Build for detox
+        run: set -o pipefail && NSUnbufferedIO=YES  yarn detox build --configuration ios.debug.ci 2>&1
+
+      - name: Test with detox
+        if: inputs.NEW_ARCH != 1
+        run: |
+          npx detox --version
+          yarn detox test --configuration ios.debug.ci --debug-synchronization 500 --loglevel trace --record-logs all --take-screenshots all  | xcbeautify -qq --renderer github-actions
+        env:
+          SKIP_TESTS_NO_METAL: ${{ inputs.MAP_IMPL == 'mapbox' || inputs.MAP_IMPL == 'mapbox11' }}
+
+      - name: Store Detox artifacts on test failure
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: detox-artifacts
+          path: example/artifacts

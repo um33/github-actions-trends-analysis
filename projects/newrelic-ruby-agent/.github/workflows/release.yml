@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      repository-projects: write
+    steps:
+    - uses: actions/checkout@8f4b7f84864484a7bf31766abe9204da3cbe65b3 # tag v3.5.0
+      with:
+        fetch-depth: 0
+
+    - uses: ruby/setup-ruby@af848b40be8bb463a751551a1180d74782ba8a72 # tag v1.162.0
+      with:
+        ruby-version: 3.2
+
+    - name: Install onetimepass
+      run: pip install onetimepass==1.0.1
+
+    - name: Configure gem credentials
+      run: |
+        echo "GEM_HOST_API_KEY=${{ secrets.RUBYGEMS_API_KEY }}" >> $GITHUB_ENV
+        echo "RUBYGEMS_MFA_KEY=${{ secrets.RUBYGEMS_MFA_KEY }}" >> $GITHUB_ENV
+
+    - name: Build newrelic_rpm gem
+      run: gem build newrelic_rpm.gemspec
+
+    - name: Build newrelic-infinite_tracing gem
+      run: |
+        cd infinite_tracing
+        gem build newrelic-infinite_tracing.gemspec
+        cd ..
+
+    - name: Determine version
+      run: |
+        echo "VERSION=$(ls newrelic_rpm-*.gem | ruby -pe 'sub(/newrelic_rpm\-(.*).gem/, "\\1")')" >> $GITHUB_ENV
+
+    - name: Create github release
+      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # tag v0.1.15
+      if: $(git tag -l ${{ env.VERSION }}) == false
+      with:
+        tag_name: ${{ env.VERSION }}
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Obtain OTP to publish newrelic_rpm to rubygems.org
+      run: echo "RUBYGEMS_OTP=$(python ./.github/workflows/scripts/rubygems-authenticate.py RUBYGEMS_MFA_KEY)" >> $GITHUB_ENV
+
+    - name: Publish newrelic_rpm to rubygems.org
+      run: ruby ./.github/workflows/scripts/rubygems-publish.rb newrelic_rpm
+
+    - name: Obtain OTP to publish newrelic-infinite_tracing to rubygems.org
+      run: echo "RUBYGEMS_OTP=$(python ./.github/workflows/scripts/rubygems-authenticate.py RUBYGEMS_MFA_KEY)" >> $GITHUB_ENV
+
+    - name: Publish newrelic-infinite_tracing to rubygems.org
+      run: ruby ./.github/workflows/scripts/rubygems-publish.rb infinite_tracing/newrelic-infinite_tracing

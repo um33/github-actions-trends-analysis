@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # repository root
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: autoprefixer
+        versions:
+          - 10.x
+  # purecss.io site
+  - package-ecosystem: npm
+    directory: "/site"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    groups:
+      docusaurus:
+        patterns:
+          - '@docusaurus/*'

@@ -1,0 +1,47 @@
+name: Release with changelog
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install JDK ${{ matrix.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: 17
+
+      - name: Install Android SDK
+        uses: malinskiy/action-android/install-sdk@release/0.1.4
+
+      - name: Build project
+        run: ./gradlew assembleRelease
+        env:
+          VERSION: ${{ github.ref }}
+
+      - name: Get the version
+        id: tagger
+        uses: jimschubert/query-tag-action@v2
+        with:
+          skip-unshallow: 'true'
+          abbrev: false
+          commit-ish: HEAD
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{steps.tagger.outputs.tag}}
+          name: ${{steps.tagger.outputs.tag}}
+          generate_release_notes: true
+          files: touchview/build/outputs/aar/touchview-release.aar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

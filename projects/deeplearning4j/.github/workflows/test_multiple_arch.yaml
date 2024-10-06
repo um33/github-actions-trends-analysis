@@ -1,0 +1,32 @@
+on:
+  workflow_dispatch:
+jobs:
+  cache:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: konduitai/cuda-install/.github/actions/install-cuda-ubuntu@master
+        env:
+            cuda: 11.6.0
+            GCC: 7
+      - name: Cache cuda 11.6 install
+        uses: actions/cache@v2
+        id: cache-cuda-116
+        with:
+            path: /usr/local/cuda-11.6
+            key: ubuntu-20.04-cuda-11.6
+            restore-keys: ubuntu-20.04-cuda-11.6
+      - uses: konduitai/cuda-install/.github/actions/install-cuda-ubuntu@master
+        env:
+            cuda: 11.4
+            GCC: 7
+      - name: Cache cuda 11.4 install
+        uses: actions/cache@v2
+        id: cache-cuda-114
+        with:
+            path: /usr/local/cuda-11.4
+            key: ubuntu-20.04-cuda-11.4
+            restore-keys: ubuntu-20.04-cuda-11.4
+
+
+

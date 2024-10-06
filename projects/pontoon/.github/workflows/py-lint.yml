@@ -1,0 +1,61 @@
+name: Python linting
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pontoon/**.py
+      - .github/workflows/py-lint.yml
+      - requirements/lint.txt
+  pull_request:
+    branches:
+      - main
+    paths:
+      - pontoon/**.py
+      - .github/workflows/py-lint.yml
+      - requirements/lint.txt
+  workflow_dispatch:
+
+jobs:
+  flake8:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: |
+          pip install -U pip
+          pip install -r requirements/lint.txt
+      - name: flake8
+        run: flake8 pontoon
+
+  black:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: |
+          pip install -U pip
+          pip install -r requirements/lint.txt
+      - name: black
+        run: black --check pontoon
+
+  pyupgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: |
+          pip install -U pip
+          pip install -r requirements/lint.txt
+      - name: pyupgrade
+        run: pyupgrade --py310-plus *.py `find pontoon -name \*.py`

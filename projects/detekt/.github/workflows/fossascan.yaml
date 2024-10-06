@@ -1,0 +1,22 @@
+name: FOSSA License Scan
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  fossa-scan:
+    if: github.repository == 'detekt/detekt'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Run FOSSA Scan
+        uses: fossas/fossa-action@f61a4c0c263690f2ddb54b9822a719c25a7b608f # tag=v1
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}

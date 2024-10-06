@@ -1,0 +1,93 @@
+## Heavily inspired from https://github.com/rstudio/shinycoreci-apps/blob/5eb7be4a0b3591205211d491365ee90087207169/.github/workflows/deploy.yml
+## Trigger workflow with
+# ```r
+# #remotes::install_github("rstudio/shinycoreci")
+# shinycoreci::trigger("deploy", "rstudio/shiny-examples")
+# ```
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - "**deploy**"
+  schedule:
+    - cron: "0 6 10 * *" # every 10th (arbitrary) day of each month at ~ midnight central time
+  repository_dispatch:
+    types:
+      - all
+      - deploy
+
+jobs:
+  deploy:
+    runs-on: macos-latest
+
+    name: "${{ matrix.config.type }}"
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        config:
+          - r: "4.2"
+            type: "shinyappsio"
+            account: "gallery"
+            server_name: "shinyapps.io"
+            cores: 5
+            extra_text: " --all"
+        # Testing config on particular app
+        # - { r: 'release', type: "shinyappsio", account: "gallery", server_name: "shinyapps.io", cores: 1, extra_text: " 182" }
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+      CRAN: "https://cloud.r-project.org"
+
+    steps:
+      - uses: actions/checkout@v2
+        name: GitHub Pull
+
+      - name: R Options
+        shell: bash
+        run: |
+          echo 'MAKEFLAGS=-j2' >> .Renviron
+
+      - name: Install R, system dependencies, and package dependencies
+        uses: rstudio/shiny-workflows/setup-r-package@v1
+        with:
+          r-version: ${{ matrix.config.r }}
+          packages: remotes
+          extra-packages: |
+            any::devtools
+            any::rsconnect
+            any::packrat
+            any::knitr
+            any::renv
+            any::shiny
+            any::cpp11
+            any::plogr
+            any::BH
+            any::RcppArmadillo
+            any::RcppEigen
+            any::progress
+            any::AsioHeaders
+            hadley/shinySignals
+            jcheng5/bubbles
+            jcheng5/googleCharts
+            rstudio/shinyvalidate
+            cran/XML
+            rstudio/httpuv
+
+      - name: Install remaining packages
+        shell: Rscript {0}
+        run: |
+          source('install_deps.R')
+
+      - name: Set up shinyapps.io
+        run: >
+          Rscript
+          -e "options(pkgType = 'binary')"
+          -e "rsconnect::setAccountInfo(name='${{ matrix.config.account }}', token='${{ secrets.shinyapps_io_gallery_token }}', secret='${{ secrets.shinyapps_io_gallery_secret }}')"
+      - name: Deploy Apps to shinyapps.io
+        run: >
+          ./deploy -d -a ${{ matrix.config.account }} -s ${{ matrix.config.server_name }} -c ${{ matrix.config.cores }}${{ matrix.config.extra_text }}

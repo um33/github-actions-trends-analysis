@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: daily
+    assignees:
+      - mistic100
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-patch']
+      - dependency-name: '@typescript-eslint/*'
+        update-types: ['version-update:semver-minor']
+      - dependency-name: 'marked'
+        update-types: ['version-update:semver-major']
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    assignees:
+      - mistic100
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'

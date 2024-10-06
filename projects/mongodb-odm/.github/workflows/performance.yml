@@ -1,0 +1,65 @@
+name: "Performance tests"
+
+on:
+  pull_request:
+    branches:
+      - "*.x"
+      - "feature/*"
+  push:
+
+jobs:
+  performance-tests:
+    name: "Performance Tests"
+    runs-on: "ubuntu-22.04"
+
+    strategy:
+      matrix:
+        php-version:
+          - "8.1"
+
+    services:
+      mongodb:
+        image: "mongo"
+        ports:
+          - "27017:27017"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+
+      - name: Setup cache environment
+        id: extcache
+        uses: shivammathur/cache-extensions@v1
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: "mongodb-${{ matrix.driver-version }}, bcmath"
+          key: "extcache-v1"
+
+      - name: Cache extensions
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.extcache.outputs.dir }}
+          key: ${{ steps.extcache.outputs.key }}
+          restore-keys: ${{ steps.extcache.outputs.key }}
+
+      - name: "Install PHP"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          coverage: "none"
+          extensions: "mongodb, bcmath"
+          php-version: "${{ matrix.php-version }}"
+
+      - name: "Show driver information"
+        run: "php --ri mongodb"
+
+      - name: "Install dependencies with Composer"
+        uses: "ramsey/composer-install@v3"
+
+      - name: "Upload composer.lock as build artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: composer.lock
+          path: composer.lock
+
+      - name: "Run PHPBench"
+        run: "vendor/bin/phpbench run --report=default --revs=100 --iterations=5 --report=aggregate"

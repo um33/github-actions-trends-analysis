@@ -1,0 +1,26 @@
+name: Lock Issues
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: lock
+
+jobs:
+  lock-issues:
+    name: Lock Old Issues
+    if: github.repository == 'zealdocs/zeal'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: dessant/lock-threads@v5
+        with:
+          issue-inactive-days: 180
+          issue-lock-reason: ""
+          process-only: issues

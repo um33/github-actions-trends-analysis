@@ -1,0 +1,252 @@
+#
+# Copyright:	2021, The Geany contributors
+# License:		GNU GPL v2 or later
+
+name: CI Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+# cancel already running builds of the same branch or pull request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CFLAGS: -g -O2 -Werror=pointer-arith -Werror=implicit-function-declaration
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_COMPRESS: true
+  CCACHE_MAXSIZE: 1G
+  PYTHON: python3
+  JOBS: 2
+  DEBUG: 0
+
+jobs:
+  linux:
+    name: Linux Build (BINRELOC=${{ matrix.binreloc }})
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - binreloc: no
+          - binreloc: yes
+
+    env:
+      CONFIGURE_FLAGS: --enable-binreloc=${{ matrix.binreloc }}
+      CC: ccache gcc
+      CXX: ccache g++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # create and use a timestamp for the cache key: GH Actions will never update a cache
+      # only use an existing cache item or create a new one. To use an existing cache *and*
+      # push back the the updated cache after build, we use a always new cache key (to force
+      # the creation of the cache item at the end) in combination with "restore-keys" as fallback
+      - name: Prepare ccache timestamp
+        id: ccache_cache_timestamp
+        run: echo "timestamp=$(date +%Y-%m-%d-%H-%M)" >> $GITHUB_OUTPUT
+
+      - name: Configure ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-${{ github.job }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-ccache-
+
+      - name: Show environment
+        run: env | sort
+        if: ${{ env.DEBUG == '1' }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --assume-yes --no-install-recommends \
+            ccache \
+            gettext autopoint \
+            libtool \
+            libgtk-3-dev \
+            doxygen \
+            python3-docutils \
+            python3-lxml \
+            rst2pdf
+
+      - name: Configure
+        run: |
+          NOCONFIGURE=1 ./autogen.sh
+          mkdir _build
+          cd _build
+          { ../configure $CONFIGURE_FLAGS || { cat config.log; exit 1; } ; }
+
+      - name: Build
+        run: |
+          cd _build
+          make -j ${{ env.JOBS }}
+
+      - name: Run Tests
+        run: |
+          cd _build
+          make -j ${{ env.JOBS }} check
+
+      - name: Run distcheck
+        run: |
+          cd _build
+          make -j ${{ env.JOBS }} distcheck DISTCHECK_CONFIGURE_FLAGS="$CONFIGURE_FLAGS";
+
+      - name: ccache statistics
+        run: ccache --show-stats
+        if: ${{ env.DEBUG == '1' }}
+
+  linux-meson:
+    name: Linux Meson Build
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: false
+
+    env:
+      CC: ccache gcc
+      CXX: ccache g++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # create and use a timestamp for the cache key: GH Actions will never update a cache
+      # only use an existing cache item or create a new one. To use an existing cache *and*
+      # push back the the updated cache after build, we use a always new cache key (to force
+      # the creation of the cache item at the end) in combination with "restore-keys" as fallback
+      - name: Prepare ccache timestamp
+        id: ccache_cache_timestamp
+        run: echo "timestamp=$(date +%Y-%m-%d-%H-%M)" >> $GITHUB_OUTPUT
+
+      - name: Configure ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-${{ github.job }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-ccache-
+
+      - name: Show environment
+        run: env | sort
+        if: ${{ env.DEBUG == '1' }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --assume-yes --no-install-recommends \
+            ccache \
+            gettext autopoint \
+            libtool \
+            libgtk-3-dev \
+            doxygen \
+            python3-docutils \
+            python3-lxml \
+            rst2pdf \
+            meson
+
+      - name: Configuration
+        run: |
+          meson _build
+
+      - name: Build
+        run: |
+          ninja -C _build
+
+      - name: Run Tests
+        run: |
+          ninja -C _build test
+
+      # distcheck not applicable, meson exports the source tree per git-archive
+
+      - name: ccache statistics
+        run: ccache --show-stats
+        if: ${{ env.DEBUG == '1' }}
+
+  mingw64:
+    name: Mingw-w64 Build (Windows)
+    runs-on: ubuntu-20.04
+
+    env:
+      INFRASTRUCTURE_PATH:      ${{ github.workspace }}/.infrastructure
+      BUILDER_PATH:             ${{ github.workspace }}/.infrastructure/builders
+      DOCKER_REGISTRY:          "ghcr.io"
+      DOCKER_IMAGE_NAME:        "geany-mingw64-ci"
+      DOCKER_IMAGE_TAG:         "ghcr.io/geany/geany-mingw64-ci:latest"
+
+    steps:
+      - name: Checkout Geany
+        uses: actions/checkout@v4
+
+      - name: Checkout Build Scripts
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          repository: geany/infrastructure
+          path: ${{ env.INFRASTRUCTURE_PATH }}
+          token: ${{ github.token }}
+
+      - uses: jwalton/gh-find-current-pr@v1
+        id: find_pull_request
+        with:
+          state: open
+
+      - name: Define environment variables
+        run: |
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GITHUB_PULL_REQUEST=${GITHUB_PULL_REQUEST}" >> $GITHUB_ENV
+          echo "GITHUB_PULL_REQUEST_OR_REF=${GITHUB_PULL_REQUEST:-${{ github.ref_name }}}" | tr '/' '-' >> $GITHUB_ENV
+        env:
+          GITHUB_PULL_REQUEST: ${{ steps.find_pull_request.outputs.pr }}
+
+      - name: Show Environment
+        if: ${{ env.DEBUG == '1' }}
+        run: |
+            env | sort
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Or Build Docker Image
+        working-directory: ${{ env.BUILDER_PATH }}
+        run: |
+          docker_image_created=
+          docker pull ${{ env.DOCKER_IMAGE_TAG }} || true
+          if $(docker image inspect ${{ env.DOCKER_IMAGE_TAG }} --format="ignored" >/dev/null 2>&1); then
+              docker tag ${{ env.DOCKER_IMAGE_TAG }} ${{ env.DOCKER_IMAGE_NAME }}
+              docker_image_created=$(docker image inspect ${{ env.DOCKER_IMAGE_NAME }} --format='{{ index .Config.Labels "org.opencontainers.image.created" }}')
+              echo "Docker image built on: ${docker_image_created}"
+          fi
+
+          bash start_build.sh --log-to-stdout --mingw64 --rebuild-images
+          docker_image_created_new=$(docker image inspect ${{ env.DOCKER_IMAGE_NAME }} --format='{{ index .Config.Labels "org.opencontainers.image.created" }}')
+          # tag the image
+          if [ "${docker_image_created}" != "${docker_image_created_new}" ]; then
+              docker tag ${{ env.DOCKER_IMAGE_NAME }} ${{ env.DOCKER_IMAGE_TAG }}
+          fi
+
+      - name: Build Geany
+        if: steps.geany_cache.outputs.cache-hit != 'true'
+        working-directory: ${{ env.BUILDER_PATH }}
+        run: |
+            bash start_build.sh --log-to-stdout --mingw64 --geany --geany-source "${{ github.workspace }}"
+
+      - name: Archive Geany Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: geany-installer-ci-${{ env.SHORT_SHA }}-pr${{ env.GITHUB_PULL_REQUEST_OR_REF }}
+          retention-days: 30
+          path: |
+            ${{ env.BUILDER_PATH }}/output/mingw64/geany-*.exe
+            ${{ env.BUILDER_PATH }}/output/mingw64/geany-*.zip

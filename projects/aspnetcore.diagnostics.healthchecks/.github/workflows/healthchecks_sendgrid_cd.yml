@@ -1,0 +1,16 @@
+name: HealthChecks SendGrid CD
+
+on:
+  push:
+    tags:
+      - release-sendgrid-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.SendGrid/HealthChecks.SendGrid.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.SendGrid

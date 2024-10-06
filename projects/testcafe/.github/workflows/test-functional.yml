@@ -1,0 +1,187 @@
+name: Test Functional
+
+on:
+  workflow_call:
+    inputs:
+      test-script:
+        required: true
+        type: string
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+      node-version:
+        required: false
+        type: number
+        default: 16
+      matrix-jobs-count:
+        required: false
+        type: number
+        default: 3
+      display:
+        required: false
+        type: string
+        default: ''
+      use-public-hostname:
+        required: false
+        type: boolean
+        default: false
+      retry_failed_tests:
+        required: false
+        type: boolean
+        default: true
+      timeout:
+        required: false
+        type: number
+        default: 25
+      is-docker:
+        required: false
+        type: boolean
+        default: false
+      is-browserstack:
+        required: false
+        type: boolean
+        default: false
+env:
+  NO_CACHE: ${{ secrets.NO_CACHE }}
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: "${{ steps.generate-matrix.outputs.result }}"
+    steps:
+      - uses: actions/github-script@v6
+        id: generate-matrix
+        with:
+          script: |
+            return Array.from({length: ${{ inputs.matrix-jobs-count }}}, (_, i) => i + 1)
+
+  test:
+    needs: prepare-matrix
+    runs-on: ${{ inputs.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        test-group: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+    environment: test-functional
+    env:
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      BROWSERSTACK_BUILD_NAME: ${{ format('{0} ({1})', github.workflow, github.run_id) }}
+      USE_PUBLIC_HOSTNAME: ${{ inputs.use-public-hostname }}
+      RETRY_FAILED_TESTS: ${{ inputs.retry_failed_tests }}
+      TEST_GROUPS_COUNT: ${{ inputs.matrix-jobs-count }}
+      TEST_GROUP_NUMBER: ${{ matrix.test-group }}
+      DEBUG: 'testcafe*'
+      DISPLAY: ${{ inputs.display }}
+    steps:
+      - name: Set 'pending' status
+        uses: DevExpress/testcafe-build-system/actions/set-status@main
+        with:
+          status: 'pending'
+
+      - run: sudo safaridriver --enable
+        if: ${{ contains(inputs.os, 'macos') }}
+
+      - run: |
+          sudo apt install fluxbox
+          Xvfb ${{ inputs.display }} -screen 0 1920x1080x24 &
+          sleep 3
+          fluxbox >/dev/null 2>&1 &
+        if: ${{ inputs.display }}
+        
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{github.event.inputs.merged_sha || github.event.inputs.sha}}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # Remove after https://github.com/actions/runner-images/issues/8114 will be fixed
+      - name: Remove Google Chrome for Testing
+        if: ${{ contains(inputs.os, 'windows') }}
+        run: Remove-Item -Path "C:\Program Files\Google\Chrome" -Force -Recurse
+
+      - name: Install Google Chrome
+        if: ${{ contains(inputs.os, 'windows') }}
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - uses: DevExpress/testcafe-build-system/actions/read-artifacts@main
+        with:
+          package-name: 'testcafe'
+          is-docker: ${{ inputs.is-docker }}
+
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        shell: bash
+        run: |
+          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@v3
+        id: npm-cache # use this to check for `cache-hit` ==> if: steps.npm-cache.outputs.cache-hit != 'true'
+        if: ${{ !env.NO_CACHE }}
+        with:
+          path: ${{ steps.npm-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - run: npm ci
+        if: ${{ !inputs.is-docker }}
+      - run: npm install
+        if: ${{ inputs.is-docker }}
+
+      - name: Add permissions on MacOS
+        run: |
+          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access VALUES('kTCCServiceAppleEvents','com.devexpress.testcafe-browser-tools',0,2,3,1,X'fade0c0000000068000000010000000700000007000000080000001443fa4ca5141baeda21aeca1f50894673b440d4690000000800000014f8afcf6e69791b283e55bd0b03e39e422745770e0000000800000014bf4fc1aed64c871a49fc6bc9dd3878ce5d4d17c6',NULL,0,'com.apple.Safari',X'fade0c000000002c00000001000000060000000200000010636f6d2e6170706c652e53616661726900000003',NULL,1687952810);"
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.devexpress.testcafe-browser-tools',0,2,3,1,X'fade0c0000000068000000010000000700000007000000080000001443fa4ca5141baeda21aeca1f50894673b440d4690000000800000014f8afcf6e69791b283e55bd0b03e39e422745770e0000000800000014bf4fc1aed64c871a49fc6bc9dd3878ce5d4d17c6',NULL,0,'UNUSED',NULL,0,1687952810);"
+        if: ${{ contains(inputs.os, 'mac') }}
+
+      - name: 'Start BrowserStackLocal Tunnel'
+        if: ${{ inputs.is-browserstack }}
+        uses: 'browserstack/github-actions/setup-local@master'
+        with:
+          local-testing: start
+          local-logging-level: all-logs
+          local-identifier: random
+
+      - run: ${{ inputs.test-script }} 2> testcafe-debug-log-${{ matrix.test-group }}.log
+        timeout-minutes: ${{ inputs.timeout }}
+
+      - name: 'Stop BrowserStackLocal'
+        if: ${{ inputs.is-browserstack }}
+        uses: 'browserstack/github-actions/setup-local@master'
+        with:
+          local-testing: stop
+
+      - name: Save debug log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+            name: testcafe-debug-log
+            path: testcafe-debug-log-${{ matrix.test-group }}.log
+
+      - uses: DevExpress/testcafe-build-system/actions/save-matrix-status@main
+        if: always()
+        with: 
+          job-id: ${{ matrix.test-group }}
+
+  set-result-status:
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: DevExpress/testcafe-build-system/actions/read-matrix-status@main
+        id: matrix-status
+
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        if: always()
+        with:
+          status: ${{ steps.matrix-status.outputs.status }}
+
+      - name: Exit with error
+        if: ${{ steps.matrix-status.outputs.status != 'success' }}
+        run: exit 1

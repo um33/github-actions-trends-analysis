@@ -1,0 +1,63 @@
+name: "Build Docker"
+
+on: workflow_call
+jobs:
+  buildx:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    name: Build Docker
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # 4.1.4
+        with:
+          name: dist
+      - name: Prep binaries
+        working-directory: .github/workflows/docker
+        run: |
+          mkdir binaries
+          cp -r ../../../shiori_linux_* binaries/
+          mv binaries/shiori_linux_arm_7 binaries/shiori_linux_arm
+          mv binaries/shiori_linux_amd64_v1 binaries/shiori_linux_amd64
+          gzip -d -S binaries/.gz__  -r .
+          chmod 755 binaries/shiori_linux_*/shiori
+
+      # Every pull request that goes into master
+      - name: Prepare master push tags
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          REPO=ghcr.io/${{ github.repository }}
+          TAG=$(git describe --tags)
+          echo "tag_flags=--tag $REPO:$TAG" >> $GITHUB_ENV
+
+      # New tagged version
+      - name: Prepare version push tags
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          REPO=ghcr.io/${{ github.repository }}
+          TAG=$(git describe --tags)
+          if [[ "$TAG" == *"rc"* ]]
+          then
+            TAG2="dev"
+          else
+            TAG2="latest"
+          fi
+          echo "tag_flags=--tag $REPO:$TAG --tag $REPO:$TAG2" >> $GITHUB_ENV
+
+      # Every pull request
+      - name: Prepare pull request tags
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "tag_flags=--tag ${{ github.ref }}" >> $GITHUB_ENV
+          REPO=ghcr.io/${{ github.repository }}
+          echo "tag_flags=--tag $REPO:pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+
+      - name: Buildx
+        working-directory: .github/workflows/docker
+        run: |
+          set -x
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u "${{ github.repository_owner }}" --password-stdin ghcr.io
+          docker buildx create --use --name builder
+          docker buildx build -f Dockerfile.ci --platform=linux/amd64,arm64,linux/arm/v7 --push ${{ env.tag_flags }} .

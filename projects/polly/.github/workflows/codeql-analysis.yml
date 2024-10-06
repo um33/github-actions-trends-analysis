@@ -1,0 +1,57 @@
+name: code-scan
+
+on:
+  push:
+    branches: [ main, release/* ]
+  pull_request:
+    branches: [ main, release/* ]
+  schedule:
+    - cron: '0 8 * * MON'
+  workflow_dispatch:
+
+env:
+  SKIP_POLLY_ANALYZERS: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  code-ql:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'csharp' ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+
+    - name: Setup NuGet cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@4355270be187e1b672a7a1c7c7bae5afdc1ab94a # v3.24.10
+      with:
+        languages: ${{ matrix.language }}
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@4355270be187e1b672a7a1c7c7bae5afdc1ab94a # v3.24.10
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@4355270be187e1b672a7a1c7c7bae5afdc1ab94a # v3.24.10
+      with:
+        category: "/language:${{ matrix.language }}"

@@ -1,0 +1,78 @@
+name: Lint & Test
+
+on:
+  workflow_call
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    env:
+      # List of licenses that are compatible with the MIT License and
+      # can be used in our project
+      ALLOWED_LICENSE: Apache Software License;
+        BSD License;
+        GNU Library or Lesser General Public License (LGPL);
+        ISC License (ISCL);
+        MIT License;
+        Mozilla Public License 2.0 (MPL 2.0);
+        Public Domain;
+        Python Software Foundation License;
+        The Unlicense (Unlicense)
+
+      # Dummy values for required bot environment variables
+      BOT_API_KEY: foo
+      BOT_SENTRY_DSN: blah
+      BOT_TOKEN: bar
+      REDDIT_CLIENT_ID: spam
+      REDDIT_SECRET: ham
+      REDIS_PASSWORD: ''
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python Dependencies
+        uses: HassanAbouelela/actions/setup-python@setup-python_v1.4.2
+        with:
+          python_version: '3.12'
+
+      # Check all of our non-dev dependencies are compatible with the MIT license.
+      # If you added a new dependencies that is being rejected,
+      # please make sure it is compatible with the license for this project,
+      # and add it to the ALLOWED_LICENSE variable
+      - name: Check Dependencies License
+        run: |
+          pip-licenses --allow-only="$ALLOWED_LICENSE" \
+            --package $(poetry export -f requirements.txt --without-hashes | sed "s/==.*//g" | tr "\n" " ")
+
+      - name: Run pre-commit hooks
+        run: SKIP=ruff pre-commit run --all-files
+
+      # Run `ruff` using github formatting to enable automatic inline annotations.
+      - name: Run ruff
+        run: "ruff check --output-format=github ."
+
+      - name: Run tests and generate coverage report
+        run: pytest -n auto --cov -q
+
+      # Prepare the Pull Request Payload artifact. If this fails, we
+      # we fail silently using the `continue-on-error` option. It's
+      # nice if this succeeds, but if it fails for any reason, it
+      # does not mean that our lint-test checks failed.
+      - name: Prepare Pull Request Payload artifact
+        id: prepare-artifact
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: cat $GITHUB_EVENT_PATH | jq '.pull_request' > pull_request_payload.json
+
+      # This only makes sense if the previous step succeeded. To
+      # get the original outcome of the previous step before the
+      # `continue-on-error` conclusion is applied, we use the
+      # `.outcome` value. This step also fails silently.
+      - name: Upload a Build Artifact
+        if: always() && steps.prepare-artifact.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pull-request-payload
+          path: pull_request_payload.json

@@ -1,0 +1,22 @@
+---
+# yamllint disable rule:comments
+name: Pull Request Docs Check
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches:
+      - master
+      - release/*
+  pull_request:
+    branches:
+      - master
+      - release/*
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      # yamllint disable-line rule:line-length
+      - uses: ammaraskar/sphinx-action@8b4f60114d7fd1faeba1a712269168508d4750d2 # tag=0.4
+        with:
+          docs-folder: docs/

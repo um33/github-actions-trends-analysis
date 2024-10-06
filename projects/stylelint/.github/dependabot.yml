@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - 'pr: dependencies'
+    versioning-strategy: increase
+    groups:
+      csstools-parser:
+        patterns: ['@csstools/*']
+        exclude-patterns: ['@csstools/selector-specificity'] # unrelated to other parser packages
+      changesets:
+        patterns: ['@changesets/*']
+      eslint:
+        patterns: ['eslint', 'eslint-*']
+      jest:
+        patterns: ['jest', 'jest-*', '@jest/*']
+      stylelint:
+        patterns: ['@stylelint/*']
+      typescript:
+        patterns: ['typescript', '@types/*']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - 'pr: dependencies'

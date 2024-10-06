@@ -1,0 +1,28 @@
+name: Android CI
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+          - uses: actions/checkout@v3
+          - uses: actions/setup-java@v3
+            with:
+              java-version: '17'
+              distribution: 'zulu'
+          - uses: gradle/gradle-build-action@v2
+          - name: Build and run unit tests with Gradle
+            run: ./scripts/ci_unit.sh
+          - name: Build javadocs
+            run: ./gradlew :dokkaHtmlMultiModule
+          - name: Publish a source snapshot to Sonatype
+            env:
+              NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+              NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+            if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'bumptech/glide' }}
+            run: ./gradlew publish -PNEXUS_USERNAME="${NEXUS_USERNAME}" -PNEXUS_PASSWORD="${NEXUS_PASSWORD}"
+

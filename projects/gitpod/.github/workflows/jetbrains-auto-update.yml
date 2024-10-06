@@ -1,0 +1,61 @@
+name: JB Update Latest IDE Images
+on:
+  workflow_dispatch:
+  schedule:
+    # At 11:00 on every day.
+    - cron: "0 11 * * *"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "components/ide/jetbrains/backend-plugin/gradle-latest.properties"
+
+jobs:
+  intellij:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: intellij
+      productCode: IIU
+    secrets: inherit
+  goland:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: goland
+      productCode: GO
+    secrets: inherit
+  pycharm:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: pycharm
+      productCode: PCP
+    secrets: inherit
+  phpstorm:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: phpstorm
+      productCode: PS
+    secrets: inherit
+  rubymine:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: rubymine
+      productCode: RM
+    secrets: inherit
+  webstorm:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: webstorm
+      productCode: WS
+    secrets: inherit
+  rider:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: rider
+      productCode: RD
+    secrets: inherit
+  clion:
+    uses: ./.github/workflows/jetbrains-auto-update-template.yml
+    with:
+      productId: clion
+      productCode: CL
+    secrets: inherit

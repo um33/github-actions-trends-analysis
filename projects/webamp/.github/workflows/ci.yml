@@ -1,0 +1,54 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install Dependencies
+        run: yarn
+      - name: Build
+        run: |
+          yarn workspace ani-cursor build
+          yarn workspace webamp build
+          yarn workspace webamp build-library
+      - name: Lint
+        run: |
+          yarn lint
+          yarn workspace webamp type-check
+      - name: Run Unit Tests
+        run: |
+          touch packages/skin-database/config.js
+          yarn test
+          yarn workspace webamp test
+      - name: Run Integration Tests
+        run: yarn workspace webamp integration-tests
+        env:
+          CI: true
+      - name: Upload Screenshot Diffs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: image_diffs
+          path: packages/webamp/js/__tests__/__image_snapshots__/__diff_output__/
+      - name: Generate New Screenshots
+        if: failure()
+        run: |
+          yarn workspace webamp integration-tests -u
+      - name: Upload New Screenshots
+        if: failure()
+        uses: actions/upload-artifact@v1
+        with:
+          name: new_images
+          path: packages/webamp/js/__tests__/__image_snapshots__/

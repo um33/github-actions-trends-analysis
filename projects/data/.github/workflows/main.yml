@@ -1,0 +1,195 @@
+name: Main
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - beta
+      - release
+      - 'release-*'
+      - 'lts-*'
+    tags:
+      - '*'
+
+env:
+  TURBO_API: http://127.0.0.1:9080
+  TURBO_TOKEN: this-is-not-a-secret
+  TURBO_TEAM: myself
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    timeout-minutes: 8
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: ./.github/actions/setup
+        with:
+          restore-lint-caches: true
+          install: true
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prettier
+        run: pnpm lint:prettier
+      - name: Lint
+        run: pnpm lint
+      - name: Check Uncompiled Packages for TypeScript Compilation Errors
+        run: pnpm check:types
+
+  special-build-tests:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: ./.github/actions/setup
+        with:
+          restore-broccoli-cache: true
+          install: true
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          with-cert: true
+      - if: |
+          github.event_name == 'pull_request' && (
+            github.base_ref == 'main' || github.base_ref == 'beta'
+          )
+        name: Enable All In progress features
+        env:
+          EMBER_DATA_FEATURE_OVERRIDE: ENABLE_ALL_OPTIONAL
+        run: pnpm test
+      - if: |
+          github.event_name == 'pull_request' && (
+            github.base_ref == 'main' || github.base_ref == 'beta'
+          )
+        name: Disabled All In progress features
+        env:
+          EMBER_DATA_FEATURE_OVERRIDE: DISABLE_ALL
+        run: pnpm test
+      - if: |
+          github.event_name == 'pull_request' && (
+            github.base_ref == 'main' || github.base_ref == 'beta'
+          )
+        name: Remove All Deprecations
+        env:
+          EMBER_DATA_FULL_COMPAT: true
+        run: pnpm test:production
+
+  browser-tests:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        launcher: [Chrome] # Firefox currently has an issue on ubuntu we cannot replicate on macos 03/29/2023
+    runs-on: ubuntu-latest
+    name: Test ${{matrix.launcher}}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GH_PACKAGES_ACCESS_TOKEN }}
+          restore-broccoli-cache: true
+          jobs: 2
+          parallel-build: true
+          with-cert: true
+          install: true
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for Test Failure Retry
+        id: retry-test-failures
+        uses: actions/cache/restore@v4
+        with:
+          path: failed-test-log.txt
+          key: failed-test-log_${{ github.sha }}
+
+      - name: Development
+        run: timeout $BROWSER_TIMEOUT pnpm test
+        env:
+          TESTEM_CI_LAUNCHER: ${{ matrix.launcher }}
+          CI: true
+          DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG == 'true' && 'engine,socket.io*' }}
+          # DISPLAY_TEST_NAMES: true # uncomment this line to see the test names in the logs
+          FORCE_COLOR: 2
+          BROWSER_TIMEOUT: 540
+
+      - name: Production
+        id: run-tests-production
+        run: timeout $BROWSER_TIMEOUT pnpm test:production
+        env:
+          TESTEM_CI_LAUNCHER: ${{ matrix.launcher }}
+          CI: true
+          DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG == 'true' && 'engine,socket.io*' }}
+          # DISPLAY_TEST_NAMES: true # uncomment this line to see the test names in the logs
+          FORCE_COLOR: 2
+          BROWSER_TIMEOUT: 540
+
+      - name: Upload testem logs
+        if: ${{ always() && steps.run-tests-production.conclusion != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-testem-logs
+          path: './tests/main/testem.log'
+          retention-days: 1
+
+      - name: Maybe Cache Failures
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: failed-test-log.txt
+          key: failed-test-log_${{ github.sha }}
+
+      - name: Archive Tests Execution File
+        uses: actions/upload-artifact@v4
+        if: (success() || failure()) && steps.retry-test-failures.outputs.cache-hit != 'true'
+        with:
+          name: tests-execution-file-partition
+          path: 'tests/main/test-execution-*.json'
+          retention-days: 1
+
+  lts:
+    needs: [browser-tests]
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ember-lts-4.12, ember-lts-4.8, ember-lts-4.4, ember-lts-3.28]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: ./.github/actions/setup
+        with:
+          restore-broccoli-cache: true
+          with-cert: true
+          install: true
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Basic tests with ${{ matrix.scenario }}
+        timeout-minutes: 12
+        env:
+          CI: true
+        run: pnpm test:try-one ${{ matrix.scenario }} -- ember test --test-port=0
+
+  releases:
+    timeout-minutes: 12
+    needs: [browser-tests]
+    if: |
+      github.event_name == 'pull_request' && (
+        github.base_ref == 'main' || github.base_ref == 'beta'
+      ) || github.event_name == 'push' && (
+        endsWith(github.ref, '/main') || endsWith(github.ref, '/beta')
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [ember-canary, ember-beta]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: ./.github/actions/setup
+        with:
+          restore-broccoli-cache: true
+          with-cert: true
+          install: true
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Basic tests with ${{ matrix.release }}
+        env:
+          CI: true
+        run: pnpm test:try-one ${{ matrix.release }} -- ember test --test-port=0

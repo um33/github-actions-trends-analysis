@@ -1,0 +1,315 @@
+name: Create Sysdig draft/RC release
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[a-z]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[a-z]+[0-9]+'
+
+jobs:
+
+  build-skeleton-sysdig-linux-amd64:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/draios/sysdig-skel-builder:dev
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+        with:
+          path: sysdig
+      - name: Link paths
+        run: |
+          mkdir -p /source
+          ln -s "$GITHUB_WORKSPACE/sysdig" /source/sysdig
+      - name: Prepare build skeleton
+        run: build cmake-skeleton
+      - name: Build skeleton
+        run: build make-skeleton
+      - name: Cache build skeleton
+        uses: actions/cache/save@v3
+        if: always()
+        id: cache
+        with:
+          path: /build-skeleton
+          key: build-skeleton-${{ github.run_id }}
+
+  build-release-linux-amd64:
+    needs: build-skeleton-sysdig-linux-amd64
+    runs-on: ubuntu-latest
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+    container:
+      image: ghcr.io/draios/sysdig-builder:dev
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+        with:
+          path: sysdig
+      - name: Link paths
+        run: |
+          mkdir -p /source
+          ln -s "$GITHUB_WORKSPACE/sysdig" /source/sysdig
+      - name: Restore build skeleton
+        id: cache
+        uses: actions/cache/restore@v3
+        with:
+          path: /build-skeleton
+          key: build-skeleton-${{ github.run_id }}
+          restore-keys: build-skeleton-
+      - name: Build
+        run: build cmake
+      - name: Build packages
+        run: build package
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-x86_64
+          path: /build/release/sysdig-${{ env.BUILD_VERSION }}*
+    
+  build-release-linux-arm64:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      BUILD_VERSION: ${{ github.ref_name }}
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+        with:
+          path: sysdig
+      - name: Create build dir
+        run: |
+          mkdir -p ${{ github.workspace }}/sysdig-build-aarch64
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'amd64,arm64'
+      - name: Run the build skeleton process with Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          image: ghcr.io/draios/sysdig-skel-builder:dev
+          options: --platform=linux/arm64 -v ${{ github.workspace }}/sysdig:/source/sysdig -v ${{ github.workspace }}/sysdig-build-aarch64:/build/release-packages -v ${{ github.workspace }}/skeleton-build:/build-skeleton -e BUILD_VERSION=${{ env.BUILD_VERSION }}
+          run: |
+            mkdir -p /build/release-packages && \
+            build cmake-skeleton && \
+            build make-skeleton
+      - name: Run the build process with Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          image: ghcr.io/draios/sysdig-builder:dev
+          options: --platform=linux/arm64 -v ${{ github.workspace }}/sysdig:/source/sysdig -v ${{ github.workspace }}/sysdig-build-aarch64:/build/release-packages -v ${{ github.workspace }}/skeleton-build:/build-skeleton -e BUILD_VERSION=${{ env.BUILD_VERSION }}
+          run: |
+            mkdir -p /build/release-packages && \
+            build cmake && \
+            build package && \
+            cp /build/release/sysdig-${{ env.BUILD_VERSION }}* /build/release-packages
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-aarch64
+          path: ${{ github.workspace }}/sysdig-build-aarch64/sysdig-${{ env.BUILD_VERSION }}*
+          
+  build-release-others-amd64:
+    name: build-release-others-amd64
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            artifact_name: win
+            artifact_ext: exe
+          - os: macos-latest
+            artifact_name: osx
+            artifact_ext: dmg
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+    runs-on: ${{ matrix.os }}  
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+      - name: Build
+        run: |
+          mkdir -p build
+          cd build && cmake -Wno-dev -DBUILD_DRIVER=OFF -DSYSDIG_VERSION="${{ env.BUILD_VERSION }}" ..
+          cmake --build . --target package --config Release
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.artifact_name }}-x86_64
+          path: build/sysdig-${{ env.BUILD_VERSION }}*.${{ matrix.artifact_ext }}
+
+  build-release-others-arm64:
+    name: build-release-others-arm64
+    strategy:
+      matrix:
+        os: [macos-14]
+        include:
+          - os: macos-14
+            artifact_name: osx
+            artifact_ext: dmg
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+    runs-on: ${{ matrix.os }}  
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+      - name: Build
+        run: |
+          mkdir -p build
+          cd build && cmake -Wno-dev -DBUILD_DRIVER=OFF -DSYSDIG_VERSION="${{ env.BUILD_VERSION }}" ..
+          cmake --build . --target package --config Release
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.artifact_name }}-arm64
+          path: build/sysdig-${{ env.BUILD_VERSION }}*.${{ matrix.artifact_ext }}
+
+  push-container-image:
+    runs-on: ubuntu-latest
+    needs: [build-release-linux-amd64, build-release-linux-arm64, sign-rpms, sign-debs]
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+      REGISTRY: ghcr.io
+      SYSDIG_IMAGE_BASE: ghcr.io/draios/sysdig
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v3
+      - name: Download artifacts aarch64
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-aarch64
+      - name: Download artifacts x86_64
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-x86_64
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'amd64,arm64'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Github Packages
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push container images
+        uses: docker/build-push-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+          file: docker/sysdig/Dockerfile
+          context: .
+          tags: ${{ env.SYSDIG_IMAGE_BASE }}:${{ env.BUILD_VERSION }}-draft
+          push: true
+          build-args:
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+
+  sign-rpms:
+    strategy:
+      matrix:
+        name: [amd64, arm64]
+        include:
+          - name: amd64
+            arch: x86_64
+          - name: arm64
+            arch: aarch64
+    needs: [build-release-linux-amd64, build-release-linux-arm64]
+    runs-on: ubuntu-latest
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+      KEY_ID: EC51E8C4
+    container:
+      image: fedora:39
+    steps:
+      - name: Install deps
+        run: dnf install -y rpm-sign pinentry
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.arch }}
+      - name: Import private key
+        env:
+          PRIVATE_KEY: ${{ secrets.SYSDIG_REPO_SIGNING_KEY }}
+        run: printenv PRIVATE_KEY | gpg --import -
+      - name: Sign RPMs 
+        run: rpm --define "_gpg_name ${{ env.KEY_ID }}" --define "_binary_filedigest_algorithm 8" --addsign *.rpm
+      - name: Check signature
+        run: test "$(rpm -qpi *.rpm | awk '/Signature/' | grep -i none | wc -l)" -eq 0
+      - name: Upload Signed RPMs
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.arch }}
+          path: "*.rpm"
+
+  sign-debs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        name: [amd64, arm64]
+        include:
+          - name: amd64
+            arch: x86_64
+          - name: arm64
+            arch: aarch64
+    needs: [build-release-linux-amd64, build-release-linux-arm64]
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+      KEY_ID: EC51E8C4
+    container:
+      image: debian:bullseye-slim
+    steps:
+      - name: Install deps
+        run: apt-get update && apt-get -y install dpkg-sig
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.arch }}
+      - name: Import private key
+        env:
+          PRIVATE_KEY: ${{ secrets.SYSDIG_REPO_SIGNING_KEY }}
+        run: printenv PRIVATE_KEY | gpg --import -
+      - name: Sign DEBs
+        run: dpkg-sig -k ${{ env.KEY_ID }} -s builder *.deb
+      - name: Check signature
+        run: dpkg-sig --verify *.deb
+      - name: Upload Signed DEBs
+        uses: actions/upload-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-${{ matrix.arch }}
+          path: "*.deb"
+
+  create-draft-release:
+    runs-on: ubuntu-latest
+    needs: [push-container-image, build-release-linux-amd64, build-release-linux-arm64, sign-rpms, sign-debs]
+    env:
+      BUILD_VERSION: ${{ github.ref_name }}
+    steps:
+      - name: Download artifacts (linux-amd64)
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-x86_64
+      - name: Download artifacts (linux-arm64)
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-aarch64
+      - name: Download artifacts (win-amd64)
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-win-x86_64
+      - name: Download artifacts (osx-amd64)
+        uses: actions/download-artifact@v3
+        with:
+          name: sysdig-release-${{ env.BUILD_VERSION }}-osx-x86_64
+      - name: Create draft release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            sysdig-${{ env.BUILD_VERSION }}*
+          draft: true

@@ -1,0 +1,30 @@
+name: Format
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release/*
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v1.7.2
+      with:
+        dotnet-version: 3.1.100
+     
+    - name: dotnet tool restore
+      run: dotnet tool restore
+
+    - name: add dotnet format problem matcher
+      run: echo "::add-matcher::build/dotnet-format-problem-matcher.json" 
+      
+    - name: dotnet format
+      run: dotnet format -w tye.sln --check --dry-run -v diag
+

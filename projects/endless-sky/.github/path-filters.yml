@@ -1,0 +1,58 @@
+data:
+  - 'data/**/*'
+  - 'images/**/*'
+  - 'sounds/**/*'
+
+game_code:
+  - 'source/**'
+
+unit_tests:
+  - 'tests/unit/**/*.h'
+  - 'tests/unit/**/*.hpp'
+  - 'tests/unit/**/*.cpp'
+
+integration_tests:
+  - 'tests/integration/config/plugins/integration-tests/**'
+
+codespell:
+  - .codespell.exclude
+  - .codespell.words.exclude
+
+editorconfig_files:
+  - '**/!(*.mp3)'
+
+content_style_check:
+  - utils/check_content_style.py
+  - utils/contentStyle.json
+
+code_style_check:
+  - utils/check_code_style.py
+
+cmake_files:
+  - CMakeLists.txt
+  - source/CMakeLists.txt
+  - tests/CMakeLists.txt
+  - tests/integration/IntegrationTests.cmake
+  - tests/integration/RunIntegrationTest.cmake
+  - utils/vcpkg_bootstrap.cmake
+  - utils/check_cmake.sh
+  - CMakePresets.json
+  - vcpkg.json
+  - vcpkg-configuration.json
+
+copyright:
+  - copyright
+  - utils/check_copyright.py
+
+changelog:
+  - changelog
+
+ci_config:
+  - '.github/workflows/ci.yml'
+  - '.github/path-filters.yml'
+  - '.github/workflows/compute-changes.yml'
+
+projects_check_config:
+  - '.github/workflows/projects_check.yml'
+  - '.github/path-filters.yml'
+  - '.github/workflows/compute-changes.yml'

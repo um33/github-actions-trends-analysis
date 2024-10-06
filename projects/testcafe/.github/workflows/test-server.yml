@@ -1,0 +1,64 @@
+name: Test Server
+
+on:
+  workflow_call:
+    inputs:
+      test-script:
+        required: true
+        type: string
+      node-version:
+        required: false
+        type: string
+        default: 16
+      is-docker:
+        required: false
+        type: boolean
+        default: false    
+env:
+  NO_CACHE: ${{ secrets.NO_CACHE }}
+jobs:  
+  test:
+    runs-on: ubuntu-latest
+    environment: test-server
+    steps:
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        with:
+          status: 'pending'
+            
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{github.event.inputs.merged_sha || github.event.inputs.sha}}
+          
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: DevExpress/testcafe-build-system/actions/read-artifacts@main
+        with:
+          package-name: 'testcafe'
+          is-docker: ${{ inputs.is-docker }}
+          
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+      - uses: actions/cache@v3
+        if: ${{ !env.NO_CACHE }}
+        id: npm-cache # use this to check for `cache-hit` ==> if: steps.npm-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.npm-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - run: npm ci
+        if: ${{ !inputs.is-docker }}
+      - run: npm install
+        if: ${{ inputs.is-docker }}
+        
+      - run: ${{ inputs.test-script }}
+        timeout-minutes: 60
+
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        if: always()
+        with:
+          status: ${{ fromJSON('["failure", "success"]')[job.status == 'success'] }}

@@ -1,0 +1,40 @@
+# Lines starting with '#' are comments.
+# Each line is a file pattern followed by one or more owners.
+
+# These owners will be the default owners for everything in the repo.
+*                                               @fryguy
+#
+/app/models/manageiq/providers/                 @agrare @fryguy
+/app/models/manageiq/providers/inventory/       @agrare @fryguy
+/app/models                                     @agrare @fryguy @kbrock
+/app/models/authenticator*                      @kbrock
+/app/models/cloud*                              @agrare
+/app/models/container*                          @agrare
+/app/models/ems_event*                          @agrare
+/app/models/ems_refresh*                        @agrare
+/app/models/event_stream*                       @agrare
+/app/models/firmware_registry*                  @agrare
+/app/models/job*                                @agrare
+/app/models/manageiq/providers                  @agrare
+/app/models/metric*                             @agrare
+/app/models/miq_ems_metrics_processor_worker*   @agrare
+/app/models/miq_event_handler*                  @agrare
+/app/models/miq_product_feature*                @jeffibm
+/app/models/miq_report*                         @kbrock
+/app/models/miq_schedule*                       @jrafanie
+/app/models/miq_server*                         @jrafanie
+/app/models/miq_template*                       @agrare
+/app/models/miq_worker*                         @jrafanie
+/app/models/physical_server*                    @agrare
+/app/models/scan_item*                          @agrare
+/app/models/vim_performance_state*              @agrare
+/app/models/vm                                  @agrare
+/app/models/vm_or_template                      @agrare
+/bin                                            @jrafanie @bdunne
+/content                                        @bdunne
+/config                                         @jrafanie
+/db                                             @agrare @bdunne
+/lib/generators                                 @agrare
+/lib/manageiq/reporting                         @jrafanie
+/locale/*                                       @jrafanie
+/product/*                                      @jeffibm

@@ -1,0 +1,80 @@
+# Copyright 2023 JanusGraph Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Apply docker tags to the official JanusGraph release
+
+on:
+  release:
+    types: [released,edited]
+
+env:
+  LATEST_RELEASE: 1.0
+
+jobs:
+  tagging:
+    runs-on: ubuntu-22.04
+    if: "!contains(github.event.release.tag_name, '-') && !github.event.release.prerelease"
+    steps:
+      - uses: actions/checkout@v4
+      - name: GET DOCKER TOKEN
+        run: |
+          curl  -u ${{ secrets.DOCKERHUB_USERNAME }}:${{ secrets.DOCKERHUB_TOKEN }} -s -o test.json "https://auth.docker.io/token?service=registry.docker.io&scope=repository:janusgraph/janusgraph:pull,push"
+          TOKEN=$(cat test.json | jq -r '.token')
+          echo "DOCKER_SHORT_TOKEN=${TOKEN}" >> $GITHUB_ENV
+      - name: EXTRACT VERSION
+        run: |
+          MINOR_VERSION=$(echo "${{ github.event.release.tag_name }}" | grep -Eo '[0-9]+\.[0-9]+' | head -1)
+          PATCH_VERSION=$(echo "${{ github.event.release.tag_name }}" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          REVISION="$(git rev-parse --short HEAD)"
+          echo "MINOR_VERSION=${MINOR_VERSION}" >> $GITHUB_ENV
+          echo "PATCH_VERSION=${PATCH_VERSION}" >> $GITHUB_ENV
+          echo "REVISION=${REVISION}" >> $GITHUB_ENV
+      - name: Run minor tag for ghcr.io
+        uses: shrink/actions-docker-registry-tag@v4
+        with:
+          registry: ghcr.io
+          repository: janusgraph/janusgraph
+          target: ${{ env.PATCH_VERSION }}-${{ env.REVISION }}
+          tags: |
+            ${{ env.PATCH_VERSION }}
+            ${{ env.MINOR_VERSION }}
+      - name: Run minor tag for docker.io
+        uses: shrink/actions-docker-registry-tag@v4
+        with:
+          registry: index.docker.io
+          repository: janusgraph/janusgraph
+          target: ${{ env.PATCH_VERSION }}-${{ env.REVISION }}
+          token: "${{ env.DOCKER_SHORT_TOKEN }}"
+          tags: |
+            ${{ env.PATCH_VERSION }}
+            ${{ env.MINOR_VERSION }}
+      - name: Run latest tag for ghcr.io
+        if: "env.MINOR_VERSION == '${{ env.LATEST_RELEASE }}'"
+        uses: shrink/actions-docker-registry-tag@v4
+        with:
+          registry: ghcr.io
+          repository: janusgraph/janusgraph
+          target: ${{ env.PATCH_VERSION }}-${{ env.REVISION }}
+          tags: |
+            latest
+      - name: Run latest tag for docker.io
+        if: "env.MINOR_VERSION == '${{ env.LATEST_RELEASE }}'"
+        uses: shrink/actions-docker-registry-tag@v4
+        with:
+          registry: index.docker.io
+          repository: janusgraph/janusgraph
+          target: ${{ env.PATCH_VERSION }}-${{ env.REVISION }}
+          token: ${{ env.DOCKER_SHORT_TOKEN }}
+          tags: |
+            latest

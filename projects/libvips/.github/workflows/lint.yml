@@ -1,0 +1,25 @@
+name: Lint
+
+on: [pull_request]
+
+permissions: {}
+
+jobs:
+  cpp-linter:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        with:
+          style: file
+          version: 15 # Ubuntu 22.04 provides clang-format-15
+          tidy-checks: '-*' # disable clang-tidy
+          lines-changed-only: true
+          # ignore bundled files
+          ignore: 'libvips/foreign/libnsgif|fuzz/StandaloneFuzzTargetMain.c'
+
+      - name: Fail fast
+        continue-on-error: true # TODO: remove this line in the future
+        if: steps.linter.outputs.checks-failed > 0
+        run: exit 1

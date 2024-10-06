@@ -1,0 +1,175 @@
+name: Validation
+
+env:
+  JAVA_OPTS: "-Xms512m -Xmx6048m -Xss128m -XX:ReservedCodeCacheSize=512m -server"
+  GRADLE_OPTS: "-Xms512m -Xmx6048m -Xss128m -XX:ReservedCodeCacheSize=512m -server"
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_PACKAGE_REGISTRY_USER: ${{ secrets.GH_PACKAGE_REGISTRY_USER }}
+  GH_PACKAGE_REGISTRY_TOKEN: ${{ secrets.GH_PACKAGE_REGISTRY_TOKEN }}
+  GRADLE_BUILDCACHE_USER: ci
+  GRADLE_BUILDCACHE_PSW: ${{ secrets.GRADLE_BUILDCACHE_PSW }}
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+  TERM: xterm-256color
+  JDK_CURRENT: 21
+  JDK_DISTRIBUTION: "corretto"
+
+##########################################################################
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - '!**.**.**'
+      - '!heroku-*'
+  pull_request:
+    types: [ labeled ]
+    branches: [ master, pr-* ]
+concurrency:
+  group: "workflow = ${{ github.workflow }}, ref = ${{ github.event.ref }}, pr = ${{ github.event.pull_request.id }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.repository != 'apereo/cas' }}
+
+##########################################################################
+
+jobs:
+  trigger-ci:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'CI')) && !contains(github.event.pull_request.labels.*.name, 'Renovate') && !contains(github.event.head_commit.message, 'trigger dependency update') && !contains(github.event.head_commit.message, 'documentation update') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CI
+        run: echo "CI Triggered"
+  initialize:
+    needs: [trigger-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: ls ./ci && find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+
+##########################################################################
+
+  validate-javadocs:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Validate Javadocs
+        run: ./gradlew --build-cache --configure-on-demand --no-daemon --parallel javadoc -x test -x check -DskipNestedConfigMetadataGen=true --parallel --max-workers=8 --no-configuration-cache
+
+##########################################################################
+
+  validate-commandline-shell:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Validate CAS Command-line Shell
+        timeout-minutes: 10
+        run: |
+          chmod -R +x ./ci/tests/shell/run-shell.sh && ./ci/tests/shell/run-shell.sh
+          echo "Checking for stack traces in output that would indicate an error"
+          cat cas-shell.out
+          count=$(grep -c -e ".*\(Exception\|Throwable\|caused\\sby\).*" cas-shell.out || true);
+          test $count -eq 0
+
+##########################################################################
+
+  validate-webapp-embedded:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        category:
+          - tomcat
+          - jetty
+          - undertow
+    name: embedded - ${{ matrix.category }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Validate Web Application Server
+        run: ./ci/tests/webapp/validate-embedded-webapp.sh ${{ matrix.category }}
+
+##########################################################################
+
+  validate-webapp-external:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        category:
+          - cas-server
+          - config-server
+    name: external tomcat - ${{ matrix.category }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Validate Web Application Server via External Apache Tomcat
+        run: ./ci/tests/webapp/validate-external-webapp.sh ${{ matrix.category }}
+
+##########################################################################
+
+  validate-spring-cloud-config-server:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Validate Spring Cloud Configuration Server
+        run: ./ci/tests/webapp/validate-configserver-webapp.sh

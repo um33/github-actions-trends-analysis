@@ -1,0 +1,35 @@
+name: 'Label'
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        go: [ '1.21.x']
+        os: [ ubuntu-latest ]
+
+    name: Run Build
+    if: ${{ github.event.label.name == 'run-build' }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Test
+        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+
+      - name: Coverage
+        run: bash <(curl -s https://codecov.io/bash)

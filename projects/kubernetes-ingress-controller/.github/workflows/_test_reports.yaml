@@ -1,0 +1,69 @@
+# Uploads test reports to Codecov and BuildPulse.
+# The contract for Codecov is that all test reports are uploaded to the same "coverage" artifact location.
+# The contract for BuildPulse is that all test reports are uploaded to the same "tests-report" artifact location.
+
+name: test reports
+
+on:
+  workflow_call:
+    inputs:
+      coverage:
+        description: Whether to upload coverage to Codecov.
+        type: boolean
+        default: true
+      buildpulse:
+        description: Whether to upload test reports to BuildPulse.
+        type: boolean
+        default: true
+
+jobs:
+  coverage:
+    timeout-minutes: ${{ fromJSON(vars.GHA_DEFAULT_TIMEOUT) }}
+    if: ${{ inputs.coverage && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: collect test coverage artifacts
+        id: download-coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage
+          merge-multiple: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          name: combined-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ${{ steps.download-coverage.outputs.download-path }}
+          fail_ci_if_error: true
+          verbose: true
+
+  buildpulse-report:
+    timeout-minutes: ${{ fromJSON(vars.GHA_DEFAULT_TIMEOUT) }}
+    if: ${{ inputs.buildpulse && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: download tests report
+        id: download-coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tests-report-*
+          path: report
+          merge-multiple: true
+
+      - name: Upload test results to BuildPulse for flaky test detection
+        if: ${{ !cancelled() }}
+        uses: buildpulse/buildpulse-action@v0.11.0
+        with:
+          account: 962416
+          repository: 127765544
+          path: report/*.xml
+          key: ${{ secrets.BUILDPULSE_ACCESS_KEY_ID }}
+          secret: ${{ secrets.BUILDPULSE_SECRET_ACCESS_KEY }}

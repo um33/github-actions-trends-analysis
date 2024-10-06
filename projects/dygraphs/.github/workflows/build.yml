@@ -1,0 +1,79 @@
+{
+  "concurrency": {
+    "cancel-in-progress": true,
+    "group": "pages"
+  },
+  "jobs": {
+    "build-and-pages": {
+      "environment": {
+        "name": "github-pages",
+        "url": "${{ steps.deployment.outputs.page_url }}"
+      },
+      "if": "github.repository == 'mirabilos/dygraphs'",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3.3.0"
+        },
+        {
+          "run": "./.pages.sh"
+        },
+        {
+          "uses": "actions/upload-artifact@v3",
+          "with": {
+            "name": "package-lock.json",
+            "path": "package-lock.json"
+          }
+        },
+        {
+          "uses": "actions/upload-pages-artifact@v1.0.7"
+        },
+        {
+          "id": "deployment",
+          "uses": "actions/deploy-pages@v1.2.3"
+        }
+      ]
+    },
+    "build-split": {
+      "environment": {
+        "name": "GHA-output",
+        "url": "${{ steps.deployment.outputs.page_url }}"
+      },
+      "if": "github.repository == 'danvk/dygraphs'",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3.3.0"
+        },
+        {
+          "run": "./.pages.sh"
+        },
+        {
+          "uses": "actions/upload-artifact@v3",
+          "with": {
+            "name": "package-lock.json",
+            "path": "package-lock.json"
+          }
+        },
+        {
+          "uses": "actions/upload-pages-artifact@v1.0.7"
+        }
+      ]
+    }
+  },
+  "name": "build and test",
+  "on": {
+    "push": {
+      "branches": [
+        "debian",
+        "master"
+      ]
+    },
+    "workflow_dispatch": null
+  },
+  "permissions": {
+    "contents": "read",
+    "id-token": "write",
+    "pages": "write"
+  }
+}

@@ -1,0 +1,38 @@
+name: test
+
+on: [push, pull_request]
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  ruby-versions:
+    uses: ruby/actions/.github/workflows/ruby_versions.yml@master
+    with:
+      min_version: 2.3
+      engine: cruby-jruby
+      versions: '["truffleruby"]'
+
+  test:
+    needs: ruby-versions
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ 'ubuntu-latest', 'macos-latest', 'windows-latest' ]
+        ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
+        exclude:
+          - os: windows-latest
+            ruby: truffleruby
+          - os: windows-latest
+            ruby: jruby-head
+          - os: windows-latest
+            ruby: jruby
+    steps:
+    - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v3.3.0
+    - uses: ruby/setup-ruby@5f19ec79cedfadb78ab837f95b87734d0003c899 # v1.173.0
+      with:
+        ruby-version: ${{ matrix.ruby }}
+    - name: Install dependencies
+      run: gem install test-unit
+    - name: Run test
+      run: ruby -Ilib exe/rake

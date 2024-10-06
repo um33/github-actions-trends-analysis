@@ -1,0 +1,45 @@
+# Please sort into logical groups with comment headers. Sort groups in order of specificity.
+# For example, default owners should always be the first group.
+# Sort lines alphabetically within these groups to avoid accidentally adding duplicates.
+#
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default file owners
+* @bitwarden/dept-development-mobile
+
+# DevOps for Actions and other workflow changes
+.github/workflows @bitwarden/dept-devops
+
+# DevOps for Version Bumping
+src/App/Platforms/Android/AndroidManifest.xml
+src/iOS.Autofill/Info.plist
+src/iOS.Extension/Info.plist
+src/iOS.ShareExtension/Info.plist
+src/App/Platforms/iOS/Info.plist
+
+## Auth team files ##
+
+## Platform team files ##
+appIcons @bitwarden/team-platform-dev
+
+## Vault team files ##
+src/watchOS @bitwarden/team-vault-dev
+
+## Tools team files ##
+src/Core/Services/EmailForwarders @bitwarden/team-tools-dev
+
+## Crowdin Sync files ##
+src/Core/Resources/Localization @bitwarden/team-tools-dev
+src/watchOS/bitwarden/bitwarden\ WatchKit\ Extension/Localization @bitwarden/team-tools-dev
+store/apple @bitwarden/team-tools-dev
+store/google @bitwarden/team-tools-dev
+
+## Locales ## 
+src/Core/Resources/Localization/AppResources.Designer.cs
+src/Core/Resources/Localization/AppResources.resx
+src/watchOS/bitwarden/bitwarden\ WatchKit\ Extension/Localization/en.lproj
+store/apple/en
+store/google/en
+
+## Utils ##
+store/google/Publisher

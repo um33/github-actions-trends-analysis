@@ -1,0 +1,47 @@
+name: PR Check
+
+on:
+
+  pull_request:
+    branches: [ main, release/2.x ]
+
+jobs:
+
+  windows:
+    runs-on: windows-latest
+    env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Test
+      run: dotnet test --configuration Release --logger GitHubActions
+
+  linux:
+    runs-on: ubuntu-latest
+    env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Test
+      run: dotnet test --configuration Release --logger GitHubActions
+
+  macos:
+    runs-on: macos-14
+    env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Test
+      run: dotnet test --configuration Release --logger GitHubActions

@@ -1,0 +1,39 @@
+# This workflow will build a Java project with Maven
+# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        jdk: [17, 21]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up JDK
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ matrix.jdk }}
+    - name: Install Zookeeper
+      run: echo "Install Zookeeper 3.5.6"
+        && wget https://archive.apache.org/dist/zookeeper/zookeeper-3.5.6/apache-zookeeper-3.5.6-bin.tar.gz
+        && tar -zxf apache-zookeeper-3.5.6-bin.tar.gz
+        && mv apache-zookeeper-3.5.6-bin/conf/zoo_sample.cfg apache-zookeeper-3.5.6-bin/conf/zoo.cfg
+        && /bin/bash apache-zookeeper-3.5.6-bin/bin/zkServer.sh start
+    - name: Build with Maven
+      run: mvn clean install -B -V
+        && sh ./tools/check_format.sh
+    - name: Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true

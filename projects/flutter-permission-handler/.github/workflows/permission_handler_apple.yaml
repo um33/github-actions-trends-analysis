@@ -1,0 +1,71 @@
+# This is a basic workflow to help you get started with Actions
+
+name: permission_handler_apple
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the main branch
+on:
+  push:
+    branches: [ main ]
+    paths:
+    - 'permission_handler_apple/**'
+    - '.github/workflows/permission_handler_apple.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+    - 'permission_handler_apple/**'
+    - '.github/workflows/permission_handler_apple.yaml'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    name: Apple platform package
+
+    # The type of runner that the job will run on
+    #
+    # TODO(mvanbeusekom): Manually set to macOS 13 to support Xcode 15 and iOS 17 SDKs.
+    # Currently `macos-latest` is based on macOS 12 and doesn't support iOS 17 SDK. This
+    # should be moved back to `macos-latest` when GitHub Actions images are updated.
+    runs-on: macos-13
+
+    env:
+      source-directory: ./permission_handler_apple
+      example-directory: ./permission_handler_apple/example 
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      # Override current Xcode version with version 15.0.1.
+      #
+      # TODO(mvanbeusekom): Remove when the macos-latest image supports version 15.0.1
+      # out of the box (see https://github.com/actions/runner-images/blob/main/README.md).
+      - name: Select Xcode version
+        run: sudo xcode-select -s '/Applications/Xcode_15.0.1.app/Contents/Developer'
+      
+      # Make sure the stable version of Flutter is available
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # Download all Flutter packages
+      - name: Download dependencies
+        run: flutter pub get
+        working-directory: ${{env.source-directory}}
+
+      # Run Dart Format to ensure formatting is valid
+      - name: Run Dart Format
+        run: dart format --set-exit-if-changed .
+        working-directory: ${{env.source-directory}}
+
+      # Run Flutter Analyzer
+      - name: Run Flutter Analyzer
+        run: flutter analyze
+        working-directory: ${{env.source-directory}}
+
+      # Build iOS version of the example App
+      - name: Run iOS build
+        run: flutter build ios --no-codesign --release
+        working-directory: ${{env.example-directory}}
+        

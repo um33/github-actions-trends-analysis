@@ -1,0 +1,37 @@
+name: CLOG
+
+on:
+  push:
+    branches:
+    - main
+    - release/*
+  pull_request:
+    branches:
+    - main
+    - release/*
+
+permissions: read-all
+
+jobs:
+  validate:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Validate
+    runs-on: windows-latest
+    steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
+      with:
+        dotnet-version: 6.0.x
+    - name: Checkout repository
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: Prepare Machine
+      run: scripts/prepare-machine.ps1
+      shell: pwsh
+    - name: Run CLOG Update
+      run: scripts/update-sidecar.ps1
+      shell: pwsh
+    - name: Check for Changes
+      run: |
+        git add .
+        git --no-pager diff --exit-code HEAD

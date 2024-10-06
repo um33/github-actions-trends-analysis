@@ -1,0 +1,398 @@
+name: Linux
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux:
+    # Build Linux binaries, ready for release.
+    # This runs inside an Alpine Linux container so we can more easily create a
+    # statically linked binary.
+    runs-on: ubuntu-latest
+    container:
+      image: golang:1.22-alpine
+    steps:
+      - name: Install apk dependencies
+        # tar: needed for actions/cache@v4
+        # git+openssh: needed for checkout (I think?)
+        # ruby: needed to install fpm
+        run: apk add tar git openssh make g++ ruby
+      - name: Work around CVE-2022-24765
+        # We're not on a multi-user machine, so this is safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Cache Go
+        uses: actions/cache@v4
+        with:
+          key: go-cache-linux-alpine-v1-${{ hashFiles('go.mod') }}
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+      - name: Restore LLVM source cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-source
+        with:
+          key: llvm-source-17-linux-alpine-v1
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save LLVM source cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore LLVM build cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-build
+        with:
+          key: llvm-build-17-linux-alpine-v1
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # install dependencies
+          apk add cmake samurai python3
+          # build!
+          make llvm-build
+          # Remove unnecessary object files (to reduce cache size).
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save LLVM build cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: Cache Binaryen
+        uses: actions/cache@v4
+        id: cache-binaryen
+        with:
+          key: binaryen-linux-alpine-v1
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: |
+          apk add cmake samurai python3
+          make binaryen STATIC=1
+      - name: Cache wasi-libc
+        uses: actions/cache@v4
+        id: cache-wasi-libc
+        with:
+          key: wasi-libc-sysroot-linux-alpine-v2
+          path: lib/wasi-libc/sysroot
+      - name: Build wasi-libc
+        if: steps.cache-wasi-libc.outputs.cache-hit != 'true'
+        run: make wasi-libc
+      - name: Install fpm
+        run: |
+          gem install --version 4.0.7 public_suffix
+          gem install --version 2.7.6 dotenv
+          gem install --no-document fpm
+      - name: Build TinyGo release
+        run: |
+          make release deb -j3 STATIC=1
+          cp -p build/release.tar.gz /tmp/tinygo.linux-amd64.tar.gz
+          cp -p build/release.deb    /tmp/tinygo_amd64.deb
+      - name: Publish release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-double-zipped
+          path: |
+            /tmp/tinygo.linux-amd64.tar.gz
+            /tmp/tinygo_amd64.deb
+  test-linux-build:
+    # Test the binaries built in the build-linux job by running the smoke tests.
+    runs-on: ubuntu-latest
+    needs: build-linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: Install wasmtime
+        run: |
+          mkdir -p $HOME/.wasmtime $HOME/.wasmtime/bin
+          curl https://github.com/bytecodealliance/wasmtime/releases/download/v14.0.4/wasmtime-v14.0.4-x86_64-linux.tar.xz -o wasmtime-v14.0.4-x86_64-linux.tar.xz -SfL
+          tar -C $HOME/.wasmtime/bin --wildcards -xf wasmtime-v14.0.4-x86_64-linux.tar.xz --strip-components=1 wasmtime-v14.0.4-x86_64-linux/*
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-double-zipped
+      - name: Extract release tarball
+        run: |
+          mkdir -p ~/lib
+          tar -C ~/lib -xf tinygo.linux-amd64.tar.gz
+          ln -s ~/lib/tinygo/bin/tinygo ~/go/bin/tinygo
+      - run: make tinygo-test-wasi-fast
+      - run: make tinygo-test-wasip1-fast
+      - run: make smoketest
+  assert-test-linux:
+    # Run all tests that can run on Linux, with LLVM assertions enabled to catch
+    # potential bugs.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install apt dependencies
+        run: |
+          echo "Show cpuinfo; sometimes useful when troubleshooting"
+          cat /proc/cpuinfo
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+              qemu-system-arm \
+              qemu-system-riscv32 \
+              qemu-user \
+              simavr \
+              ninja-build
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install wasmtime
+        run: |
+          mkdir -p $HOME/.wasmtime $HOME/.wasmtime/bin
+          curl -L https://github.com/bytecodealliance/wasmtime/releases/download/v14.0.4/wasmtime-v14.0.4-x86_64-linux.tar.xz -o wasmtime-v14.0.4-x86_64-linux.tar.xz -SfL
+          tar -C $HOME/.wasmtime/bin --wildcards -xf wasmtime-v14.0.4-x86_64-linux.tar.xz --strip-components=1 wasmtime-v14.0.4-x86_64-linux/*
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      - name: Restore LLVM source cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-source
+        with:
+          key: llvm-source-17-linux-asserts-v1
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save LLVM source cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore LLVM build cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-build
+        with:
+          key: llvm-build-17-linux-asserts-v1
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # build!
+          make llvm-build ASSERT=1
+          # Remove unnecessary object files (to reduce cache size).
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save LLVM build cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: Cache Binaryen
+        uses: actions/cache@v4
+        id: cache-binaryen
+        with:
+          key: binaryen-linux-asserts-v1
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: make binaryen
+      - name: Cache wasi-libc
+        uses: actions/cache@v4
+        id: cache-wasi-libc
+        with:
+          key: wasi-libc-sysroot-linux-asserts-v6
+          path: lib/wasi-libc/sysroot
+      - name: Build wasi-libc
+        if: steps.cache-wasi-libc.outputs.cache-hit != 'true'
+        run: make wasi-libc
+      - run: make gen-device -j4
+      - name: Test TinyGo
+        run: make ASSERT=1 test
+      - name: Build TinyGo
+        run: |
+          make ASSERT=1
+          echo "$(pwd)/build" >> $GITHUB_PATH
+      - name: Test stdlib packages
+        run: make tinygo-test
+      - run: make smoketest
+      - run: make wasmtest
+      - run: make tinygo-baremetal
+  build-linux-cross:
+    # Build ARM Linux binaries, ready for release.
+    # This intentionally uses an older Linux image, so that we compile against
+    # an older glibc version and therefore are compatible with a wide range of
+    # Linux distributions.
+    # It is set to "needs: build-linux" because it modifies the release created
+    # in that process to avoid doing lots of duplicate work and to avoid
+    # complications around precompiled libraries such as compiler-rt shipped as
+    # part of the release tarball.
+    strategy:
+      matrix:
+        goarch: [ arm, arm64 ]
+        include:
+          - goarch: arm64
+            toolchain: aarch64-linux-gnu
+            libc: arm64
+          - goarch: arm
+            toolchain: arm-linux-gnueabihf
+            libc: armhf
+    runs-on: ubuntu-20.04
+    needs: build-linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+              qemu-user \
+              g++-${{ matrix.toolchain }} \
+              libc6-dev-${{ matrix.libc }}-cross
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: Restore LLVM source cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-source
+        with:
+          key: llvm-source-17-linux-v1
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save LLVM source cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore LLVM build cache
+        uses: actions/cache/restore@v4
+        id: cache-llvm-build
+        with:
+          key: llvm-build-17-linux-${{ matrix.goarch }}-v1
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # Install build dependencies.
+          sudo apt-get install --no-install-recommends ninja-build
+          # build!
+          make llvm-build CROSS=${{ matrix.toolchain }}
+          # Remove unnecessary object files (to reduce cache size).
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save LLVM build cache
+        uses: actions/cache/save@v4
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: Cache Binaryen
+        uses: actions/cache@v4
+        id: cache-binaryen
+        with:
+          key: binaryen-linux-${{ matrix.goarch }}-v3
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install --no-install-recommends ninja-build
+          git submodule update --init --recursive lib/binaryen
+          make CROSS=${{ matrix.toolchain }} binaryen
+      - name: Install fpm
+        run: |
+          sudo gem install --version 4.0.7 public_suffix
+          sudo gem install --version 2.7.6 dotenv
+          sudo gem install --no-document fpm
+      - name: Build TinyGo binary
+        run: |
+          make CROSS=${{ matrix.toolchain }}
+      - name: Download amd64 release
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-double-zipped
+      - name: Extract amd64 release
+        run: |
+          mkdir -p build/release
+          tar -xf tinygo.linux-amd64.tar.gz -C build/release tinygo
+      - name: Modify release
+        run: |
+          cp -p build/tinygo   build/release/tinygo/bin
+          cp -p build/wasm-opt build/release/tinygo/bin
+      - name: Create ${{ matrix.goarch }} release
+        run: |
+          make release deb RELEASEONLY=1 DEB_ARCH=${{ matrix.libc }}
+          cp -p build/release.tar.gz /tmp/tinygo.linux-${{ matrix.goarch }}.tar.gz
+          cp -p build/release.deb    /tmp/tinygo_${{ matrix.libc }}.deb
+      - name: Publish release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.goarch }}-double-zipped
+          path: |
+            /tmp/tinygo.linux-${{ matrix.goarch }}.tar.gz
+            /tmp/tinygo_${{ matrix.libc }}.deb

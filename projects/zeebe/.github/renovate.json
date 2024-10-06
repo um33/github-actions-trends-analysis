@@ -1,0 +1,125 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "commitMessagePrefix": "deps:",
+  "baseBranches": [
+    "main",
+    "/^stable\\/8\\..*/",
+    "stable/operate-8.5"
+  ],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 30,
+  "updateNotScheduled": false,
+  "schedule": [
+    "after 10pm every weekday",
+    "before 6am every weekday"
+  ],
+  "helmv3": {
+    "registryAliases": {
+      "helm-camunda-io": "https://helm.camunda.io"
+    }
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["area/security"],
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "addLabels": ["automerge"]
+  },
+  "packageRules": [
+    {
+      "description": "Only patch updates for our maintenance branches to avoid breaking changes.",
+      "matchBaseBranches": [
+        "/^stable\\/8\\..*/",
+        "stable/operate-8.5"
+      ],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["maven"],
+      "matchPackagePrefixes": ["org.opensearch.client", "org.elasticsearch", "co.elastic"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    },
+    {
+      "description": "Digest updates cover all use cases since they are used as base, so we disable other types.",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["maven"],
+      "matchPackagePrefixes": ["org.jacoco"],
+      "allowedVersions": "!/0.8.9/"
+    },
+    {
+      "description" : "Exclude SNAPSHOT versions, renovate may suggest them for pre-release values.",
+      "matchManagers": ["maven"],
+      "matchPackagePatterns": [".*"],
+      "allowedVersions": "!/-SNAPSHOT$/"
+    },
+    {
+      "description" : "Exclude internal Maven modules and Maven dependencies lacking metadata.",
+      "matchManagers": ["maven"],
+      "matchPackagePatterns": [
+        "io.camunda:operate-parent",
+        "io.camunda:operate-qa",
+        "io.camunda:operate-qa-migration-tests-parent",
+        "io.camunda:tasklist-qa",
+        "io.camunda:tasklist-qa-migration-tests-parent",
+        "net.jcip:jcip-annotations"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "This additional prefix is used to skip Operate backend tests.",
+      "matchManagers": ["npm", "nvm"],
+      "additionalBranchPrefix": "fe-"
+    },
+    {
+      "matchPackageNames": ["mcr.microsoft.com/playwright"],
+      "additionalBranchPrefix": "fe-"
+    },
+    {
+      "matchPackagePrefixes": ["@types/"],
+      "groupName": "definitelyTyped"
+    },
+    {
+      "extends": "monorepo:react",
+      "groupName": "react monorepo"
+    },
+    {
+      "extends": "monorepo:react-router",
+      "groupName": "react-router monorepo"
+    },
+    {
+      "matchManagers": ["npm", "nvm"],
+      "matchPackagePatterns": ["*"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    },
+    {
+      "description": "Both dependencies need to be updated at once for green CI.",
+      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "groupName": "playwright"
+    },
+    {
+      "description": "Automerge all updates with green CI.",
+      "matchPackagePatterns": ["*"],
+      "automerge": true,
+      "addLabels": ["automerge"]
+    }
+  ],
+  "dockerfile": {
+    "ignorePaths": [
+      "zeebe/benchmarks/**",
+      "clients/go/vendor/**"
+    ]
+  }
+}

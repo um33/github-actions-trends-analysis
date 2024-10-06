@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base", "schedule:weekly", "group:allNonMajor"],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "depTypeList": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "matchPaths": [
+        "examples/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major examples dependencies",
+      "groupSlug": "all-minor-patch-examples"
+    }
+  ],
+  "ignoreDeps": [
+    // manually bumping
+    "node",
+    "vite",
+    // we patch these packages
+    "@types/chai",
+    "@sinonjs/fake-timers",
+    "cac",
+    // TODO: update when chai is updated to 5.0
+    "loupe",
+    // Pinned due to https://github.com/vitest-dev/vitest/issues/4710
+    "log-update",
+    // Pinned because it requires "node" condition in the new version
+    // But we intentionally build Vitest ambiguously
+    "find-up"
+  ]
+}

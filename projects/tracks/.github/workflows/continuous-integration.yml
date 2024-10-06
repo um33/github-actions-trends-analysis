@@ -1,0 +1,19 @@
+---
+name: Automated tests
+on: pull_request
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby: ["2.7", "3.0"]
+        db: [sqlite, mysql, postgres]
+        exclude:
+          - ruby: "2.6"
+            db: sqlite
+          - ruby: "2.6"
+            db: postgres
+
+    steps:
+      - uses: actions/checkout@v1
+      - run: bash -x script/cibuild ${{ matrix.ruby }} ${{ matrix.db }}

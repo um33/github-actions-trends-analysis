@@ -1,0 +1,68 @@
+name: Test Coverage
+on:
+  pull_request:
+    paths:
+      # Trigger only when files affecting coverage has changed
+      - "**.ts"
+      - "**.js"
+      # Or the workflow itself
+      - ".github/workflows/pr-coverage.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REALM_DISABLE_ANALYTICS: 1
+  MOCHA_TIMEOUT: 60000 # 1 minute
+  LONG_TIMEOUT: 300000 # 5 minutes
+  BAAS_BRANCH: master
+
+jobs:
+  run:
+    name: Build and tests with coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Setup node version
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Wireit cache
+        uses: google/wireit@setup-github-actions-caching/v1
+
+      - name: Environment setup
+        run: sudo apt-get install ccache ninja-build
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: coverage
+          max-size: '2.0G'
+
+      - name: Install dependencies
+        # Ignoring scripts to prevent a prebuilt from getting fetched / built
+        run: npm ci --ignore-scripts
+
+      - name: Start BaaS test server
+        id: baas
+        uses: ./.github/actions/baas-test-server
+        with:
+          branch: ${{ env.BAAS_BRANCH }}
+        env:
+          BAASAAS_KEY: ${{ secrets.BAASAAS_KEY }}
+
+      - name: Run tests with coverage
+        timeout-minutes: 60
+        run: npm run ci:coverage --workspace @realm/integration-tests -- --reporter mocha-github-actions-reporter --timeout ${{ env.MOCHA_TIMEOUT }}
+        env:
+          CONTEXT: syncLogLevel=warn,longTimeoutMs=${{ env.LONG_TIMEOUT }},baseUrl=${{ steps.baas.outputs.baas-url }}
+
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2

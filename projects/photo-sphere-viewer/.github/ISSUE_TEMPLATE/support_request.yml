@@ -1,0 +1,53 @@
+name: 🆘 Support request
+description: If you need help to use this library
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Let's try to solve your problem
+
+        **Please use English or French**, I don't speak other languages.
+
+        Consider searching [the documentation](https://photo-sphere-viewer.js.org/guide/) to find the solution by yourself.
+
+        Use [markdown codeblocks](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks) when posting code samples, **do not use screenshots**!
+  - id: description
+    type: textarea
+    attributes:
+      label: Describe your problem
+      placeholder: A clear description of what you want to achieve and what you already tried. If possible provided an online demo of your progression.
+    validations:
+      required: true
+  - id: url
+    type: input
+    attributes:
+      label: Online demo URL
+  - id: version
+    type: dropdown
+    attributes:
+      label: Photo Sphere Viewer version
+      options:
+        - 5.7.2
+        - 5.7.1
+        - 5.7.0
+        - 5.6.0
+        - 5.5.2
+        - 5.5.1
+        - 5.5.0
+        - 5.4.4
+        - 5.4.3
+        - 5.4.2
+        - other
+    validations:
+      required: true
+  - id: plugins
+    type: input
+    attributes:
+      label: Plugins loaded
+  - id: context
+    type: textarea
+    attributes:
+      label: Additional context
+      placeholder: Add any other context about the request here.

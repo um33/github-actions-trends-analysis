@@ -1,0 +1,33 @@
+name: linters
+
+on:
+  workflow_call: {}
+
+jobs:
+  lint:
+    timeout-minutes: ${{ fromJSON(vars.GHA_DEFAULT_TIMEOUT) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/go.mod
+
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+
+      - name: Run lint
+        env:
+          # Our .golangci.yaml has fix: true, but we don't want that in CI therefore the below override.
+          GOLANGCI_LINT_FLAGS: "--fix=false"
+        run: make lint
+
+      - name: Verify manifest consistency
+        run: make verify.manifests
+
+      - name: Verify generators consistency
+        run: make verify.generators

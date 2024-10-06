@@ -1,0 +1,18 @@
+kibbeh:
+  - kibbeh/**/*
+baklava:
+  - baklava/**/*
+kebab:
+  - kebab/**/*
+kousa:
+  - kousa/**/*
+pilaf:
+  - pilaf/**/*
+shawarma:
+  - shawarma/**/*
+dolma:
+  - dolma/**/*
+emote:
+  - kibbeh/public/emotes/**/*
+translation:
+  - kibbeh/public/locales/**/*

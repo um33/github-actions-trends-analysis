@@ -1,0 +1,68 @@
+name: Code Coverage
+ 
+on:
+  push:
+    branches: 
+      - 'main'
+      - 'release/*'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+    branches: 
+      - 'main'
+      - 'release/*'
+      - '!/docs/'
+      - '!/*.md'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  
+jobs:
+  build_and_test:
+    name: Run
+
+    env:
+      Solution_Name: Open-XML-SDK.sln  
+      Configuration: Release
+          
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+
+    - name: Restore
+      run: dotnet restore --verbosity normal
+          
+    - name: Build
+      run: dotnet build --no-restore --verbosity normal 
+
+    - name: Test
+      run: dotnet test --no-restore --verbosity normal --collect:"XPlat Code Coverage" --results-directory coverage
+
+    - name: ReportGenerator
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.2.2
+      with:
+        reports: coverage/**/coverage.cobertura.xml
+        targetdir: coveragereport
+        reporttypes: MarkdownSummaryGithub;MarkdownDeltaSummary
+        assemblyfilters: +DocumentFormat.OpenXml.Framework;+DocumentFormat.OpenXml;+DocumentFormat.OpenXml.Linq;+DocumentFormat.OpenXml.Features
+        filefilters: -*.g.cs
+        tag: '${{ github.run_number }}_${{ github.run_id }}' # Optional tag or build version.
+           
+    - name: Post results
+      run: |
+        cat coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+    
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Code Coverage
+        path: coveragereport/*

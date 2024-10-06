@@ -1,0 +1,346 @@
+#############################
+## GitHub Actions CI Tests ##
+#############################
+#
+# This can be kicked off manually in the Actions tab of GitHub
+# It will also run nightly at 2pm
+# It will run on any pull request, except non-code changes
+# (images, markdown files, )
+#
+name: CI
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 2am each night
+    - cron: '00 2 * * *'
+  # Don't use pull_request_target here. See:
+  # https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+    # Merge Queue checks requested. This feature is still in beta
+    # from Github and so may need updating later.
+    # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#merge_group
+    types: [checks_requested]
+
+jobs:
+
+  linting:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        jobs: [ 'linting', 'doclinting', 'docbuild', 'yamllint', 'mypy', 'doctests' ]
+    name: ${{ matrix.jobs }} tests
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: pip install tox
+    - name: Run the tests
+      run: tox -e ${{ matrix.jobs }}
+
+  # Test with coverage tracking on most recent python (py12).
+  python-version-tests:
+    name: Python Tests
+    strategy:
+      matrix:
+        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
+        include:
+          # Default to test without coverage tracking on older python versions.
+          # This saves time, as testing without coverage tracking is faster.
+          - coverage: false
+          # Override coverage to be true for most recent python version.
+          - python-version: "3.12"
+            coverage: true
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/ci-test-python.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      coverage: ${{ matrix.coverage }}
+    secrets:
+      gh_token: ${{ secrets.github_token }}
+
+  dbt-tests:
+    name: dbt Plugin Tests
+    strategy:
+      matrix:
+        dbt-version: [ dbt110, dbt120, dbt130, dbt140, dbt150, dbt160 ]
+        include:
+          # Default to python 3.11 for dbt tests. dbt doesn't support py 3.12 yet.
+          - python-version: "3.11"
+          # For the two oldest dbt versions, override to python 3.9.
+          - dbt-version: dbt110
+            python-version: "3.9"
+          - dbt-version: dbt120
+            python-version: "3.9"
+          # For dbt 1.3 override to python 3.10
+          - dbt-version: dbt130
+            python-version: "3.10"
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/ci-test-dbt.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      dbt-version: ${{ matrix.dbt-version }}
+      coverage: true
+    secrets:
+      gh_token: ${{ secrets.github_token }}
+
+  dialect-tests:
+    name: Dialect ${{ matrix.marks }}
+    strategy:
+      matrix:
+        include:
+          # This runs the bulk of the dialect _parsing_ tests.
+          #
+          # It's run as a separate job as takes longer than the CI jobs and allows
+          # them to be rerun separately if GitHub Actions or Coverage is experiencing
+          # issues.
+          - marks: "parse_suite"
+            # We test coverage here for some parsing routines.
+            coverage: true
+          # This lints all our dialect fixtures to check rules can handle a variety
+          # of SQL and don't error out badly.
+          #
+          # It's run as a separate job as takes longer than the CI jobs and allows
+          # them to be rerun separately if GitHub Actions or Coverage is experiencing
+          # issues.
+          - marks: "fix_suite"
+            coverage: false
+          # This lints all our rules fixtures to check rules.
+          #
+          # It's run as a separate job as takes longer than the CI jobs and allows
+          # them to be rerun separately if GitHub Actions or Coverage is experiencing
+          # issues.
+          - marks: "rules_suite"
+            coverage: true
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/ci-test-python.yml
+    with:
+      python-version: "3.12"
+      marks: ${{ matrix.marks }}
+      coverage: ${{ matrix.coverage }}
+    secrets:
+      gh_token: ${{ secrets.github_token }}
+
+  ymlchecks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements_dev.txt
+        pip install -e .
+    - name: Generate the YAML files
+      run: |
+        python test/generate_parse_fixture_yml.py
+    - name: Test the generated YAML files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          git diff
+          echo "Generated YAML files do not match branch."
+          echo "Please run the following command to generate these:"
+          echo "  python test/generate_parse_fixture_yml.py"
+          exit 1
+        fi
+
+  examples:
+    runs-on: ubuntu-latest
+    name: example tests
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        pip install -e .
+        pip install tqdm
+    - name: Test the example files
+      run: |
+        for file in examples/*
+        do
+          echo "Running $file"
+          python "$file"
+        done
+
+  python-windows-tests:
+    runs-on: windows-latest
+    name: Python 3.12 Windows tests
+    steps:
+    - name: Set git to use LF
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: List Env
+      shell: bash
+      run: |
+        env | sort
+    - name: Install dependencies
+      shell: bash
+      run: pip install tox
+    - name: Run the tests
+      shell: bash
+      # Set python temp dir in working dir as on GitHub Actions Windows
+      # machine often has system temp dir (which tox uses) on C drive and
+      # working dir on D drive which causes problems.
+      run: |
+        mkdir temp_pytest
+        python -m tox -e winpy -- --cov=sqlfluff -n 2 test -m "not integration"
+    - name: Upload coverage data (github)
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-data-winpy3.12
+        path: ".coverage.*"
+        if-no-files-found: ignore
+
+  python-windows-dbt-tests:
+    runs-on: windows-latest
+    name: dbt Plugin Python 3.11 Windows tests
+    steps:
+    - name: Start PostgreSQL on Windows
+      run: |
+        $pgService = Get-Service -Name postgresql*
+        Set-Service -InputObject $pgService -Status running -StartupType automatic
+        Start-Process -FilePath "$env:PGBIN\pg_isready" -Wait -PassThru
+    - name: Set postgres user password
+      run: |
+        & $env:PGBIN\psql --command="ALTER USER postgres PASSWORD 'password';" --command="\du"
+    - name: Set git to use LF
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        # dbt doesn't support py 3.12 yet.
+        python-version: "3.11"
+    - name: Install dependencies
+      shell: bash
+      run: pip install tox
+    - name: Run the tests
+      shell: bash
+      # Do not set explicitly temp dir for dbt as causes problems
+      # None of these test need temp dir set
+      run: |
+        python -m tox -e dbt150-winpy -- plugins/sqlfluff-templater-dbt
+
+  pip-test-pull-request:
+    # Test that using pip install works as we've missed
+    # some dependencies in the past - see #1842
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    name: pip install tests
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - uses: actions/checkout@v4
+    - name: Install dependencies
+      run: |
+        pip install .
+    - name: Run the version test
+      run: |
+        sqlfluff --version
+    - name: Run a simple select parse test via stdin
+      run: |
+        echo "select 1" | sqlfluff parse --dialect=ansi -
+    - name: Run a simple select lint test via stdin
+      run: |
+        echo "select 1" | sqlfluff lint --dialect=ansi -
+    - name: Run a simple select parse test via file
+      run: |
+        sqlfluff parse --dialect=ansi <(echo "select 1")
+    - name: Run a simple select lint test via file
+      run: |
+        sqlfluff lint --dialect=ansi <(echo "select 1")
+
+  coveralls_finish:
+    name: Finalise coveralls.
+    needs: [python-version-tests, dbt-tests, python-windows-tests, dialect-tests]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Coveralls Finished
+      uses: coverallsapp/github-action@v2
+      with:
+        github-token: ${{ secrets.github_token }}
+        parallel-finished: true
+
+  coverage_check:
+    name: Combine & check 100% coverage.
+    runs-on: ubuntu-latest
+    needs: [python-version-tests, dbt-tests, python-windows-tests, dialect-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install --upgrade coverage[toml]
+
+      - name: Download coverage data.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-data-*
+          merge-multiple: true
+
+      - name: Combine coverage & fail if it's <100%.
+        id: report_coverage
+        # NOTE: Setting the pipefail option here means that even when
+        # piping the output to `tee`, we still get the exit code of the
+        # `coverage report` command.
+        run: |
+          set -o pipefail
+          python -m coverage combine
+          python -m coverage html --skip-covered --skip-empty
+          python -m coverage report --fail-under=100 --skip-covered --skip-empty -m | tee coverage-report.txt
+
+      - name: Upload HTML report if check failed.
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report
+          path: htmlcov
+        if: failure() && github.event_name == 'pull_request'
+
+      - name: Stash PR Number.
+        if: always() && github.event_name == 'pull_request'
+        # NOTE: We do this so we know what PR to comment on when we pick up the report.
+        run: |
+          echo ${{ github.event.number }} > ./pr-number.txt
+          echo ${{ steps.report_coverage.outcome }} > ./outcome.txt
+
+      - name: Upload TXT report always (to add as comment to PR).
+        # NOTE: We don't actually comment on the PR from here, we'll do that in
+        # a more secure way by triggering a more secure workflow.
+        # https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+        uses: actions/upload-artifact@v4
+        with:
+          name: txt-report
+          path: |
+            coverage-report.txt
+            pr-number.txt
+            outcome.txt
+        if: always() && github.event_name == 'pull_request'

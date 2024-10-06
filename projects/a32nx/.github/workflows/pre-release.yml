@@ -1,0 +1,57 @@
+name: Pre release
+on:
+  push:
+    tags:
+      - "v*-rc*"
+
+jobs:
+  build_a32nx:
+    name: Build and publish A32NX
+    runs-on: ubuntu-latest
+    env:
+      FBW_PRODUCTION_BUILD: 1
+      RELEASE_ZIP_NAME: A32NX-stable.7z
+      BUILD_DIR_NAME: stable
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+      - name: Create .env file
+        run: |
+          echo FBW_PRODUCTION_BUILD=1 >> fbw-a32nx/.env
+          echo CLIENT_ID=\"${{ secrets.NAVIGRAPH_CLIENT_ID }}\" >> fbw-a32nx/.env
+          echo CLIENT_SECRET=\"${{ secrets.NAVIGRAPH_CLIENT_SECRET }}\" >> fbw-a32nx/.env
+          echo CHARTFOX_SECRET=\"${{ secrets.CHARTFOX_SECRET }}\" >> fbw-a32nx/.env
+          echo SENTRY_DSN=\"${{ secrets.SENTRY_DSN }}\" >> fbw-a32nx/.env
+          echo BUILD_DIR_NAME=${{ env.BUILD_DIR_NAME }} >> .env
+          echo LOCALAZY_READ_KEY=${{ secrets.LOCALAZY_READ_KEY }} >> .env
+          echo VITE_BUILD=false >> .env
+      - name: Build A32NX
+        run: |
+          ./scripts/dev-env/run.sh ./scripts/setup.sh --clean
+          ./scripts/dev-env/run.sh ./scripts/build.sh --no-tty -j 4
+          rm -rf fbw-a32nx/src
+          docker system prune -af
+      - name: Build ZIP file
+        run: |
+          cd ./fbw-a32nx/out/
+          7z a -t7z -m0=lzma2 -mx=7 ../../${{ env.BUILD_DIR_NAME }}/${{ env.RELEASE_ZIP_NAME }} ./flybywire-aircraft-a320-neo/
+          cd ../..
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          draft: false
+          prerelease: true
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ env.BUILD_DIR_NAME }}/${{ env.RELEASE_ZIP_NAME }}
+          asset_name: ${{ env.RELEASE_ZIP_NAME }}
+          asset_content_type: application/zip

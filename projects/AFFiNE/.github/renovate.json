@@ -1,0 +1,83 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":disablePeerDependencies"],
+  "labels": ["dependencies"],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/__fixtures__/**"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["napi", "napi-build", "napi-derive"],
+      "rangeStrategy": "replace",
+      "groupName": "napi-rs"
+    },
+    {
+      "matchPackagePatterns": ["^eslint", "^@typescript-eslint"],
+      "rangeStrategy": "replace",
+      "groupName": "linter"
+    },
+    {
+      "matchPackagePatterns": ["^@nestjs"],
+      "rangeStrategy": "replace",
+      "groupName": "nestjs"
+    },
+    {
+      "matchPackagePatterns": ["^@opentelemetry"],
+      "rangeStrategy": "replace",
+      "groupName": "opentelemetry"
+    },
+    {
+      "matchPackageNames": [
+        "@prisma/client",
+        "@prisma/instrumentation",
+        "prisma"
+      ],
+      "rangeStrategy": "replace",
+      "groupName": "prisma"
+    },
+    {
+      "matchPackagePatterns": ["^@electron-forge"],
+      "rangeStrategy": "replace",
+      "groupName": "electron-forge"
+    },
+    {
+      "matchPackageNames": ["oxlint"],
+      "rangeStrategy": "replace",
+      "groupName": "oxlint"
+    },
+    {
+      "groupName": "blocksuite-canary",
+      "matchPackagePatterns": ["^@blocksuite"],
+      "excludePackageNames": ["@blocksuite/icons"],
+      "rangeStrategy": "replace",
+      "followTag": "canary"
+    },
+    {
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "matchPackagePatterns": ["*"],
+      "excludePackagePatterns": ["^@blocksuite/", "oxlint"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchPackagePatterns": ["*"],
+      "rangeStrategy": "replace",
+      "excludePackagePatterns": ["^@blocksuite/"]
+    }
+  ],
+  "commitMessagePrefix": "chore: ",
+  "commitMessageAction": "bump up",
+  "commitMessageTopic": "{{depName}} version",
+  "ignoreDeps": [],
+  "postUpdateOptions": ["yarnDedupeHighest"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "extends": ["schedule:weekly"]
+  }
+}

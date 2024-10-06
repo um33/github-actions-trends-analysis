@@ -1,0 +1,170 @@
+name: Build and test on Linux
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - web/**
+      - doc/**
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - web/**
+      - doc/**
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+          - ubuntu-22.04
+        x11: [ON, OFF]
+        wayland: [ON, OFF]
+        compiler:
+          - clang
+          - gcc
+        compiler_version:
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+        exclude:
+          # 9 only exists for gcc
+          - compiler: clang
+            compiler_version: 9
+
+          # 13, 14, 15 only exist for clang
+          - compiler: gcc
+            compiler_version: 13
+          - compiler: gcc
+            compiler_version: 14
+          - compiler: gcc
+            compiler_version: 15
+
+          # ubuntu-20.04
+          - os: ubuntu-20.04
+            compiler: gcc
+            compiler_version: 11
+          - os: ubuntu-20.04
+            compiler: gcc
+            compiler_version: 12
+          - os: ubuntu-20.04
+            compiler: clang
+            compiler_version: 13
+          - os: ubuntu-20.04
+            compiler: clang
+            compiler_version: 14
+          - os: ubuntu-20.04
+            compiler: clang
+            compiler_version: 15
+
+          # ubuntu-22.04
+          - os: ubuntu-22.04
+            compiler: clang
+            compiler_version: 10
+          - os: ubuntu-22.04
+            compiler: clang
+            compiler_version: 11
+          - os: ubuntu-22.04
+            compiler: clang
+            compiler_version: 12
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: sudo apt-get -qq update
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -yqq --no-install-recommends \
+            audacious-dev \
+            cmake \
+            gawk \
+            lcov \
+            libaudclient-dev \
+            libcairo2-dev \
+            libcurl4-gnutls-dev \
+            libcurl4-gnutls-dev \
+            libdbus-glib-1-dev \
+            libglib2.0-dev \
+            libical-dev \
+            libimlib2-dev \
+            libircclient-dev \
+            libiw-dev \
+            liblua5.3-dev \
+            libmicrohttpd-dev \
+            libmysqlclient-dev \
+            libpulse-dev \
+            librsvg2-dev \
+            libsystemd-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libx11-dev \
+            libxdamage-dev \
+            libxext-dev \
+            libxft-dev \
+            libxinerama-dev \
+            libxml2-dev \
+            libxmmsclient-dev \
+            libxnvctrl-dev \
+            ncurses-dev \
+            ninja-build \
+            wayland-protocols
+      - name: Install libc++
+        if: matrix.compiler == 'clang'
+        run: |
+          sudo apt-get install -yqq --no-install-recommends \
+            libc++-${{ matrix.compiler_version }}-dev \
+            libc++abi-${{ matrix.compiler_version }}-dev
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure with CMake
+        run: |
+          set -x # show the commands we're running
+          [[ "${{ matrix.compiler }}" == "clang"* ]] && CC=clang-${{ matrix.compiler_version }}
+          [[ "${{ matrix.compiler }}" == "clang"* ]] && CXX=clang++-${{ matrix.compiler_version }}
+
+          [[ "${{ matrix.compiler }}" == "gcc"* ]] && CC=gcc-${{ matrix.compiler_version }}
+          [[ "${{ matrix.compiler }}" == "gcc"* ]] && CXX=g++-${{ matrix.compiler_version }}
+
+
+          # Enable librsvg by default, disable for older versions of Ubuntu
+          # because we need librsvg>=2.52
+          RSVG_ENABLED=ON
+          [[ "${{ matrix.os }}" == "ubuntu-20.04"* ]] && RSVG_ENABLED=OFF
+
+          mkdir build
+          cd build
+          cmake .. -G Ninja                      \
+            -DBUILD_AUDACIOUS=ON                 \
+            -DBUILD_HTTP=ON                      \
+            -DBUILD_ICAL=ON                      \
+            -DBUILD_ICONV=ON                     \
+            -DBUILD_IRC=ON                       \
+            -DBUILD_IRC=ON                       \
+            -DBUILD_JOURNAL=ON                   \
+            -DBUILD_LUA_CAIRO=ON                 \
+            -DBUILD_LUA_IMLIB2=ON                \
+            -DBUILD_LUA_RSVG=${RSVG_ENABLED}     \
+            -DBUILD_MYSQL=ON                     \
+            -DBUILD_NVIDIA=ON                    \
+            -DBUILD_PULSEAUDIO=ON                \
+            -DBUILD_CURL=ON                      \
+            -DBUILD_RSS=ON                       \
+            -DBUILD_TESTS=ON                     \
+            -DBUILD_WLAN=ON                      \
+            -DBUILD_WAYLAND=${{ matrix.wayland }}\
+            -DBUILD_X11=${{ matrix.x11 }}        \
+            -DBUILD_XMMS2=ON                     \
+            -DCMAKE_C_COMPILER=$CC               \
+            -DCMAKE_CXX_COMPILER=$CXX            \
+            -DMAINTAINER_MODE=ON
+      - name: Compile
+        run: cmake --build build
+      - name: Test
+        working-directory: build
+        run: ctest

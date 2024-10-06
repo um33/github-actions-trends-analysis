@@ -1,0 +1,14 @@
+{
+  "aliveStatusCodes": [0, 200],
+  "ignorePatterns": [
+    {
+      "pattern": "example.org"
+    },
+    {
+      "pattern": "gitlab.com/profile"
+    },
+    {
+      "pattern": "twitter.com/KodapsAcademy"
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+name: tester
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'release-**'
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    branches:
+      - 'main'
+      - 'release-**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    outputs:
+      should-run-tests: ${{ steps.changes.outputs.go == 'true' }}
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: changes
+        with:
+          filters: |
+            go:
+              - '**.go'
+              - 'go.*'
+              - '.github/workflows/test.yml'
+  test:
+    needs: [changes]
+    if: needs.changes.outputs.should-run-tests == 'true'
+    name: Tests
+    runs-on: ubuntu-22.04
+    container: ghcr.io/runatlantis/testing-env:latest@sha256:aca1de9fd00818db0a8b221c9d0d7252a3acbab72d071b0e96833377be1f10fc
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      # need to setup go toolchain explicitly
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version-file: go.mod
+
+      - run: make test-all
+      - run: make check-fmt
+      ###########################################################
+      # Notifying #contributors about test failure on main branch
+      ###########################################################
+      - name: Slack failure notification
+        if: ${{ github.ref == 'refs/heads/main' && failure() }}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":x: Failed GitHub Action:"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.workflow }}>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Job:*\n${{ github.job }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repo:*\n${{ github.repository }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  skip-test:
+    needs: [changes]
+    if: needs.changes.outputs.should-run-tests == 'false'
+    name: Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - run: 'echo "No build required"'

@@ -1,0 +1,100 @@
+name: github-OSX
+
+on:
+  push:
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    - ready_for_review
+
+concurrency:
+  group: ${ {github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+
+permissions:
+  contents: read
+
+jobs:
+  osx-serial:
+    # simple serial build using apple clang
+
+    name: OSX serial
+    runs-on: [macos-latest]
+
+    #
+    # The following condition only runs the workflow on 'push' or if the
+    # 'pull_request' is not a draft. This is only useful for hackathons or
+    # other situations when the CI is massively overburdened with pull
+    # requests.
+    #
+    # if: ${{ github.event_name == 'push' || !github.event.pull_request.draft }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: info
+      run: |
+        g++ -v
+        cmake --version
+    - name: configure
+      run: |
+        cmake -D CMAKE_BUILD_TYPE=Debug -D DEAL_II_CXX_FLAGS='-Werror' -D DEAL_II_EARLY_DEPRECATIONS=ON .
+    - name: print detailed.log
+      run: cat detailed.log
+    - name: build
+      run: |
+        make VERBOSE=1 -j2
+        make -j3 test # quicktests
+    - name: upload CMakeConfigureLog
+      uses: actions/upload-artifact@v4
+      if: always()
+      continue-on-error: true
+      with:
+        name: osx-serial-CMakeConfigureLog.yaml
+        path: CMakeFiles/CMakeConfigureLog.yaml
+
+  osx-parallel64:
+    # MPI build using apple clang and 64 bit indices
+
+    name: OSX parallel 64bit
+    runs-on: [macos-latest]
+
+    #
+    # The following condition only runs the workflow on 'push' or if the
+    # 'pull_request' is not a draft. This is only useful for hackathons or
+    # other situations when the CI is massively overburdened with pull
+    # requests.
+    #
+    # if: ${{ github.event_name == 'push' || !github.event.pull_request.draft }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: setup
+      run: |
+        brew install openmpi
+        # uncomment these for a gcc based build
+        #export OMPI_CXX=g++
+        #export OMPI_CC=gcc
+        #export OMPI_FC=gfortran
+    - name: info
+      run: |
+        mpicxx -v
+        cmake --version
+    - name: configure
+      run: |
+        CC=mpicc CXX=mpic++ cmake -D CMAKE_BUILD_TYPE=Debug -D DEAL_II_WITH_64BIT_INDICES=ON -D DEAL_II_CXX_FLAGS='-Werror' -D DEAL_II_EARLY_DEPRECATIONS=ON -D DEAL_II_WITH_MPI=on .
+    - name: print detailed.log
+      run: cat detailed.log
+    - name: build
+      run: |
+        make VERBOSE=1 -j2
+        make -j3 test #quicktests
+    - name: upload CMakeConfigureLog
+      uses: actions/upload-artifact@v4
+      if: always()
+      continue-on-error: true
+      with:
+        name: osx-parallel64-CMakeConfigureLog.yaml
+        path: CMakeFiles/CMakeConfigureLog.yaml
+

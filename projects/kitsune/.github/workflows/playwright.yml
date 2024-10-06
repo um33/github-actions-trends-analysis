@@ -1,0 +1,149 @@
+name: Playwright Tests
+on:
+    schedule:
+        # Playwright tests are running automatically in Firefox on each Monday & in Chrome on each Friday.
+        - cron: '0 5 * * 1,5'
+    workflow_dispatch:
+        inputs:
+            Browsers:
+                description: Browsers
+                required: true
+                default: firefox
+                type: choice
+                options:
+                    - firefox
+                    - chrome
+            TestSuite:
+                description: Test Suite to run
+                required: true
+                default: All
+                type: choice
+                options:
+                    - All
+                    - homePageTests
+                    - topNavbarTests
+                    - footerSectionTests
+                    - contributePagesTests
+                    - messagingSystem
+                    - User Pages
+                    - contactSupportPage
+                    - productSolutionsPage
+                    - productTopicsPage
+                    - AAQ
+                    - KB Articles
+                    - KB Restricted Visibility
+                    - recentRevisionsDashboard
+                    - kbDashboard
+
+env:
+    TEST_ACCOUNT_12: ${{secrets.AUTOMATION_TEST_ACCOUNT_12}}
+    TEST_ACCOUNT_13: ${{secrets.AUTOMATION_TEST_ACCOUNT_13}}
+    TEST_ACCOUNT_MESSAGE_1: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_1}}
+    TEST_ACCOUNT_MESSAGE_2: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_2}}
+    TEST_ACCOUNT_MESSAGE_3: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_3}}
+    TEST_ACCOUNT_MESSAGE_4: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_4}}
+    TEST_ACCOUNT_MESSAGE_5: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_5}}
+    TEST_ACCOUNT_MESSAGE_6: ${{secrets.AUTOMATION_TEST_ACCOUNT_MESSAGE_6}}
+    TEST_ACCOUNT_SPECIAL_CHARS: ${{secrets.AUTOMATION_TEST_ACCOUNT_SPECIAL_CHARS}}
+    TEST_ACCOUNTS_PS: ${{secrets.AUTOMATION_ACCOUNTS_PASSWORD}}
+    TEST_ACCOUNT_MODERATOR: ${{secrets.AUTOMATION_MODERATOR_ACCOUNT}}
+    BROWSER: ${{secrets.BROWSER}}
+
+
+jobs:
+  playwright_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        if: success() || failure()
+        run: |
+          sudo apt-get update
+          pip3 install --user poetry
+          poetry install
+      - name: Ensure Playwright browsers are installed
+        run: |
+            pip3 install playwright
+            python -m playwright install
+      - name: Set up browsers env
+        if: "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+        run: |
+            if [ "${{ github.event_name }}" == 'schedule' ]; then
+                current_day=$(date +\%u)
+                if [ $current_day -eq 1 ]; then
+                    echo "BROWSER=firefox" >> $GITHUB_ENV
+                elif [ $current_day -eq 5 ]; then
+                    echo "BROWSER=chrome" >> $GITHUB_ENV
+                fi
+            elif [ "${{ github.event_name }}" == 'workflow_dispatch' ]; then
+                echo "BROWSER=${{inputs.Browsers}}" >> $GITHUB_ENV
+            fi
+      - name: Creating User Sessions for ${{ env.BROWSER }}
+        id: create-sessions
+        working-directory: playwright_tests
+        run: |
+         poetry run pytest -m loginSessions --browser ${{ env.BROWSER }} --reruns 1
+      - name: Run ${{inputs.TestSuite}} Playwright Tests
+        working-directory: playwright_tests
+        if: success() || failure() && steps.create-sessions.outcome == 'success'
+        run: |
+            declare dispatch_test_suite="${{inputs.TestSuite}}"
+            declare all_test_suites=("homePageTests" "topNavbarTests" "footerSectionTests" "contributePagesTests" "messagingSystem" "userContributionTests" "userProfile" "userSettings" "editUserProfileTests" "userQuestions" "contactSupportPage" "productSolutionsPage" "productTopicsPage" "aaqPage" "postedQuestions" "kbProductsPage" "kbArticleCreationAndAccess" "beforeThreadTests" "articleThreads" "afterThreadTests" "kbArticleShowHistory" "recentRevisionsDashboard" "kbDashboard" "restrictedArticleCreation" "kbRestrictedVisibilitySingleGroup" "whitelistingDifferentGroup" "kbRestrictedVisibilityMultipleGroups" "removingAllArticleRestrictions" "kbRemovedRestrictions" "deleteAllRestrictedTestArticles")
+            if [ "$dispatch_test_suite" == "All" ] || [ "${{ github.event_name}}" == "schedule" ] ; then
+                for test in "${all_test_suites[@]}"; do
+                    if ! poetry run pytest -m $test --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                    fi
+                done
+            elif [ "$dispatch_test_suite" == "User Pages" ]; then
+                for test in "userContributionTests" "userProfile" "userSettings" "editUserProfileTests" "userQuestions"; do
+                    if ! poetry run pytest -m ${test} --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                    fi
+                done
+            elif [ "$dispatch_test_suite" == "AAQ" ]; then
+                for test in "aaqPage" "postedQuestions"; do
+                    if ! poetry run pytest -m ${test} --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                    fi
+                done
+            elif [ "$dispatch_test_suite" == "KB Articles" ]; then
+                for test in "kbProductsPage" "kbArticleCreationAndAccess" "beforeThreadTests" "articleThreads" "afterThreadTests" "kbArticleShowHistory"; do
+                    if ! poetry run pytest -m ${test} --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                    fi
+                done
+            elif [ "$dispatch_test_suite" == "KB Restricted Visibility" ]; then
+                for test in "restrictedArticleCreation" "kbRestrictedVisibilitySingleGroup" "whitelistingDifferentGroup" "kbRestrictedVisibilityMultipleGroups" "removingAllArticleRestrictions" "kbRemovedRestrictions"  "deleteAllRestrictedTestArticles"; do
+                    if ! poetry run pytest -m ${test} --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                    fi
+                done
+            else
+                if ! poetry run pytest -m $dispatch_test_suite --numprocesses 2 --browser ${{ env.BROWSER }} --reruns 1; then
+                        any_failures=true
+                fi
+            fi
+            echo "TESTS_FAILED=$any_failures" >> $GITHUB_ENV
+      - name: Generating Allure Report
+        working-directory: playwright_tests
+        if: success() || failure()
+        run: |
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+            brew install allure
+            allure generate --single-file reports/allure_reports
+      - name: Upload the combined test report as artifact
+        if: success() || failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: Playwright test report
+          path: |
+            playwright_tests/allure-report
+      - name: Playwright Test Status
+        if: env.TESTS_FAILED == 'true'
+        run: exit 1

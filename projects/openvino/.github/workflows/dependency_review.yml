@@ -1,0 +1,18 @@
+name: 'Dependency Review'
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone OpenVINO
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: './.github/dependency_review.yml'
+          allow-dependencies-licenses: 'pkg:pypi/PyGithub@2.2.0,pkg:pypi/psycopg2-binary'

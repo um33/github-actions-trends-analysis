@@ -1,0 +1,116 @@
+name: "Continuous Integration"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  MONGODB_SERVER: mongodb://127.0.0.1:27017
+
+jobs:
+  phpunit:
+    name: "PHPUnit ${{ matrix.php-version }} (${{ matrix.deps }})"
+    runs-on: "ubuntu-20.04"
+
+    services:
+      mongo:
+        image: mongo
+        ports:
+          - 27017:27017
+
+    strategy:
+      matrix:
+        php-version:
+          - "7.4"
+          - "8.0"
+          - "8.1"
+          - "8.2"
+          - "8.3"
+        deps:
+          - "highest"
+        include:
+          - deps: "lowest"
+            php-version: "7.4"
+          - deps: "highest"
+            php-version: "8.1"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 2
+
+      - name: "Install PHP"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          php-version: "${{ matrix.php-version }}"
+          extensions: mongodb
+          coverage: "pcov"
+
+      # Remove PHP-CS-Fixer to avoid conflicting dependency ranges (i.e. doctrine/annotations)
+      - name: "Remove PHP-CS-Fixer"
+        run: "composer remove --dev --no-update friendsofphp/php-cs-fixer"
+
+      - name: "Install dependencies with Composer"
+        uses: "ramsey/composer-install@v2"
+        with:
+          dependency-versions: "${{ matrix.deps }}"
+
+      - name: "Run PHPUnit"
+        run: "vendor/bin/phpunit -c tests --coverage-clover coverage.xml"
+
+      - name: "Upload coverage file"
+        uses: "actions/upload-artifact@v4"
+        with:
+          name: "${{ github.job }}-${{ matrix.php-version }}-${{ matrix.deps }}-coverage"
+          path: "coverage.xml"
+
+  lint-doctrine-xml-schema:
+    name: Lint Doctrine XML schemas
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Install PHP"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          php-version: "8.2"
+          extensions: mongodb
+
+      - name: "Install dependencies with Composer"
+        uses: "ramsey/composer-install@v2"
+        with:
+          dependency-versions: "highest"
+
+      - name: Install required dependencies
+        run: sudo apt-get update && sudo apt-get install libxml2-utils
+
+      - name: Lint xml files
+        run: make lint-doctrine-xml-schema
+
+  upload_coverage:
+    name: "Upload coverage to Codecov"
+    runs-on: "ubuntu-22.04"
+    needs:
+      - "phpunit"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+        with:
+          fetch-depth: 2
+
+      - name: "Download coverage files"
+        uses: "actions/download-artifact@v4"
+        with:
+          path: "reports"
+
+      - name: "Upload to Codecov"
+        uses: "codecov/codecov-action@v4"
+        with:
+          directory: reports

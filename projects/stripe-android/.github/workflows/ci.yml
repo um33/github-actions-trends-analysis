@@ -1,0 +1,69 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+env:
+  STRIPE_END_TO_END_TESTS_BACKEND_URL: ${{ secrets.STRIPE_END_TO_END_TESTS_BACKEND_URL }}
+  STRIPE_END_TO_END_TESTS_PUBLISHABLE_KEY: ${{ secrets.STRIPE_END_TO_END_TESTS_PUBLISHABLE_KEY }}
+  GRADLE_OPTS: -Dkotlin.incremental=false
+
+jobs:
+  end-to-end-tests:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/stripe_setup
+      - name: End-to-end tests
+        run: ./gradlew :stripe-test-e2e:testDebugUnitTest
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: unit-test-report
+          path: stripe-test-e2e/build/reports/tests/testDebugUnitTest/
+
+  build-paymentsheet-example-project:
+    name: Build paymentsheet example project
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/stripe_setup
+      - name: Build example projects
+        run: ./gradlew :paymentsheet-example:assembleAndroidTest
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: test-failures
+          path: |
+            **/build/reports/tests/
+            **/out/failures/
+
+  payment-sheet-apk-size-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/stripe_setup
+      - name: Generate Android release bundle
+        run: ./gradlew :paymentsheet-example:bundleRelease
+      - name: Upload artifact to Emerge
+        uses: EmergeTools/emerge-upload-action@3477b597fc62054136eb6f499e0ba78144f8a999
+        with:
+          artifact_path: paymentsheet-example/build/outputs/bundle/release/paymentsheet-example-release.aab
+          emerge_api_key: ${{ secrets.EMERGE_API_KEY }}
+          build_type: pull_request
+
+  check-for-untranslated-strings:
+    name: Check for untranslated strings
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for untranslated strings
+        run: cd scripts && ruby lokalise/check_untranslated_strings.rb
+        env:
+          LOKALISE_API_TOKEN: ${{ secrets.LOKALISE_API_TOKEN }}

@@ -1,0 +1,38 @@
+name: Test / Lint
+on:
+  push:
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+      - uses: actions/setup-node@5e21ff4d9bc1a8cf6de233a3057d20ec6b3fb69d # v3
+        with:
+          node-version: 18
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+  test:
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x]
+        config:
+          # arch isn't used and we have no way to use it currently
+          - { os: macos-latest, arch: x64 }
+          - { os: ubuntu-latest, arch: x64 }
+          - { os: windows-latest, arch: x64 }
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+      - uses: actions/setup-node@5e21ff4d9bc1a8cf6de233a3057d20ec6b3fb69d # v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm test
+      - uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3
+        with:
+          directory: ./coverage/

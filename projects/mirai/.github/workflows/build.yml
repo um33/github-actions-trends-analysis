@@ -1,0 +1,107 @@
+name: Build
+
+
+on:
+  push:
+    paths-ignore:
+      - 'docs/**'
+      - 'mirai-console/docs/**'
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'mirai-console/docs/**'
+      - '**/*.md'
+
+jobs:
+  build:
+    name: "Build (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: # You must use macos-12. Only macos-12 get 14GB memory while others have only 7GB.
+          #          - windows-2022
+          - macos-12
+    env:
+      gradleArgs: --scan
+      isMac: ${{ startsWith(matrix.os, 'macos') }}
+      isWindows: ${{ startsWith(matrix.os, 'windows') }}
+      isUbuntu: ${{ startsWith(matrix.os, 'ubuntu') }}
+      isUnix: ${{ startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'ubuntu') }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - if: ${{ env.isUnix == 'true' }}
+        run: chmod -R 777 *
+
+      - if: ${{ env.isWindows == 'true' }}
+        name: Setup Memory Environment on Windows
+        run: >
+          wmic pagefileset where name="D:\\pagefile.sys" set InitialSize=1024,MaximumSize=18432 &
+          net stop mongodb
+        shell: cmd
+        continue-on-error: true
+
+      - name: Clean and download dependencies
+        run: ./gradlew clean ${{ env.gradleArgs }}
+
+      - run: >
+          ./gradlew updateSnapshotVersion ${{ env.gradleArgs }}
+        if: github.event.pusher && vars.RUN_MIRAI_SNAPSHOTS == 'true'
+        env:
+          MIRAI_IS_SNAPSHOTS_PUBLISHING: true
+          SNAPSHOTS_PUBLISHING_USER: ${{ secrets.SNAPSHOTS_PUBLISHING_USER }}
+          SNAPSHOTS_PUBLISHING_KEY: ${{ secrets.SNAPSHOTS_PUBLISHING_KEY }}
+          SNAPSHOTS_PUBLISHING_URL: ${{ secrets.SNAPSHOTS_PUBLISHING_URL }}
+          MIRAI_BUILD_INDEX_AUTH_USERNAME: ${{ secrets.MIRAI_BUILD_INDEX_AUTH_USERNAME }}
+          MIRAI_BUILD_INDEX_AUTH_PASSWORD: ${{ secrets.MIRAI_BUILD_INDEX_AUTH_PASSWORD }}
+
+      - name: "Assemble"
+        run: ./gradlew assemble ${{ env.gradleArgs }}
+
+      - name: Publish Local Artifacts
+        if: ${{ env.enableLocalPublishingTest == 'true' }}
+        run: ./gradlew :mirai-deps-test:publishMiraiArtifactsToMavenLocal ${{ env.gradleArgs }} "-Dmirai.build.project.version=2.99.0-deps-test"
+
+      - name: "Check"
+        run: ./gradlew check ${{ env.gradleArgs }}
+
+      # Snapshots
+
+      - if: ${{ env.isMac == 'true' }}
+        name: Ensure KDoc valid
+        run: ./gradlew dokkaHtmlMultiModule ${{ env.gradleArgs }}
+
+      - name: Release RAM
+        run: node ci-release-helper/scripts/kill-java.js
+
+      - name: Publish Snapshots
+        if: ${{ github.event.pusher && env.isMac == 'true' && vars.RUN_MIRAI_SNAPSHOTS == 'true' }}
+        run: ./gradlew publishAllPublicationsToMiraiRepoRepository ${{ env.gradleArgs }}
+        env:
+          MIRAI_IS_SNAPSHOTS_PUBLISHING: true
+          SNAPSHOTS_PUBLISHING_USER: ${{ secrets.SNAPSHOTS_PUBLISHING_USER }}
+          SNAPSHOTS_PUBLISHING_KEY: ${{ secrets.SNAPSHOTS_PUBLISHING_KEY }}
+          SNAPSHOTS_PUBLISHING_URL: ${{ secrets.SNAPSHOTS_PUBLISHING_URL }}
+
+      # Upload
+
+      - name: Publish MavenLocal
+        run: ./gradlew publishToMavenLocal ${{ env.gradleArgs }}
+
+      - name: Upload MavenLocal
+        uses: actions/upload-artifact@v3
+        with:
+          name: maven-cache
+          path: ~/.m2

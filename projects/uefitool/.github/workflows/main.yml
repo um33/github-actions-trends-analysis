@@ -1,0 +1,408 @@
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+# Release builds
+  build_release_macos:
+    name: Release build (macOS universal, static Qt 6.5.0)
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get Qt
+        uses: actions/checkout@v3
+        with:
+          repository: LongSoft/qt-6-static-universal-macos
+          path: qt
+          lfs: true
+      - name: Unpack Qt
+        shell: bash
+        working-directory: qt
+        run: sudo 7z x qt-6.5.0-static-universal-macos.7z -o/opt
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake -DCMAKE_PREFIX_PATH="/opt/qt-6.5.0-static-universal-macos" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          zip -qryj ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIExtract/UEFIExtract
+          zip -qryj ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFIFind/UEFIFind
+          cd UEFITool
+          zip -qry ../../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_universal_mac.zip ./UEFITool.app
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macOS builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_linux:
+    name: Release build (Linux x64, shared Qt 6)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get Qt
+        run: | 
+          sudo apt update
+          sudo apt-get install -qq zip cmake libgl1-mesa-dev qt6-base-dev
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          zip -qryj ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFIExtract/uefiextract
+          zip -qryj ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFIFind/uefifind
+          zip -qryj ../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_x64_linux.zip ./UEFITool/uefitool
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Linux builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_freebsd:
+    name: Release build (FreeBSD x64, shared Qt 6)
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build on FreeBSD inside macOS VM
+        id: test
+        uses: cross-platform-actions/action@v0.21.0
+        with:
+          operating_system: freebsd
+          version: '13.1'
+          shell: sh
+          run: |
+            sudo pkg install -y zip cmake qt6-base
+            mkdir dist
+            mkdir build
+            cd build
+            cmake ..
+            cmake --build . --config Release
+            UEFITOOL_VER=$(cat ../version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+            zip -qryj ../dist/UEFIExtract_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFIExtract/uefiextract
+            zip -qryj ../dist/UEFIFind_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFIFind/uefifind
+            zip -qryj ../dist/UEFITool_NE_${UEFITOOL_VER}_x64_freebsd.zip ./UEFITool/uefitool
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: FreeBSD builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_windows_32:
+    name: Release build (Win32, static Qt 5.6.3)
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v3 
+      - name: Get Qt 5.6.3
+        uses: actions/checkout@v3
+        with:
+          repository: LongSoft/qt-5.6.3-static-x86-msvc2017
+          path: qt5
+          lfs: true
+      - name: Unpack Qt 5.6.3
+        shell: bash
+        working-directory: qt5
+        run: 7z x qt-5.6.3-static-x86-msvc2017.7z -o../..
+      - name: Create dist directory
+        shell: bash
+        run: mkdir dist
+      - name: Create UEFIExtract build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFIExtract
+      - name: Configure UEFIExtract
+        shell: bash
+        working-directory: ${{runner.workspace}}/build/UEFIExtract
+        run: cmake -G "Visual Studio 16 2019" -A Win32 -T "v141_xp" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" ../../UEFITool/UEFIExtract/
+      - name: Build UEFIExtract
+        working-directory: ${{runner.workspace}}/build/UEFIExtract
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Archive UEFIExtract
+        working-directory: ${{runner.workspace}}/build/UEFIExtract/Release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_win32.zip UEFIExtract.exe
+      - name: Create UEFIFind build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFIFind
+      - name: Configure UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind
+        shell: bash
+        run: cmake -G "Visual Studio 16 2019" -A Win32 -T "v141_xp" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" ../../UEFITool/UEFIFind/
+      - name: Build UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Archive UEFIFind
+        working-directory: ${{runner.workspace}}/build/UEFIFind/Release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_win32.zip UEFIFind.exe
+      - name: Create UEFITool build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build/UEFITool
+      - name: Configure UEFITool
+        shell: bash
+        working-directory: ${{runner.workspace}}/build/UEFITool
+        run: ../../qt-5.6.3-static-x86-msvc2017/bin/qmake.exe -tp vc ../../UEFITool/UEFITool/
+      - name: Build UEFITool
+        working-directory: ${{runner.workspace}}/build/UEFITool
+        shell: cmd
+        run: |
+            call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
+            msbuild -t:Rebuild -p:PlatformToolset=v141_xp;Configuration=Release
+      - name: Archive UEFITool
+        working-directory: ${{runner.workspace}}/build/UEFITool/release
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../../../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../../../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_win32.zip UEFITool.exe
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Windows 32-bit builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build_release_windows_64:
+    name: Release build (Win64, static Qt 6.5.0)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v3 
+      - name: Get Qt 6.5.0
+        uses: actions/checkout@v3
+        with:
+          repository: LongSoft/qt-6-static-x64-msvc2022
+          path: qt6
+          lfs: true
+      - name: Unpack Qt 6.5.0
+        shell: bash
+        working-directory: qt6
+        run: 7z x qt-6.5.0-static-x64-msvc2022.7z -o../..
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        shell: cmd
+        run: cmake -DCMAKE_PREFIX_PATH="D:\a\UEFITool\qt-6.5.0-static-x64-msvc2022" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" -A x64 ../UEFITool
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: cmake --build . --config Release
+      - name: Create dist directory
+        run: cmake -E make_directory ${{runner.workspace}}/UEFITool/dist
+      - name: Archive everything
+        working-directory: ${{runner.workspace}}/build
+        shell: bash
+        run: |
+          UEFITOOL_VER=$(cat ../UEFITool/version.h | grep PROGRAM_VERSION | cut -d'"' -f2 | sed 's/NE alpha /A/') ; \
+          7z a ../UEFITool/dist/UEFIExtract_NE_${UEFITOOL_VER}_win64.zip ./UEFIExtract/Release/UEFIExtract.exe
+          7z a ../UEFITool/dist/UEFIFind_NE_${UEFITOOL_VER}_win64.zip ./UEFIFind/Release/UEFIFind.exe
+          7z a ../UEFITool/dist/UEFITool_NE_${UEFITOOL_VER}_win64.zip ./UEFITool/Release/UEFITool.exe
+      - name: Upload to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Windows 64-bit builds
+          path: dist/*.zip
+      - name: Upload to releases
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*.zip
+          tag: ${{ github.ref }}
+          file_glob: true
+
+# Build Tests
+  build_test_linux_meson:
+    name: Meson build system test (shared Qt 5)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get Deps
+        run: | 
+          sudo apt update
+          sudo apt-get install -qq cmake meson zlib1g-dev qtbase5-dev
+      - name: Configure build
+        run: mkdir build-meson && meson ./build-meson
+      - name: Build everything
+        run: ninja -C build-meson
+
+  build_test_windows_mingw:
+    name: MinGW compiler test (shared Qt 6.5.0)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+      - name: Build everything
+        run: |
+          cmake -G "MinGW Makefiles" -B build .
+          cmake --build build --parallel
+  
+# Static Analysis
+  build_analyze_linux_coverity:
+    env:
+      PROJECT_TYPE: TOOL
+      JOB_TYPE: COVERITY
+    if: github.repository_owner == 'LongSoft' && github.event_name != 'pull_request'
+    name: Coverity Static Analysis (shared Qt 6.5.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'linux'
+          target: 'desktop'
+      - name: Create build directory
+        run: cmake -E make_directory ${{runner.workspace}}/build
+      - name: Configure everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake ../UEFITool
+      - name: Run Coverity
+        working-directory: ${{runner.workspace}}/build
+        run: |
+          src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap-linux.sh) && eval "$src" || exit 1
+        env:
+          COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+          COVERITY_SCAN_EMAIL: ${{ secrets.COVERITY_SCAN_EMAIL }}
+          COVERITY_BUILD_COMMAND: cmake --build .
+
+  build_analyze_linux_pvs_studio_and_codeql:
+    if: github.repository_owner == 'LongSoft' && github.event_name != 'pull_request'
+    name: PVS-Studio and CodeQL Static Analysis (shared Qt 6.5.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'linux'
+          target: 'desktop'
+      - name: Install PVS-Studio
+        run: |
+          wget -q -O - https://files.pvs-studio.com/etc/pubkey.txt \
+            | sudo apt-key add -
+          sudo wget -O /etc/apt/sources.list.d/viva64.list \
+            https://files.pvs-studio.com/etc/viva64.list
+          sudo apt update
+          sudo apt install pvs-studio
+          pvs-studio-analyzer credentials ${{ secrets.PVS_STUDIO_CREDENTIALS }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: cpp
+      - name: Build everything
+        run: |
+          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=On -B build .
+          cmake --build build
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v2
+      - name: Perform PVS-Studio analysis
+        run: |
+          pvs-studio-analyzer analyze -f build/compile_commands.json -j
+      - name: Convert PVS-Studio report
+        run: |
+          plog-converter -t sarif -o pvs-report.sarif PVS-Studio.log
+      - name: Publish PVS-Studio report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: pvs-report.sarif
+          category: PVS-Studio
+          
+  build_analyze_linux_sonarcloud:
+    if: github.repository_owner == 'LongSoft' && github.event_name != 'pull_request'
+    name: SonarCloud Static Analysis (shared Qt 6.5.0)
+    runs-on: ubuntu-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: 'linux'
+          target: 'desktop'
+      - name: Install JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: 17
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v2
+      - name: Run build-wrapper
+        run: |
+          cmake -B build .
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build build
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"

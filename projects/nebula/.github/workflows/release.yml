@@ -1,0 +1,77 @@
+name: release
+
+on:
+  release:
+    types:
+      - published
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    container:
+      image: vesoft/nebula-dev:centos7
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/tagname-action
+        id: tag
+      - uses: vesoft-inc/.github/actions/setup-minio@master
+        with:
+          minio_url: ${{ secrets.MINIO_ENDPOINT }}
+          access_key: ${{ secrets.MINIO_KEY }}
+          secret_key: ${{ secrets.MINIO_SECRET }}
+      - name: Copy rc to release on MinIO
+        run: |
+          files=$(mc ls minio/rc-build/nebula-graph/${{ steps.tag.outputs.tagnum }}/ | awk '{print $6}' | grep -v '/$')
+          for file in $files; do
+            mc cp minio/rc-build/nebula-graph/${{ steps.tag.outputs.tagnum }}/$file \
+            minio/release-build/nebula-graph/${{ steps.tag.outputs.tagnum }}/
+          done
+          mc cp -r minio/rc-build/nebula-graph/${{ steps.tag.outputs.tagnum }}/symbols/ \
+          minio/release-build/nebula-graph/${{ steps.tag.outputs.tagnum }}/symbols/
+
+  docker_build:
+    name: docker-build
+    runs-on: [self-hosted, nebula]
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - graphd
+          - metad
+          - storaged
+          - tools
+    steps:
+      - uses: webiny/action-post-run@3.0.0
+        with:
+          run: sh -c "find . -mindepth 1 -delete"
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/tagname-action
+        id: tagname
+      - id: docker
+        run: |
+          majorver=$(git tag -l --sort=v:refname | tail -n1 | cut -f1 -d".")
+          tag=""
+          if [[ $majorver == ${{ steps.tagname.outputs.majorver }} ]]; then
+            tag="latest"
+          fi
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+      - name: Sync docker images
+        env:
+          FROM_IMAGE: docker://${{ secrets.HARBOR_REGISTRY }}/rc/nebula-${{ matrix.service }}
+          TO_IMAGE: docker://docker.io/vesoft/nebula-${{ matrix.service }}
+          CMD: docker run --rm -i quay.io/containers/skopeo:latest copy -a --src-creds ${{ secrets.HARBOR_USERNAME }}:${{ secrets.HARBOR_PASSWORD }} --dest-creds ${{ secrets.DOCKER_USERNAME }}:${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          ${{ env.CMD }} ${{ env.FROM_IMAGE }}:${{ steps.tagname.outputs.tag }} ${{ env.TO_IMAGE }}:${{ steps.tagname.outputs.tag }}
+          ${{ env.CMD }} ${{ env.FROM_IMAGE }}:${{ steps.tagname.outputs.tag }} ${{ env.TO_IMAGE }}:${{ steps.tagname.outputs.majorver }}
+          if [[ ! -z "${{ steps.docker.outputs.tag }}" ]]; then
+            ${{ env.CMD }} ${{ env.FROM_IMAGE }}:${{ steps.tagname.outputs.tag }} ${{ env.TO_IMAGE }}:${{ steps.docker.outputs.tag }}
+          fi

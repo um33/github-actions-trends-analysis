@@ -1,0 +1,77 @@
+---
+on:
+  workflow_call:
+
+env:
+  PACKER_GITHUB_API_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+  PACKER_LOG: "1"
+
+jobs:
+  aarch64:
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - almalinux-8
+          - almalinux-9
+          - centos-7
+          - centos-stream-8
+          - centos-stream-9
+          - debian-11
+          - debian-12
+          - fedora-38
+          - fedora-39
+          - freebsd-13
+          - freebsd-14
+          - opensuse-leap-15
+          - oraclelinux-7
+          - oraclelinux-8
+          - oraclelinux-9
+          - rockylinux-8
+          - rockylinux-9
+          - ubuntu-20.04
+          - ubuntu-22.04
+          - ubuntu-23.10
+        provider:
+          - virtualbox-iso
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+      - name: Install Vagrant Virtualbox
+        run: |
+          brew tap hashicorp/tap
+          brew install --cask hashicorp/tap/hashicorp-vagrant
+          wget -q https://www.virtualbox.org/download/testcase/VirtualBox-7.0.15_BETA4-162549-macOSArm64.dmg
+          hdiutil attach VirtualBox-7.0.15_BETA4-162549-macOSArm64.dmg
+          sudo installer -pkg /Volumes/VirtualBox/VirtualBox.pkg -target /
+      - name: Install Chef
+        uses: actionshub/chef-install@3.0.0
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: latest
+      - name: Install Bento
+        run: |
+          eval "$(chef shell-init bash)"
+          gem build bento.gemspec
+          gem install bento-*.gem
+      - name: Bento build
+        run: |
+          eval "$(chef shell-init bash)"
+          bento build -o ${{ matrix.provider }}.vm os_pkrvars/$(echo ${{ matrix.os }} | cut -d "-" -f 1)/"${{ matrix.os }}-aarch64.pkrvars.hcl"
+          ls -alh builds/
+          cat builds/${{ matrix.os }}*-aarch64._metadata.json
+      - name: Upload build artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: "${{ matrix.os }}-virtualbox-aarch64"
+          path: |
+            builds/*.box
+            builds/*.json
+          retention-days: 10
+          compression-level: 0 # no compression
+      - name: Bento Test
+        run: |
+          eval "$(chef shell-init bash)"
+          bento test

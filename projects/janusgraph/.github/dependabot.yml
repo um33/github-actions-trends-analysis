@@ -1,0 +1,26 @@
+version: 2
+updates:
+- package-ecosystem: maven
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "11:00"
+  open-pull-requests-limit: 10
+  groups:
+    junit:
+      patterns:
+        - "org.junit.*"
+  labels:
+    - "backport/v1.0"
+    - "dependencies"
+    - "java"
+
+- package-ecosystem: github-actions
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "11:00"
+  open-pull-requests-limit: 10
+  labels:
+    - "backport/v1.0"
+    - "dependencies"

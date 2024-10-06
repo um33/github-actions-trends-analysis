@@ -1,0 +1,81 @@
+name: Deploy to dev and test
+concurrency: dev_environment
+on:
+  push:
+env:
+  terraform_version: '1.1.7'
+  terraform_working_dir: 'fastly/terraform/'
+  fastly_vcl_service_id: 6oKc8cND9r7mE0Aymoo1ST
+  fastly_compute_service_id: 06FSzBcnfHpOjSqXwzOxvy
+  fastly_top_pops_config: 3BORC4S9SFMY71sIT4HmVD
+  fastly_compute_edge_config: 3aFM8b6aSloCCTjRFOxWIo
+  domain: dev.polyfill.io
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@b113a30d27a8e59c969077c0a0168cc13dab5ffc # pin@v1
+      - name: Set up Fastly CLI
+        uses: fastly/compute-actions/setup@c2f38daa58a1a6562575c9665f13b080803b8989 # pin@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          cli_version: '10.4.0'
+      - run: fastly compute build --package-name package
+      - name: Set cache-key
+        id: cache-key
+        run: echo "CACHE_KEY=compute-package-$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@1eb3cb2b3e0f29609092a73eb033bb759a334595 # pin@v3
+        with:
+          name: ${{ steps.cache-key.outputs.CACHE_KEY }}
+          path: pkg/package.tar.gz
+      - uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # pin@v3
+        with:
+          path: pkg/package.tar.gz
+          key: ${{ steps.cache-key.outputs.CACHE_KEY }}
+
+  deploy-dev-and-purge-cdn:
+    runs-on: ubuntu-latest
+    needs: [ build ]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v3
+      - name: Set cache-key
+        id: cache-key
+        run: echo "CACHE_KEY=compute-package-$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Restore compute-package from cache
+        uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # pin@v3
+        id: compute-package
+        with:
+          path: pkg/package.tar.gz
+          key: ${{ steps.cache-key.outputs.CACHE_KEY }}
+          fail-on-cache-miss: true
+      - name: 'Terraform Format'
+        run: terraform fmt -check
+        working-directory: ${{ env.terraform_working_dir }}
+      - uses: ./.github/actions/terraform
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          terraform_working_dir: fastly/terraform/dev
+          fastly-api-token: ${{ secrets.FASTLY_API_KEY }}
+          fastly_vcl_service_id: ${{ env.fastly_vcl_service_id }}
+          fastly_compute_service_id: ${{ env.fastly_compute_service_id }}
+          fastly_top_pops_config: ${{ env.fastly_top_pops_config }}
+          fastly_compute_edge_config: ${{ env.fastly_compute_edge_config }}
+      - run: "curl -X POST -H \"Fastly-Key: ${{ secrets.FASTLY_API_KEY }}\" https://api.fastly.com/service/${{ env.fastly_vcl_service_id }}/purge_all"
+      - run: sleep 60
+
+  dev-end-to-end-test:
+    needs: [ deploy-dev-and-purge-cdn ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v3
+      - uses: actions/setup-node@b39b52d1213e96004bfcb1c61a8a6fa8ab84f3e8 # pin@v4.0.1
+        with:
+          node-version: 18.x
+      - name: 'Install test dependencies'
+        run: npm ci
+        working-directory: "./test"
+      - run: npm run test:integration
+        working-directory: "./test"
+        env:
+          HOST: "https://${{ env.domain }}"

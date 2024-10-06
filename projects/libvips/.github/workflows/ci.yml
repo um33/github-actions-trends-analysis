@@ -1,0 +1,134 @@
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions: {}
+
+jobs:
+  CI:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Linux x64 (Ubuntu 22.04) - GCC 11"
+            os: ubuntu-22.04
+            build: { cc: gcc, cxx: g++, linker: ld }
+
+          - name: "Linux x64 (Ubuntu 22.04) - Clang 15 with ASan and UBSan"
+            os: ubuntu-22.04
+            build: { cc: clang-15, cxx: clang++-15, linker: ld.lld-15, sanitize: true }
+
+          - name: "macOS (13.6) - Xcode 15.2"
+            os: macos-13
+            build: { cc: clang, cxx: clang++, linker: ld.lld }
+
+    env:
+      CC: ${{ matrix.build.cc }}
+      CXX: ${{ matrix.build.cxx }}
+      LD: ${{ matrix.build.linker }}
+      CPPFLAGS: -Wall
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Ubuntu dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+            meson pkg-config \
+            libarchive-dev libcfitsio-dev libcgif-dev \
+            libexif-dev libexpat1-dev libffi-dev \
+            libfftw3-dev libheif-dev libhwy-dev \
+            libimagequant-dev libjpeg-dev liblcms2-dev \
+            libmatio-dev libnifti-dev libopenexr-dev \
+            libopenjp2-7-dev libopenslide-dev libpango1.0-dev \
+            libpng-dev libpoppler-glib-dev librsvg2-dev \
+            libtiff5-dev libwebp-dev \
+            liborc-0.4-dev # FIXME: Remove once libhwy 1.0.5 is available.
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          pip3 install meson
+          brew install \
+            ninja pkg-config \
+            cfitsio cgif fftw fontconfig glib \
+            highway jpeg-xl libarchive libexif \
+            libheif libimagequant libmatio librsvg \
+            libspng libtiff little-cms2 mozjpeg \
+            openexr openjpeg openslide pango \
+            poppler webp
+
+      - name: Install Clang 15
+        if: runner.os == 'Linux' && matrix.build.cc == 'clang-15'
+        run: sudo apt-get install clang-15 libomp-15-dev lld-15 llvm-15
+
+      - name: Prepare macOS environment
+        if: runner.os == 'macOS'
+        run: |
+          echo "PKG_CONFIG_PATH=$(brew --prefix mozjpeg)/lib/pkgconfig:$(brew --prefix libarchive)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          # https://github.com/orgs/Homebrew/discussions/3404
+          mkdir -p $HOME/.config/pip
+          echo -e '[global]\nbreak-system-packages = true' > $HOME/.config/pip/pip.conf
+
+      - name: Prepare sanitizers
+        if: matrix.build.sanitize
+        env:
+          LLVM_PREFIX: /usr/lib/llvm-15
+        run: |
+          ASAN_DSO=`$CC -print-file-name=libclang_rt.asan-x86_64.so`
+          echo "LDSHARED=$CC -shared" >> $GITHUB_ENV
+          echo "CPPFLAGS=-g -fsanitize=address,undefined -fno-omit-frame-pointer -fopenmp -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION" >> $GITHUB_ENV
+          echo "LDFLAGS=-g -fsanitize=address,undefined -shared-libasan -fopenmp=libomp" >> $GITHUB_ENV
+          echo "ASAN_DSO=$ASAN_DSO" >> $GITHUB_ENV
+          # Glib is built without -fno-omit-frame-pointer. We need
+          # to disable the fast unwinder to get full stacktraces.
+          # FIXME: remove `intercept_tls_get_addr=0` once we update to LLVM 17
+          # https://github.com/google/sanitizers/issues/1322
+          # https://github.com/llvm/llvm-project/commit/b1bd52cd0d8627df1187448b8247a9c7a4675019
+          echo "ASAN_OPTIONS=suppressions=${{ github.workspace }}/suppressions/asan.supp:fast_unwind_on_malloc=0:allocator_may_return_null=1:intercept_tls_get_addr=0" >> $GITHUB_ENV
+          echo "LSAN_OPTIONS=suppressions=${{ github.workspace }}/suppressions/lsan.supp:fast_unwind_on_malloc=0" >> $GITHUB_ENV
+          echo "TSAN_OPTIONS=suppressions=${{ github.workspace }}/suppressions/tsan.supp" >> $GITHUB_ENV
+          # Ensure UBSan issues causes the program to abort.
+          echo "UBSAN_OPTIONS=suppressions=${{ github.workspace }}/suppressions/ubsan.supp:halt_on_error=1:abort_on_error=1:print_stacktrace=1" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LLVM_PREFIX/lib:`dirname $ASAN_DSO`" >> $GITHUB_ENV
+          echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          # Workaround for https://github.com/google/sanitizers/issues/89
+          # otherwise libIlmImf-2_3.so ends up as <unknown module>.
+          echo "DLCLOSE_PRELOAD=${{ github.workspace }}/dlclose.so" >> $GITHUB_ENV
+          echo -e '#include <stdio.h>\nint dlclose(void*handle){return 0;}' | $CC -shared -xc -odlclose.so -
+
+      - name: Configure libvips
+        run: |
+          meson setup build \
+            -Ddebug=true \
+            -Ddeprecated=false \
+          || (cat build/meson-logs/meson-log.txt && exit 1)
+
+      - name: Build libvips
+        run: meson compile -C build
+
+      - name: Check libvips
+        run: |
+          meson test -C build \
+          || (cat build/meson-logs/testlog.txt && exit 1)
+
+      - name: Install libvips
+        run: sudo meson install -C build
+
+      - name: Rebuild the shared library cache
+        if: runner.os == 'Linux'
+        run: sudo ldconfig
+
+      - name: Install pyvips
+        run: pip3 install pyvips[test]
+
+      - name: Run test suite
+        env:
+          VIPS_LEAK: 1
+          LD_PRELOAD: ${{ env.ASAN_DSO }} ${{ env.DLCLOSE_PRELOAD }}
+        run: python3 -m pytest -sv --log-cli-level=WARNING test/test-suite

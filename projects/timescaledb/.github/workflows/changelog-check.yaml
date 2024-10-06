@@ -1,0 +1,81 @@
+name: Check for changelog entry file
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - main
+jobs:
+  # Check if the PR creates a separate file with changelog entry in the
+  # ".unreleased"  folder
+  #
+  # This check can be disabled by adding the following line in the PR text
+  #
+  # Disable-check: force-changelog-file
+  #
+  # The file having the changelog entry is expected to have lines in the
+  # following format
+  #
+  # Fixes: #NNNN <bug description> (mandatory in case of bugfixes)
+  # Thanks: @name <thank you note> (optional)
+  # Implements: #NNNN <feature description> (mandatory in case of new features)
+  check_changelog_file:
+    name: Check for file with CHANGELOG entry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check if the pull request adds file in ".unreleased" folder
+        shell: bash --norc --noprofile {0}
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          folder=".unreleased"
+
+          # Get the list of modified files in this pull request
+          files=$(git --no-pager diff --diff-filter=ACMR --name-only $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD)
+
+          if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
+            # skip changelog checks if forced
+            exit 0
+          else
+            # if no changelog files found, and the PR does not have the force disable check option
+            if ! echo "${files}" | grep -Eq "^(${folder})/.+$"; then
+              echo "PR does not add a change log file in .unreleased/ folder"
+              echo "Check .unreleased/template.rfc822 for the format of the change log file."
+              echo
+              echo "To disable changelog updated check, add this trailer to pull request message:"
+              echo
+              echo "Disable-check: force-changelog-file"
+              echo
+              echo "Trailers follow RFC2822 conventions, so no whitespace"
+              echo "before field name and the check is case-insensitive for"
+              echo "both the field name and the field body."
+              exit 1
+            else
+              # check the format of the files in .unreleased folder
+              for file in $files; do
+                if echo "${file}" | grep -Eq "^(${folder})/.+$"; then
+                  if ! python scripts/check_changelog_format.py "$file"; then
+                    echo "Not valid CHANGELOG entries in $file."
+                    exit 1
+                  fi
+                fi
+              done
+              exit 0
+            fi
+          fi

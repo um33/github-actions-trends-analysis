@@ -1,0 +1,104 @@
+name: Tag
+
+on:
+  push:
+    tags:
+      - v*
+
+defaults:
+  run:
+    working-directory: packages/client
+
+env:
+  BUCKET_WEB: reactive-trader-web-builds
+  BUCKET_OPENFIN: reactive-trader-openfin-builds
+  BUCKET_FINSEMBLE: reactive-trader-finsemble-builds
+  BUCKET_LAUNCHER: reactive-trader-launcher-builds
+  ENVIRONMENT: prod
+
+jobs:
+  build:
+    name: Build & deploy
+
+    runs-on: ubuntu-20.04
+
+    if: github.repository_owner == 'AdaptiveConsulting'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set Node version
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Set variables
+        id: vars
+        run: echo "TAG=$(git describe --tag --abbrev=0)" >> $GITHUB_OUTPUT
+
+      - name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}"
+
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GOOGLE_PROJECT_ID }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Quality (type checking, linting, format checking, tests)
+        run: npm run verify
+
+      - name: Build (web)
+        env:
+          DOMAIN: https://web.prod.reactivetrader.com
+          VITE_BUILD_VERSION: ${{ steps.vars.outputs.TAG }}
+        run: |
+          npm run build
+          npm run storybook:build
+
+      - name: Deploy (web)
+        run: |
+          gsutil -m \
+            -h "Cache-Control: no-cache" \
+            rsync -d -r dist \
+            gs://$BUCKET_WEB/tag/${{ steps.vars.outputs.TAG }}
+
+      - name: Build (OpenFin)
+        env:
+          DOMAIN: https://openfin.prod.reactivetrader.com
+          VITE_BUILD_VERSION: ${{ steps.vars.outputs.TAG }}
+        run: npm run openfin:build
+
+      - name: Deploy (OpenFin)
+        run: |
+          gsutil -m \
+            -h "Cache-Control: no-cache" \
+            rsync -d -r dist \
+            gs://$BUCKET_OPENFIN/tag/${{ steps.vars.outputs.TAG }}
+
+      - name: Deploy (Launcher)
+        run: |
+          gsutil -m \
+            -h "Cache-Control: no-cache" \
+            rsync -d -r dist \
+            gs://$BUCKET_LAUNCHER/tag/${{ steps.vars.outputs.TAG }}
+
+      - name: Build (Finsemble)
+        env:
+          DOMAIN: https://finsemble.prod.reactivetrader.com
+          VITE_BUILD_VERSION: ${{ steps.vars.outputs.TAG }}
+        run: npm run finsemble:build
+
+      - name: Deploy (Finsemble)
+        run: |
+          gsutil -m \
+            -h "Cache-Control: no-cache" \
+            rsync -d -r dist \
+            gs://$BUCKET_FINSEMBLE/tag/${{ steps.vars.outputs.TAG }}

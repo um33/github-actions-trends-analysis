@@ -1,0 +1,21 @@
+extends: substitution
+message: Prefer '%s' over '%s'
+ignorecase: false
+level: warning
+swap:
+  AdminUI: Admin UI
+  admin UI: Admin UI
+  admin-ui: Admin UI
+  Admin-UI: Admin UI
+  sql: SQL
+  postgres: PostgreSQL
+  Postgres: PostgreSQL
+  hdfs: HDFS
+  uri: URI
+  acl: ACL
+  subfields: subcolumns
+  https: HTTPS
+  jdbc: JDBC
+  Github: GitHub
+  Hotspot: HotSpot
+  hotspot: HotSpot

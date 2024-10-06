@@ -1,0 +1,47 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: mac-x64-test-1
+
+on:
+  push:
+    branches: [ build, test ]
+
+jobs:
+  build:
+
+    runs-on: macos-11
+    environment: build
+    if: "!contains(github.event.head_commit.message, '[skip test]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip mac]') && !contains(github.event.head_commit.message, '[skip test1]')"
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    # before_install:
+    - run: pip install setuptools
+    - run: npm install -g yarn
+    - run: npm i
+    - run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i -D -E playwright@1.28.1 @playwright/test@1.28.1
+
+    # script:
+    - run: npm run prepare-build
+    - name: test
+      uses: GabrielBB/xvfb-action@v1
+      with:
+        run: npm run test1
+      env:
+        NODE_TEST: 1
+        TEST_HOST: ${{ secrets.TEST_HOST }}
+        TEST_USER: ${{ secrets.TEST_USER_LINUX }}
+        TEST_PASS: ${{ secrets.TEST_PASS_LINUX }}
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        GIST_ID: ${{ secrets.GIST_ID }}
+        GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        GITEE_ID: ${{ secrets.GITEE_ID }}
+

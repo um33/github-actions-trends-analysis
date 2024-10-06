@@ -1,0 +1,69 @@
+name: Epic (User Impacting)
+description: A group of related issues which MUST be delivered together, as small in scope as possible and finite (e.g not a grouping). This template is not designed for investigations, spikes, or tech-debt.
+title: "Epic: "
+labels: ["type: epic"]
+body:
+- type: textarea
+  id: press-release
+  attributes:
+    label: Press release (and FAQ's)
+    description: What would the future feature announcement look like from a customer/user point of view? Think about questions both Gitpodders, and users/customers might ask about this feature.
+  validations:
+    required: false
+- type: textarea
+  id: context
+  attributes:
+    label: Context
+    description: What thinking led to this issue? Provide any necessary historical context required to understand this epic.
+  validations:
+    required: false
+- type: textarea
+  id: value
+  attributes:
+    label: Value
+    description: Why should we do this work? How do we know this is a real problem and worth solving?
+  validations:
+    required: false
+- type: textarea
+  id: acceptance-criteria
+  attributes:
+    label: Acceptance Criteria
+    description: What needs to be done before the work is considered complete? The checks which must be complete for this epic to be considered done.
+  validations:
+    required: false
+- type: textarea
+  id: measurement
+  attributes:
+    label: Measurement
+    description: What will we measure to know whether we've been successful?
+  validations:
+    required: false
+- type: textarea
+  id: personas
+  attributes:
+    label: Persona(s)
+    description: Optionally specifiy which user will be impacted by this change?
+    placeholder: Developer/Installer/Project Configurer/Customer/Security Reviewer - optionally the ecosystem persona e.g. Python Developers
+  validations:
+    required: false
+- type: textarea
+  id: in-scope
+  attributes:
+    label: In scope
+    description: Optionally define items explicitly in scope.
+  validations:
+    required: false
+- type: textarea
+  id: out-of-scope
+  attributes:
+    label: Out of scope
+    description: Optionally define items explicitly out of scope, to avoid side-quests and rabbitholes.
+  validations:
+    required: false
+- type: textarea
+  id: complexities
+  attributes:
+    label: Complexities
+    description: Optionally make explicit any complexities, e.g. dependencies on other teams, technical challenges, unknowns.
+  validations:
+    required: false

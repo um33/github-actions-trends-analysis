@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout VSCodeVim
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Prettier
+        if: matrix.os != 'windows-latest'
+        run: yarn prettier:check
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build
+        run: gulp webpack
+
+      - name: Test on ubuntu-latest
+        if: matrix.os != 'windows-latest'
+        run: |
+          gulp prepare-test
+          xvfb-run -a yarn test
+
+      - name: Test on windows-latest
+        if: matrix.os == 'windows-latest'
+        run: |
+          gulp prepare-test
+          yarn test

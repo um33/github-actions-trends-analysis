@@ -1,0 +1,53 @@
+name: Test
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
+      fail-fast: false
+    env:
+      cache-revision: 2
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install .
+      - name: Cache minio
+        id: cache-minio
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-minio
+        with:
+          path: ~/cache
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ env.cache-revision }}
+      - name: Download minio on cache miss
+        if: steps.cache-minio.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/cache
+          test ! -e ~/cache/minio && wget -O ~/cache/minio https://dl.minio.io/server/minio/release/linux-amd64/minio || echo "Minio already in cache"
+      - name: Start a local instance of minio
+        run: |
+          export MINIO_ROOT_USER=Q3AM3UQ867SPQQA43P2F
+          export MINIO_ROOT_PASSWORD=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+          export export MINIO_BROWSER=off
+          chmod +x ~/cache/minio
+          mkdir -p ~/minio_tmp
+          ~/cache/minio server ~/minio_tmp &
+          sleep 4 # give minio some time to start
+      - name: Run tests
+        run: python ./run-tests.py -c .ci.s3cfg -p baseauto -s minio
+      - name: Terminate
+        if: always()
+        continue-on-error: true
+        run: killall minio

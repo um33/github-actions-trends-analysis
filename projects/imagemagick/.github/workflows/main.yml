@@ -1,0 +1,187 @@
+on:
+  push:
+    branches:
+    - main
+    tags:
+    - '!*'
+  pull_request:
+    branches:
+    - main
+
+name: main
+jobs:
+  build_linux:
+    name: Build Linux
+    container:
+      image: ubuntu:20.04
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ gcc, clang ]
+        include:
+          - compiler: gcc
+            cxx_compiler: g++
+            compiler_flags: -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch
+            packages: gcc g++
+          - compiler: clang
+            cxx_compiler: clang++
+            compiler_flags: -Wall -Wextra -Werror -Wno-unused-function -Wno-incompatible-library-redeclaration
+            packages: clang
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y
+        apt-get install -y autoconf git libtool make pkg-config ${{ matrix.packages }}
+
+    - name: Configure ImageMagick
+      env:
+        CC: ${{ matrix.compiler }}
+        CXX: ${{ matrix.cxx_compiler }}
+        CFLAGS: ${{ matrix.compiler_flags }}
+        CXXFLAGS: ${{ matrix.compiler_flags }}
+      run: |
+        autoreconf -fiv
+        ./configure --with-quantum-depth=16 --enable-hdri=no --without-perl --prefix=/usr
+
+    - name: Build ImageMagick
+      run: |
+        set -e
+        make
+        make check
+        make install
+
+  build_macos:
+    name: Build MacOS
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        set -e
+        export HOMEBREW_NO_AUTO_UPDATE=1
+        brew install automake fftw flif jbigkit libxml2 pango libraqm librsvg
+
+    - name: Configure ImageMagick
+      run: |
+        export CFLAGS="-Wall -Wextra -Werror -Wno-incompatible-library-redeclaration -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-function -Wno-missing-declarations"
+        export PKG_CONFIG_PATH="/usr/local/opt/libxml2/lib/pkgconfig"
+        autoreconf -fiv
+        ./configure --with-quantum-depth=16 --enable-hdri=no --without-perl --with-fftw --with-flif --with-rsvg
+
+    - name: Build ImageMagick
+      run: |
+        set -e
+        make install
+
+  build_macos_arm64:
+    name: Build MacOS arm64
+    runs-on: macos-14
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        set -e
+        export HOMEBREW_NO_AUTO_UPDATE=1
+        brew install automake fftw flif jbigkit libxml2 pango libraqm librsvg libtool
+
+    - name: Configure ImageMagick
+      run: |
+        export CFLAGS="-Wall -Wextra -Werror -Wno-incompatible-library-redeclaration -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-function -Wno-missing-declarations -Wno-incompatible-pointer-types-discards-qualifiers"
+        export LDFLAGS=$(pkg-config --libs libjpeg)
+        autoreconf -fiv
+        ./configure --with-quantum-depth=16 --enable-hdri=no --without-perl --with-fftw --with-flif --with-rsvg
+
+    - name: Build ImageMagick
+      run: |
+        set -e
+        make
+        make check
+        sudo make install
+
+  build_windows:
+    name: Build Windows ${{matrix.platform}}
+    runs-on: windows-2022
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ x86, x64, arm64 ]
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Build configure
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+    - name: Configure ImageMagick
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /${{matrix.platform}} /smt
+
+    - name: Build ImageMagick
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows
+        msbuild IM7.Static.sln /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
+
+  build_msys2:
+    name: Build MSYS2
+    runs-on: windows-latest
+
+    steps:
+    - name: Prepare git
+      run: git config --global core.autocrlf false
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        install: mingw-w64-x86_64-toolchain base-devel binutils
+        update: true
+
+    - name: Building ImageMagick
+      run: cd ImageMagick-Windows/Build/MSYS2 && makepkg-mingw --noconfirm --syncdeps
+      env:
+        MINGW_ARCH: mingw64
+        PKGEXT: ".pkg.tar.xz"
+      shell: msys2 {0}

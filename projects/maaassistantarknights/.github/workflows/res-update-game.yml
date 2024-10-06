@@ -1,0 +1,189 @@
+name: res-update-game
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+    inputs:
+      commit_message:
+        description: "Commit Message"
+        type: string
+        required: false
+
+jobs:
+  update-game-resources:
+    if: github.repository_owner == 'MaaAssistantArknights'
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.MISTEOWORKFLOW }}
+    steps:
+      - name: Checkout MAA
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          token: ${{ secrets.MISTEOWORKFLOW }}
+
+      - name: Bootstrap MaaDeps
+        run: |
+          python3 maadeps-download.py x64-windows
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Build Resource Updater
+        run: |
+          MSBUILD tools/ResourceUpdater/ResourceUpdater.vcxproj /t:rebuild /p:Configuration="Release" /p:Platform="x64" /p:BuildProjectReferences=false /m
+
+      - name: Clone ArknightsGameResource for Official
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          repository: yuanyan3060/ArknightsGameResource
+          ref: main
+          path: .\tools\ResourceUpdater\x64\Release\Official
+          sparse-checkout: |
+            /levels.json
+            /item
+            /building_skill
+            /gamedata/excel/item_table.json
+            /gamedata/excel/building_data.json
+            /gamedata/excel/range_table.json
+            /gamedata/excel/character_table.json
+            /gamedata/excel/gacha_table.json
+            /gamedata/excel/roguelike_topic_table.json
+            /gamedata/excel/activity_table.json
+          sparse-checkout-cone-mode: false
+
+      - name: Clone ArknightsGameResource_Yostar for Overseas
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          repository: Kengxxiao/ArknightsGameData_YoStar
+          ref: main
+          path: .\tools\ResourceUpdater\x64\Release\Overseas
+          sparse-checkout: |
+            /en_US/gamedata/excel/item_table.json
+            /en_US/gamedata/excel/building_data.json
+            /en_US/gamedata/excel/range_table.json
+            /en_US/gamedata/excel/character_table.json
+            /en_US/gamedata/excel/gacha_table.json
+            /en_US/gamedata/excel/roguelike_topic_table.json
+            /en_US/gamedata/excel/activity_table.json
+            /ja_JP/gamedata/excel/item_table.json
+            /ja_JP/gamedata/excel/building_data.json
+            /ja_JP/gamedata/excel/range_table.json
+            /ja_JP/gamedata/excel/character_table.json
+            /ja_JP/gamedata/excel/gacha_table.json
+            /ja_JP/gamedata/excel/roguelike_topic_table.json
+            /ja_JP/gamedata/excel/activity_table.json
+            /ko_KR/gamedata/excel/item_table.json
+            /ko_KR/gamedata/excel/building_data.json
+            /ko_KR/gamedata/excel/range_table.json
+            /ko_KR/gamedata/excel/character_table.json
+            /ko_KR/gamedata/excel/gacha_table.json
+            /ko_KR/gamedata/excel/roguelike_topic_table.json
+            /ko_KR/gamedata/excel/activity_table.json
+          sparse-checkout-cone-mode: false
+
+      - name: Clone arknights-toolbox-update for Taiwan
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          repository: arkntools/arknights-toolbox-update
+          ref: data-tw
+          path: .\tools\ResourceUpdater\x64\Release\Overseas\zh_TW\gamedata\excel
+          token: ${{ secrets.ARKNTOOLS_MAA_RESOURCE_UPDATER}}
+
+      - name: Run Resource Updater
+        run: |
+          .\tools\ResourceUpdater\x64\Release\ResourceUpdater.exe
+
+      - name: Overseas Tasks Ordering
+        run: |
+          python3 tools/TaskSorter/TaskSorter.py
+
+      - name: Check if only sorted
+        id: check_only_sorted
+        run: |
+          git status
+
+          $diff = $(git diff --numstat HEAD | findstr -i resource)
+          if ($LASTEXITCODE -ne 0) {
+            echo "no diff"
+            exit 0
+          }
+
+          echo "diff: "$diff
+          $sp = $($diff -split "\s+")
+          $numbers = $($sp | Where-Object { $_ -match "^\d+$" })
+          echo "numbers: "$numbers
+
+          $length = $numbers.Length
+          $isAllEqual = $true
+          for ($i = 0; $i -lt $length; $i += 2) {
+            $firstNumber = $numbers[$i]
+            $secondNumber = $numbers[$i+1]
+
+            if ($firstNumber -gt 1) {
+              $isAllEqual = $false
+              break
+            }
+            
+            if ($firstNumber -ne $secondNumber) {
+                $isAllEqual = $false
+                break
+            }
+          }
+          echo "isAllEqual: "$isAllEqual
+          echo "only_sorted=$isAllEqual" >> $env:GITHUB_OUTPUT
+
+      - name: Cancelling
+        if: steps.check_only_sorted.outputs.only_sorted == 'True'
+        uses: andymckay/cancel-action@0.3
+
+      - name: Add files to git
+        if: steps.check_only_sorted.outputs.only_sorted != 'True'
+        id: add_files
+        run: |
+          git status
+
+          git config user.name "$env:GITHUB_ACTOR"
+          git config user.email "$env:GITHUB_ACTOR@users.noreply.github.com"
+          git add .
+
+          $commit_msg = "${{ github.event.inputs.commit_message }}"
+          if (-not [string]::IsNullOrWhiteSpace($commit_msg)) {
+            $commit_msg = $commit_msg.Trim()
+          } else {
+            $commit_msg = "chore: Auto Update Game Resources - $(Get-Date -Format 'yyyy-MM-dd')"
+          }
+          git commit -m "$commit_msg" -m "[skip changelog]"
+          if ($LASTEXITCODE -eq 0) {
+            echo "have_commits=True" >> $env:GITHUB_OUTPUT
+          }
+
+          git pull origin $(git rev-parse --abbrev-ref HEAD) --unshallow --rebase
+
+      - name: Cancelling
+        if: steps.add_files.outputs.have_commits != 'True'
+        uses: andymckay/cancel-action@0.3
+
+      - name: Push changes # push the output folder to your repo
+        if: steps.add_files.outputs.have_commits == 'True'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.MISTEOWORKFLOW }}
+
+      - name: Update OTA resource
+        if: steps.add_files.outputs.have_commits == 'True'
+        run: |
+          gh workflow --repo MaaAssistantArknights/MaaRelease run update-resource.yml
+
+    #   - name: Release # ref: https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow
+    #     if: steps.add_files.outputs.have_commits == 'True'
+    #     run: |
+    #       gh workflow run release-nightly-ota -f release_body="Auto Release of Resource Updates"
+    #     env:
+    #       GH_TOKEN: ${{ github.token }}

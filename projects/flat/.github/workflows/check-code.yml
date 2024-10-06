@@ -1,0 +1,54 @@
+name: Code Check
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
+      - ".vscode"
+      - ".husky"
+      - "assets"
+      - "scripts"
+
+jobs:
+  check-code:
+    runs-on: macos-latest
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install PNPM
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Restore Cache
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: "pnpm"
+
+      - name: Install changed package dependencies and build packages
+        run: |-
+          # failure automatically retries 3 times
+          pnpm i || pnpm i || pnpm i
+
+      - name: Build renderer
+        run: pnpm -F renderer-app build
+
+      - name: Build main
+        run: pnpm -F flat build
+
+      - name: Build flat-web
+        run: pnpm -F flat-web build
+
+      - name: Check i18n
+        run: node packages/flat-i18n/scripts/check.js

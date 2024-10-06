@@ -1,0 +1,136 @@
+name: Code Quality Checks
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - main
+      - v14-release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linting:
+    name: Lint
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Configure JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: actions/cache/restore@v4
+        name: Yarn Cache Restore
+        id: yarn-cache
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
+          restore-keys: ${{ runner.os }}-yarn-v1
+      - name: Yarn Install
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          retry_wait_seconds: 30
+          max_attempts: 3
+          command: yarn && yarn lerna:prepare
+      - name: Lint
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 3
+          retry_wait_seconds: 10
+          max_attempts: 3
+          command: yarn lint
+      - uses: actions/cache/save@v4
+        name: Yarn Cache Save
+        if: "${{ github.ref == 'refs/heads/main' }}"
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
+
+
+  typescript:
+    name: TypeScript Build Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - uses: actions/cache/restore@v4
+        name: Yarn Cache Restore
+        id: yarn-cache
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
+          restore-keys: ${{ runner.os }}-yarn-v1
+      - name: Yarn Install
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          retry_wait_seconds: 30
+          max_attempts: 3
+          command: yarn && yarn lerna:prepare
+      - name: Lint
+        run: yarn tsc:compile
+      - uses: actions/cache/save@v4
+        name: Yarn Cache Save
+        if: "${{ github.ref == 'refs/heads/main' }}"
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
+
+
+  typedoc:
+    name: TypeDoc Generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - uses: actions/cache/restore@v4
+        name: Yarn Cache Restore
+        id: yarn-cache
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-with-website-v1-${{ hashFiles('yarn.lock') }}
+          restore-keys: ${{ runner.os }}-yarn-with-website-v1
+      - name: Yarn Install
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          retry_wait_seconds: 30
+          max_attempts: 3
+          command: yarn && yarn lerna:prepare
+      - name: Yarn Install (Website)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 3
+          retry_wait_seconds: 30
+          max_attempts: 3
+          command: cd website && yarn
+      - name: Generate TypeDoc
+        run: node -e "require('./website/scripts/generate-typedoc').generateTypedoc()"
+      - uses: actions/cache/save@v4
+        name: Yarn Cache Save
+        if: "${{ github.ref == 'refs/heads/main' }}"
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-with-website-v1-${{ hashFiles('yarn.lock') }}

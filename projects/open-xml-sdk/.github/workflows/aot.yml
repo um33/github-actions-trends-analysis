@@ -1,0 +1,43 @@
+name: AOT
+
+permissions:
+  pull-requests: write
+
+on:
+  push:
+    branches: [ main, release/* ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+env:
+  PublishAot: true
+  Configuration: RELEASE
+
+jobs:
+  benchmark:
+    name: Samples
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+      - name: SunburstChartExample
+        run: dotnet publish samples/SunburstChartExample/ -f net8.0 /p:SummaryOutDir=$GITHUB_WORKSPACE/summary
+      - name: LinqSvgExample
+        run: dotnet publish samples/Linq/SvgExample -f net8.0 /p:SummaryOutDir=$GITHUB_WORKSPACE/summary
+      - name: ThreadedCommentExample
+        run: dotnet publish samples/ThreadedCommentExample/ -f net8.0 /p:SummaryOutDir=$GITHUB_WORKSPACE/summary
+      - name: Write summary
+        run: |
+          cd $GITHUB_WORKSPACE/summary
+          for FILE in *.summary.md
+          do
+            cat ${FILE} >> $GITHUB_STEP_SUMMARY
+          done

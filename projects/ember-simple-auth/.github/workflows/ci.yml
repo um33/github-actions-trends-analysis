@@ -1,0 +1,187 @@
+name: CI
+
+env:
+  VOLTA_FEATURE_PNPM: 1
+
+on:
+  push:
+    branches:
+      - master
+      - 'v*'
+  pull_request: {}
+  schedule:
+    - cron:  '0 3 * * *' # daily, at 3am
+
+jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        workspace:
+          - test-esa
+          - classic-test-app
+          - test-app
+          - ember-simple-auth
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: volta-cli/action@2d68418f32546fd191eb666e232b321d5726484d # v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: install dependencies
+        run: pnpm install
+
+      - name: lint
+        run: pnpm run --filter ${{ matrix.workspace }} lint
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - test-esa
+          - classic-test-app
+          - test-app
+        test-suite:
+          - test:one ember-lts-3.28
+          - test:one ember-4.0
+          - test:one ember-lts-4.4
+          - test:one ember-lts-4.8
+          - test:one ember-lts-4.12
+          - test:one ember-default
+          - test:one ember-release
+        allow-failure: [false]
+        include:
+          - workspace: test-esa
+            test-suite: "test:one embroider-safe"
+            allow-failure: false
+          - workspace: test-esa
+            test-suite: "test:one embroider-optimized"
+            allow-failure: false
+          - workspace: test-app
+            test-suite: "test:one embroider-safe"
+            allow-failure: false
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: volta-cli/action@2d68418f32546fd191eb666e232b321d5726484d # v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: install dependencies
+        run: pnpm install
+
+      - name: tests
+        run: pnpm run --filter ${{ matrix.workspace }} ${{ matrix.test-suite }}
+        continue-on-error: ${{ matrix.allow-failure }}
+
+  allow-fail-try-scenarios:
+    name: ${{ matrix.workspace }} ${{ matrix.test-suite }} - Allowed to fail
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - test-esa
+          - classic-test-app
+          - test-app
+        test-suite:
+          - test:one ember-beta
+          - test:one ember-canary
+        include:
+          - workspace: test-app
+            test-suite: "test:one embroider-optimized"
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: volta-cli/action@2d68418f32546fd191eb666e232b321d5726484d # v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: install dependencies
+        run: pnpm install
+
+      - name: Allowed to fail tests
+        id: allowed_to_fail_tests
+        run: pnpm run --filter ${{ matrix.workspace }} ${{ matrix.test-suite }}
+        continue-on-error: true
+
+      - uses: mainmatter/continue-on-error-comment@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          outcome: ${{ steps.allowed_to_fail_tests.outcome }}
+          test-id: ${{ matrix.workspace }} ${{ matrix.test-suite }}
+
+  extra-tests:
+    name: Tests (Floating Dependenies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        workspace:
+          - test-esa
+          - classic-test-app
+          - test-app
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: volta-cli/action@2d68418f32546fd191eb666e232b321d5726484d # v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: install dependencies
+        run: pnpm install --no-lockfile
+
+      - name: tests
+        run: pnpm run --filter ${{ matrix.workspace }} test
+        continue-on-error: true
+
+  node-tests:
+    name: Node Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: volta-cli/action@2d68418f32546fd191eb666e232b321d5726484d # v4
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: install dependencies
+        run: pnpm install
+
+      - name: tests
+        run: pnpm run --filter test-esa test:node

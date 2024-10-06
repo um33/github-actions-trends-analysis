@@ -1,0 +1,54 @@
+name: Codacy
+permissions: read-all
+on: [ push, pull_request ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    if: github.event.repository.fork == false
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.codacy.com:443
+            api.github.com:443
+            auth.docker.io:443
+            github.com:443
+            golang.org:443
+            objects.githubusercontent.com:443
+            production.cloudflare.docker.com:443
+            raw.githubusercontent.com:443
+            registry-1.docker.io:443
+            *.blob.core.windows.net:443
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Run Codacy Analysis
+        uses: codacy/codacy-analysis-cli-action@master
+        continue-on-error: true
+        with:
+          format: sarif
+          output: results.sarif
+          gh-code-scanning-compat: true
+          max-allowed-issues: 2147483647
+      - name: Check file existence
+        id: check_files
+        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3.0.0
+        with:
+          files: results.sarif
+      - name: Remove duplicate runs
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: jq -c '.runs |= unique_by({tool, invocations, results})' < results.sarif > codacy.sarif
+      - name: Upload result to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        if: steps.check_files.outputs.files_exists == 'true'
+        continue-on-error: true
+        with:
+          sarif_file: codacy.sarif

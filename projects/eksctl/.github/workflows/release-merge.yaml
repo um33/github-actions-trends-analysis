@@ -1,0 +1,51 @@
+name: Merge release changes to main
+on:
+  push:
+    branches:
+      - "release-[0-9]+.[0-9]+"
+env:
+  VERSION_FILE: pkg/version/release.go
+  DEFAULT_BRANCH: main
+jobs:
+  merge_release:
+    name: Merge release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 #v4.1.2
+        with:
+          fetch-depth: 0
+      - name: Setup identity as eksctl-bot
+        uses: ./.github/actions/setup-identity
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Merge release branch into ${{env.DEFAULT_BRANCH}}
+        id: merge-changes
+        run: |
+          git checkout $DEFAULT_BRANCH
+          git checkout -b merge-${{ github.sha }}
+          if [ "$(git merge --no-commit --no-ff ${{ github.ref }})" = "Already up to date." ]; then
+            exit 0;
+          fi
+          git checkout ORIG_HEAD -- $VERSION_FILE
+          git add $VERSION_FILE
+          EDITOR=true git merge --continue
+          ! git diff --exit-code $DEFAULT_BRANCH...HEAD || exit 1
+          git push --set-upstream origin HEAD
+          echo "changes=true" >> $GITHUB_OUTPUT
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+        name: Open PR to ${{env.DEFAULT_BRANCH}}
+        if: steps.merge-changes.outputs.changes == 'true'
+        with:
+          github-token: ${{ secrets.EKSCTLBOT_TOKEN }}
+          script: |
+            const { data: pr } = await github.pulls.create({
+              ...context.repo,
+              title: `Merge ${context.ref} to ${{ env.DEFAULT_BRANCH }}`,
+              head: `merge-${context.sha}`,
+              base: "${{ env.DEFAULT_BRANCH }}",
+            });
+            await github.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels: ["skip-release-notes"],
+            });

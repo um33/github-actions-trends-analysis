@@ -1,0 +1,31 @@
+name: Release
+on:
+  release:
+    types: [published]
+
+jobs:
+  release_to_npm:
+    name: Release to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+      - run: npm i -g npm@9
+      - run: npm ci
+      - run: npm run build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+      - run: npm test
+      - run: npm run lint
+      - run: echo //registry.npmjs.org/:_authToken=${NPM_TOKEN} > .npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: git update-index --assume-unchanged .npmrc
+      - run: npx lerna publish from-package --yes
+      - if: always()
+        run: rm .npmrc

@@ -1,0 +1,29 @@
+name: Updating Code Variations GitHub Issue
+on:
+  push:
+    branches:    
+      - main  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Use Node.js 13.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: '13.x'
+    - name: Cache node modules
+      uses: actions/cache@v1
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+    - name: Updating GitHub Issue ${{ secrets.ISSUE_NUMBER }}
+      run: |
+        npm i
+        node checkVariations.js
+      env:
+        CI: true
+        OCTOCAT_KEY: ${{ secrets.OCTOCAT_KEY }}
+        ISSUE_NUMBER: ${{ secrets.ISSUE_NUMBER }}

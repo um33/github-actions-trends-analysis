@@ -1,0 +1,358 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'main'
+      - 'release/**'
+concurrency:
+  group: ${{ github.head_ref || github.ref_name }}  #Cancel old runs if they have not finished yet
+  cancel-in-progress: true
+
+env:
+  JVM_OPTS: -Xmx4096m
+  GRADLE_OPTS: |
+    -Xmx1536m -XX:+HeapDumpOnOutOfMemoryError
+    -Dorg.gradle.caching=true
+    -Dorg.gradle.configureondemand=true
+    -Dkotlin.compiler.execution.strategy=in-process
+    -Dkotlin.incremental=false
+
+jobs:
+
+  detekt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Corona-Warn-App:detekt
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:detekt
+
+      - name: Archive detekt report
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  klint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Corona-Warn-App:ktlintCheck
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:ktlintCheck
+
+      - name: Archive detekt report
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  validation:
+    name: "Gradle Validation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - uses: gradle/wrapper-validation-action@v1.0.5
+
+  lint_device_release_check:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Corona-Warn-App:lintDeviceRelease
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:lintDeviceRelease -i
+
+      - name: Archive detekt report
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  lint_device_for_testers_release_check:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Corona-Warn-App:lintDeviceForTestersRelease
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:lintDeviceForTestersRelease -i
+
+      - name: Archive detekt report
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  quick_build_device_release_no_tests:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Quick Build
+        run: ./gradlew -PdisablePreDex assembleDeviceRelease
+
+  quick_build_device_for_testers_release_no_tests:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Quick Build
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:assembleDeviceForTestersRelease
+
+  unit_tests_device_release:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Test
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:testDeviceReleaseUnitTest -i
+
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: testResults
+          path: Corona-Warn-App/build/test-results
+
+      - name: Publish Test Results - Device Release
+        uses: dorny/test-reporter@v1.6.0
+        if: always()
+        with:
+          name: "Unit Test Results - Device Release"
+          path: "Corona-Warn-App/build/test-results/testDeviceReleaseUnitTest/*.xml"
+          reporter: java-junit
+
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  unit_tests_device_for_testers_release:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Test
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:testDeviceForTestersReleaseUnitTest -i
+
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: testResults
+          path: Corona-Warn-App/build/test-results
+
+      - name: Publish Test Results - Device For Tester Release
+        uses: dorny/test-reporter@v1.6.0
+        if: always()
+        with:
+          name: "Unit Test Results - Device For Tester Release"
+          path: "Corona-Warn-App/build/test-results/testDeviceForTestersReleaseUnitTest/*.xml"
+          reporter: java-junit
+
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+  run_sonar_scan:
+    runs-on: ubuntu-latest
+    needs: unit_tests_device_release
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Generate JaCoCo report
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:jacocoTestReportDeviceRelease -i
+
+      - name: Archive JaCoCo report
+        uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: Corona-Warn-App/build/reports
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3.0.11
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Build and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./gradlew sonarqube --info
+
+  instrumentation_tests_device:
+    runs-on: ubuntu-latest
+    needs:
+      - detekt
+      - klint
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    env:
+      GCLOUD_SERVICE_KEY_BASE64: '${{ secrets.GCLOUD_SERVICE_KEY_BASE64 }}'
+      GOOGLE_PROJECT_ID: '${{ secrets.GOOGLE_PROJECT_ID }}'
+    permissions:
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - name: Copy CI gradle.properties
+        run: mkdir -p ~/.gradle ; cp .github/ci-gradle.properties ~/.gradle/gradle.properties
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3.6.0
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build App APK
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:assembleDeviceForTestersDebug
+
+      - name: Build Test App APK
+        run: ./gradlew -PdisablePreDex :Corona-Warn-App:assembleDeviceForTestersDebugAndroidTest
+
+      - name: Setup Google Cloud access
+        run: |
+          echo $GCLOUD_SERVICE_KEY_BASE64 | base64 -di > ${HOME}/gcloud-service-key.json
+          sudo gcloud auth activate-service-account --key-file=${HOME}/gcloud-service-key.json
+          sudo gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+
+      - name: Setup Testlab environment
+        run: |
+          echo "BUCKETDIR=`date "+%Y-%m-%d-%H:%M:%S:%3N"`-${RANDOM}" >> $GITHUB_ENV
+
+      - name: Test with Firebase Test Lab
+        run: |
+          echo "Using bucketdir ${{ env.BUCKETDIR }}"
+          sudo gcloud firebase test android run \
+            --type instrumentation \
+            --app Corona-Warn-App/build/outputs/apk/deviceForTesters/debug/*.apk \
+            --test Corona-Warn-App/build/outputs/apk/androidTest/deviceForTesters/debug/*.apk \
+            --results-dir ${{ env.BUCKETDIR }} \
+            --results-bucket ${GOOGLE_PROJECT_ID}-circleci-android \
+            --environment-variables clearPackageData=true \
+            --test-targets "notAnnotation testhelpers.Screenshot" \
+            --timeout 20m \
+            --device-ids dreamlte \
+            --os-version-ids 28 \
+            --locales de_DE \
+            --orientations portrait \
+            --num-flaky-test-attempts 3 \
+            --no-record-video
+
+      - name: Create directory to store test results
+        if: always()
+        run: mkdir firebase-results
+
+      - name: Install gsutil dependency and copy test results data
+        if: always()
+        run: |
+          sudo pip install -U crcmod
+          sudo gsutil -m cp -R -U gs://${GOOGLE_PROJECT_ID}-circleci-android/${{ env.BUCKETDIR }}/dreamlte* firebase-results
+
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: testResults
+          path: firebase-results
+
+      - name: Publish Firebase Test Results
+        uses: dorny/test-reporter@v1.6.0
+        if: always()
+        with:
+          name: "Firebase Test Results"
+          path: "firebase-results/**/*.xml"
+          reporter: java-junit

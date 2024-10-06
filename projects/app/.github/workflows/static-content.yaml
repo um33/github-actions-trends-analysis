@@ -1,0 +1,131 @@
+name: Static Content CI
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/**"
+      - "docs/**"
+      - "client/assets/content_bundles/**"
+      - "LICENSE"
+      - "tools/**"
+  push:
+    paths:
+      - ".github/workflows/**"
+      - "docs/**"
+      - "client/assets/content_bundles/**"
+      - "LICENSE"
+      - "tools/**"
+
+jobs:
+  build_content_bundles:
+    name: Build Content Bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12
+      - run: npm install
+        working-directory: tools
+      - run: DONT_PUSH=true ./build-and-push-static-serving.sh
+        working-directory: tools
+      - run: tar -cvf staticContentBuild.tar staticContentBuild
+        working-directory: tools
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: staticContentBuildTar
+          path: ./tools/staticContentBuild.tar
+  deploy_to_gcs_staging:
+    name: Deploy Content to GCS (Staging)
+    needs:
+      - build_content_bundles
+    # SECURITY: This job uses staging secrets; do not enable it for
+    # pull requests.
+    if: |
+      github.repository == 'WorldHealthOrganization/app' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      LOG_URL: "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "12.0.2"
+          architecture: x86
+      - uses: google-github-actions/setup-gcloud@v0.2.0
+      - name: Download Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: staticContentBuildTar
+          path: tools
+      - run: gcloud components update
+      - run: tar -xf staticContentBuild.tar -C ./.
+        working-directory: tools
+      - run: ls -R ./staticContentBuild
+        working-directory: tools
+      - name: Setup GCP Credentials
+        shell: bash
+        run: |
+          echo "$BASE64_KEY_JSON" | base64 --decode > $APPLICATION_CREDENTIALS_GPG
+          gpg --quiet --batch --yes --decrypt --passphrase="$KEY_PASSPHRASE" --output $APPLICATION_CREDENTIALS $APPLICATION_CREDENTIALS_GPG
+          rm $APPLICATION_CREDENTIALS_GPG
+          gcloud auth activate-service-account --key-file=$APPLICATION_CREDENTIALS
+        env:
+          BASE64_KEY_JSON: "${{ secrets.APP_ENGINE_DEPLOY_STAGING_SVCACCT_JSON }}"
+          KEY_PASSPHRASE: "${{ secrets.APP_ENGINE_DEPLOY_STAGING_SVCACCT_PASSPHRASE }}"
+          APPLICATION_CREDENTIALS: "${{ runner.temp }}/gcp.json"
+          APPLICATION_CREDENTIALS_GPG: "${{ runner.temp }}/gcp.json.gpg"
+      - run: gcloud info
+      - id: newDeployment
+        name: Track Environment Deployment Status
+        uses: actions/github-script@v2
+        with:
+          previews: flash,ant-man
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const { data: deployment } = await github.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              auto_merge: false,
+              environment: 'static-content-staging',
+              required_contexts: [],
+            });
+            await github.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.id,
+              state: 'in_progress',
+              log_url: process.env.LOG_URL,
+            });
+            return deployment.id;
+      - run: DONT_BUILD=true ./tools/build-and-push-static-serving.sh who-mh-staging
+      - name: Destroy GCP Credentials File
+        run: rm $APPLICATION_CREDENTIALS
+        if: ${{ always() }}
+        env:
+          APPLICATION_CREDENTIALS: "${{ runner.temp }}/gcp.json"
+      - name: Revoke GCP Credentials
+        run: gcloud auth revoke
+        if: ${{ always() }}
+      - uses: actions/github-script@v2
+        name: Finalize Deployment Status
+        if: ${{ always() }}
+        with:
+          previews: flash,ant-man
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            await github.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: '${{steps.newDeployment.outputs.result}}',
+              state: '${{job.status}}' === 'success' ? 'success' : 'failure',
+              log_url: process.env.LOG_URL,
+              environment_url: '${{job.status}}' === 'success' ? 'https://console.cloud.google.com/storage/browser/who-mh-staging-static-content;tab=objects?project=who-mh-staging&prefix=' : '',
+              auto_inactive: '${{job.status}}' === 'success'
+            });

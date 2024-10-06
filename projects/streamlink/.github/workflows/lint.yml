@@ -1,0 +1,58 @@
+name: Lint
+
+on:
+  pull_request: {}
+
+jobs:
+  files:
+    name: Files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: File permissions
+        run: "! grep -Ev '^644' <(git ls-files src/ tests/ | xargs stat '--format=%a %n')"
+      - name: File encodings
+        run: "! grep -E -e 'UTF-[^8]' -e 'UTF-[^ ]+ \\(with BOM\\)' <(git ls-files src/ tests/ | xargs stat '--format=%a %n')"
+      - name: Line terminators
+        run: "! grep 'with CRLF line terminators' <(git ls-files | file -nNf-)"
+      - name: No unicode bidirectional control characters
+        run: "! git grep -EIn $'[\\u2066\\u2067\\u2068\\u2069\\u202A\\u202B\\u202C\\u202D\\u202E]'"
+
+  style:
+    name: Code style
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: >
+          python -m pip install -U
+          -e .
+          -r dev-requirements.txt
+      - name: ruff
+        run: >
+          python -m ruff check .
+
+  typing:
+    name: Typing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: >
+          python -m pip install -U
+          -e .
+          -r dev-requirements.txt
+          -r docs-requirements.txt
+      - name: mypy
+        run: |
+          python -m mypy --no-incremental
+          python -m mypy --no-incremental docs

@@ -1,0 +1,27 @@
+name: Go Mod
+
+on: [pull_request]
+
+jobs:
+  go-mod:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/src
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491
+      with:
+        go-version: 1.21
+        cache-dependency-path: src/go.sum
+    - name: Checkout code
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: Check for unused dependencies
+      run: |
+        go mod tidy
+        if [ "$(git status | grep -c "nothing to commit, working tree clean")" == "1" ]; then
+          echo "Nothing to tidy"
+          exit 0
+        fi
+        echo "Go mod tidy is needed"
+        exit 1

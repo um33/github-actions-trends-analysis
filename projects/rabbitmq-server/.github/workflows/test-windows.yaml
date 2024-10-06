@@ -1,0 +1,75 @@
+name: Test Windows
+on:
+  schedule:
+  - cron: '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  test:
+    name: Test Windows OTP26
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - erlang_version: "26.1"
+          elixir_version: "1.15.2"
+        metadata_store:
+          - mnesia
+          - khepri
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: CONFIGURE ERLANG
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+    #! - name: MOUNT BAZEL CACHE
+    #!   uses: actions/cache@v1
+    #!   with:
+    #!     path: "/home/runner/repo-cache/"
+    #!     key: repo-cache
+    - name: CONFIGURE BAZEL
+      id: configure
+      shell: bash
+      run: |
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          startup --output_user_root=C:/tmp
+          startup --windows_enable_symlinks
+          build --enable_runfiles
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows
+          # build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
+          build:buildbuddy --noexperimental_remote_cache_compression
+          build:buildbuddy --noexperimental_remote_cache_async
+          build:buildbuddy --remote_build_event_upload=all
+        EOF
+
+        bazelisk info release
+    - name: RUN TESTS
+      shell: cmd
+      run: |
+        bazelisk test //... ^
+          --config=buildbuddy ^
+          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} ^
+          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker,-dialyze ^
+          --build_tests_only ^
+          --verbose_failures
+  summary-windows:
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

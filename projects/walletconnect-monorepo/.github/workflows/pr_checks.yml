@@ -1,0 +1,89 @@
+name: pull request checks
+
+on:
+  pull_request:
+    branches:
+      - v2.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.action == 'opened' || github.event.action == 'synchronize'
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+      - name: install
+        run: npm ci
+      - name: build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            packages/core/dist
+            packages/sign-client/dist
+            packages/types/dist
+            packages/utils/dist
+            packages/web3wallet/dist
+            providers/ethereum-provider/dist
+            providers/signer-connection/dist
+            providers/universal-provider/dist
+
+  code_style:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        style-command:
+          - lint
+          - prettier
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+      - name: install
+        run: npm ci
+      - name: check
+        run: npm run ${{ matrix.style-command }}
+
+  test:
+    needs: [build, code_style]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-prefix:
+          - packages/sign-client
+          - packages/core
+          - packages/web3wallet
+          - packages/utils
+          - providers/universal-provider
+          - providers/ethereum-provider
+    env:
+      TEST_RELAY_URL: ${{ secrets.TEST_RELAY_URL }}
+      TEST_PROJECT_ID: ${{ secrets.TEST_PROJECT_ID }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+      - name: install
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+      - run: npm run test --prefix=${{ matrix.test-prefix }}

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Slack organisation
+    about: Come chat with the community!
+    url: https://slack.kedro.org/
+  - name: Documentation
+    url: https://kedro.readthedocs.io/en/stable/
+    about: To learn more about how Kedro works
+  - name: Website
+    url: https://kedro.org/
+    about: Learn about features, project examples and our demo

@@ -1,0 +1,36 @@
+on:
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'COPYING'
+      - 'website/**'
+      - '.github/*.md'
+      - '.github/FUNDING.yml'
+
+name: Build Code
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+    - name: Checkout code 👋
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: Install Go 🗳
+      uses: ./.github/workflows/composite/bootstrap-go
+    - name: Run GoReleaser 🚀
+      uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8
+      with:
+        distribution: goreleaser
+        version: latest
+        args: build --clean --snapshot --skip=post-hooks --skip=before
+        workdir: src
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
+      with:
+        name: builds
+        retention-days: 1
+        path: |
+          src/dist

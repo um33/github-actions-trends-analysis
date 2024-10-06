@@ -1,0 +1,47 @@
+name: pre-release
+run-name: Pre-release ${{ github.event.inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version
+        required: true
+
+jobs:
+  release:
+    if: github.repository == 'mistic100/Photo-Sphere-Viewer'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: data
+        id: data
+        run: |
+          echo "NPM_TAG=$(echo ${{ github.event.inputs.version }} | cut -d '-' -f2 -s | cut -d '.' -f1 -s)" >> $GITHUB_OUTPUT
+          echo "YARN_CACHE_DIR=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+      - name: yarn cache ro
+        uses: actions/cache/restore@v4
+        with:
+          key: yarn-${{ hashFiles('yarn.lock') }}
+          path: ${{ steps.data.outputs.YARN_CACHE_DIR }}
+
+      - name: build
+        run: |
+          yarn install --frozen-lockfile
+          yarn ci:version ${{ github.event.inputs.version }}
+          yarn ci:build
+
+      - name: npm publish
+        run: |
+          yarn ci:publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+          NPM_TAG: ${{ steps.data.outputs.NPM_TAG || 'alpha' }}

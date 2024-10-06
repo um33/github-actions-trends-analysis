@@ -1,0 +1,129 @@
+# from doctrine/instantiator:
+# https://github.com/doctrine/instantiator/blob/97aa11bb71ad6259a8c5a1161b4de2d6cdcc5501/.github/workflows/continuous-integration.yml
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - "*.x"
+      - master
+  push:
+    branches:
+      - "*.x"
+      - master
+
+env:
+  fail-fast: true
+
+jobs:
+  phpunit:
+    name: PHPUnit
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php-version: 7.4
+            composer-flags: "--prefer-lowest"
+            doctrine-annotations: true
+          - php-version: 7.4
+            symfony-require: "5.4.*"
+            doctrine-annotations: true
+          - php-version: 8.0
+            symfony-require: "5.4.*"
+            doctrine-annotations: true
+          - php-version: 8.1
+            symfony-require: "5.4.*"
+            doctrine-annotations: true
+          - php-version: 8.3
+            symfony-require: "5.4.*"
+            doctrine-annotations: true
+          - php-version: 8.1
+            symfony-require: "6.3.*"
+            doctrine-annotations: true
+          - php-version: 8.3
+            symfony-require: "6.3.*"
+            doctrine-annotations: true
+          - php-version: 8.2
+            symfony-require: "7.0.*"
+            doctrine-annotations: false
+          - php-version: 8.3
+            symfony-require: "7.0.*"
+            doctrine-annotations: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install PHP without coverage
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: composer, flex
+          coverage: pcov
+
+      - name: Setup dependencies
+        uses: ./.github/workflows/common/composer-install
+        with:
+          symfony-version: ${{ matrix.symfony-require }}
+          install-doctrine-annotations: ${{ matrix.doctrine-annotations }}
+          composer-flags: ${{ matrix.composer-flags }}
+
+      - name: PHPUnit Tests
+        run: vendor/bin/phpunit --configuration phpunit.xml.dist --coverage-text
+
+  php-cs-fixer:
+    name: PHP-CS-Fixer
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install PHP without coverage
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          tools: composer, flex
+          coverage: pcov
+
+      - name: Setup dependencies
+        uses: ./.github/workflows/common/composer-install
+        with:
+          symfony-version: "7.0.*"
+          install-doctrine-annotations: false
+
+      - name: Run PHP-CS-Fixer
+        run: vendor/bin/php-cs-fixer check -v --diff
+
+  phpstan:
+    name: PHPStan
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install PHP without coverage
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          tools: composer, flex
+          coverage: pcov
+
+      - name: Setup dependencies
+        uses: ./.github/workflows/common/composer-install
+        with:
+          symfony-version: "7.0.*"
+          install-doctrine-annotations: false
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress --no-interaction

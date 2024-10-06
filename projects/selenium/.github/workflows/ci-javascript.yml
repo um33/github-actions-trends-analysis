@@ -1,0 +1,31 @@
+name: CI - JavaScript
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/bazel.yml
+    with:
+      name: Build
+      cache-key: javascript-build
+      run: bazel build //javascript/node/selenium-webdriver:selenium-webdriver
+  browser-tests:
+    name: Browser Tests
+    needs: build
+    uses: ./.github/workflows/bazel.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chrome
+          - firefox
+    with:
+      name: Browser Tests  (${{ matrix.browser }})
+      browser: ${{ matrix.browser }}
+      cache-key: node
+      run: |
+        export SELENIUM_BROWSER=${{ matrix.browser }}
+        bazel test --flaky_test_attempts 3 //javascript/node/selenium-webdriver:${{matrix.browser}}-browser-tests

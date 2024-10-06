@@ -1,0 +1,70 @@
+# Builds and test 
+name: build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  dotnet-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with: 
+        submodules: true
+
+    - name: setup .net
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Nuget package cache
+      uses: actions/cache@v4
+      id: nuget-package-cache
+      env:
+        cache-name: nuget-package-cache
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore Dependencies
+      run: dotnet restore
+      working-directory: "src"
+
+    - name: dotnet build
+      run: dotnet build --no-restore /p:SkipNodeScripts=true
+      working-directory: "src"
+
+    - name: dotnet test
+      run: dotnet test --no-build --verbosity normal
+      working-directory: "src"
+
+  js-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: setup node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.14.2'
+
+    - name: pnpm install
+      uses: ./.github/actions/pnpm-install
+
+    - name: sleekgrid tests
+      run: pnpm test
+      working-directory: "packages/sleekgrid"
+
+    - name: corelib tests
+      run: pnpm test
+      working-directory: "packages/corelib"

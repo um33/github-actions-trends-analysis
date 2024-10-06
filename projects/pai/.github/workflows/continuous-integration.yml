@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - master
+    - pai-**
+  pull_request:
+    branches:
+    - master
+    - pai-**
+
+jobs:
+  deployment:
+    name: Test deployment on python-${{ matrix.python }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python: [2.7]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Use Python ${{ matrix.python }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python }}
+        architecture: x64
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install dnspython==1.13.0 paramiko pyyaml jinja2 python-etcd kubernetes
+    - name: Test with unittest
+      run: |
+        python -m unittest deployment.clusterObjectModel.test.test_cluster_object_model
+        python -m unittest deployment.clusterObjectModel.test.test_template_generate
+        python -m unittest deployment.clusterObjectModel.test.test_forward_compatibility
+        cd deployment
+        python -m unittest discover test
+
+  exporters:
+    name: Test exporters on python-${{ matrix.python }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python: [3.7]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Use Python ${{ matrix.python }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python }}
+        architecture: x64
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install paramiko pyyaml requests prometheus_client twisted
+    - name: Test job exporter
+      run: |
+        cd src/job-exporter/test
+        python -m unittest discover .
+
+  watchdog:
+    name: Test watchdog on go-${{ matrix.go }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go: [1.13.8]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Use Go ${{ matrix.go }}
+      uses: actions/setup-go@v1
+      with:
+        go-version: ${{ matrix.go }}
+        architecture: x64
+    - name: Build watchdog
+      run: |
+        cd src/watchdog/src
+        go build ./cmd/watchdog/main.go
+    - name: Test watchdog
+      run: |
+        cd src/watchdog/src
+        go test -cover ./pkg/watchdog
+
+  rest-server:
+    name: Test rest server on node-${{ matrix.node }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node: [10]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Use Node ${{ matrix.node }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node }}
+    - name: yarn install and test
+      run: |
+        cd src/rest-server
+        yarn install --frozen-lockfiles
+        yarn test
+
+  code-coverage:
+    name: Run code coverage of rest-server on node-${{ matrix.node }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node: [10]
+        os: [ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Use Node ${{ matrix.node }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node }}
+    - name: yarn install and test
+      run: |
+        cd src/rest-server
+        yarn install --frozen-lockfiles
+        yarn test
+        mkdir ./coverage
+        yarn run coveralls
+
+    - name: Coveralls GitHub Action
+      uses: coverallsapp/github-action@v1.1.1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        # Path to lcov file
+        path-to-lcov: ./src/rest-server/coverage/lcov.info
+
+  webportal:
+    name: Test webportal on node-${{ matrix.node }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node: [8, 10]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Use Node ${{ matrix.node }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node }}
+    - name: yarn install, build and test
+      run: |
+        cd src/webportal
+        yarn config set ignore-engines true
+        yarn install --frozen-lockfiles
+        yarn build
+        yarn test
+
+  webportal-plugins:
+    name: Test webportal plugins on node-${{ matrix.node }}-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node: [10]
+        os: [ubuntu-18.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Use Node ${{ matrix.node }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node }}
+    - name: Test contrib/submit-job-v2
+      run: |
+        cd contrib/submit-job-v2
+        yarn install --frozen-lockfiles
+        yarn build
+

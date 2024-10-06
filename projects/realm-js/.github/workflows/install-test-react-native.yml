@@ -1,0 +1,115 @@
+name: Install test (React Native)
+
+on:
+  # Every monday at 7:00 CET
+  schedule:
+    - cron: "0 6 * * 1"
+  # You can also activate this workflow manually from the Actions tab
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: install-tests/react-native
+
+jobs:
+  install:
+    name: ${{ matrix.platform == 'ios' && 'iOS' || 'Android' }} realm@${{ matrix.realm-version }}, react-native@${{ matrix.react-native-version }} new architecture ${{ matrix.new-architecture && 'enabled' || 'disabled' }} running ${{ matrix.engine }}
+    # macos-13-xlarge is an M1 mac (which has no Android SDK)
+    runs-on: ${{ matrix.platform == 'ios' && 'macos-13-xlarge' || 'macos-13-large' }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ios
+          - android
+        realm-version:
+          # - v12 # For the last major version
+          - latest
+          #- next # For release candidates
+        react-native-version:
+          - latest
+          - next
+          # - nightly # Enable if it's not too noizy
+        new-architecture:
+          - true
+          - false
+        engine:
+          - jsc
+          - hermes
+        # See https://github.com/actions/runner-images/blob/main/images/macos/macos-12-Readme.md#xcode
+        xcode:
+          - 15.0
+        node:
+          # RN bumped minimum Node version: https://github.com/huntie/react-native/blob/6cb6b81dd1c6b74a0f4bac5b06fa5aef93b48fe4/CHANGELOG.md?plain=1#L15
+          - 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: install-test-${{ matrix.platform }}-r@${{ matrix.realm-version }}-rn@${{ matrix.react-native-version }}-${{ matrix.new-architecture && 'new' || 'old' }}-arch
+          max-size: '2.0G'
+      - name: Prepend ccache executables to the PATH
+        run: echo "/usr/local/opt/ccache/libexec" >> $GITHUB_PATH
+      - name: Configure ccache
+        run: ccache --set-config="compiler_check=content"
+
+      # Invoke a specific iPhone simulator to ensure AppleTV is not chosen as the default simulator
+      - uses: futureware-tech/simulator-action@v2
+        if: ${{ matrix.platform == 'ios' }}
+        with:
+          model: "iPhone 14"
+
+      - name: Install dependencies of the CLI
+        run: npm ci
+
+      - name: Initialize app
+        run: npm run init -- --skip-bundle-install --skip-pod-install --realm-version ${{ matrix.realm-version }} --react-native-version ${{ matrix.react-native-version }} --engine ${{ matrix.engine }} --new-architecture ${{ matrix.new-architecture }}
+
+      - if: ${{ matrix.platform == 'ios' }}
+        run: pod install
+        working-directory: install-tests/react-native/app/ios
+
+      - uses: actions/setup-java@v3
+        if: ${{ matrix.platform == 'android' }}
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Run test (iOS)
+        if: ${{ matrix.platform == 'ios' }}
+        run: npm test -- --platform ios
+
+      - name: Run test (Android)
+        if: ${{ matrix.platform == 'android' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 30
+        with:
+          api-level: 29
+          target: google_apis
+          script: npm test -- --platform android
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          working-directory: install-tests/react-native
+
+  slack-workflow-status:
+    if: always()
+    name: Post Workflow Status To Slack
+    needs: install
+    runs-on: ubuntu-latest
+    permissions:
+      actions: 'read'
+    steps:
+      - name: Slack Workflow Notification
+        uses: Gamesight/slack-workflow-status@master
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          # Post only to the #realm-js-team Slack channel in case of a scheduled run (realm-js-bot-tests otherwise)
+          slack_webhook_url: ${{ github.event.schedule && secrets.SLACK_TEAM_WEBHOOK || secrets.SLACK_TEST_WEBHOOK }}
+          include_jobs: true
+          include_commit_message: false

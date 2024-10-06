@@ -1,0 +1,60 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      node-version: 14
+
+    strategy:
+      matrix:
+        # TODO: upgrade to latest Ubuntu
+        os: [ubuntu-18.04, macos-latest, windows-latest]
+
+    steps:
+    - name: Install Linux Dependencies
+      if: runner.os == 'Linux'
+      run: sudo apt-get install libgnome-keyring-dev icnsutils graphicsmagick rpm bsdtar
+
+    - uses: actions/checkout@v3
+
+    - name: Use Node.js ${{ env.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.node-version }}
+        cache: npm
+    
+    # Version of npm that comes in 14.x is npm@6
+    - run: npm i -g npm@7
+
+    - run: npm ci
+
+    - run: npm run lint
+
+    - run: npm run format:check
+
+    - run: npm run test
+
+    - name: Prepare integration test dependencies
+      if: runner.os == 'Linux'
+      run: ./scripts/start-test-integration-deps.sh
+
+    - name: Build app for e2e test
+      if: runner.os == 'Linux'
+      run: npm run compile
+
+    - name: Run e2e test
+      if: runner.os == 'Linux'
+      run: xvfb-run --auto-servernum npm run test:e2e
+
+    - run: npm run dist -- --publish never
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.os }}
+        path: dist

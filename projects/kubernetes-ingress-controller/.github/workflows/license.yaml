@@ -1,0 +1,17 @@
+name: 'FOSSA'
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+
+jobs:
+  fossa-scan:
+    timeout-minutes: ${{ fromJSON(vars.GHA_DEFAULT_TIMEOUT) }}
+    environment: "FOSSA"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: fossas/fossa-action@v1.3.3
+        with:
+          api-key: ${{secrets.fossaApiKey}}
+          branch: main

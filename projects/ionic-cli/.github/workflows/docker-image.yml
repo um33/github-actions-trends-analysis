@@ -1,0 +1,28 @@
+name: BuildDockerImage
+
+on: workflow_dispatch
+
+jobs:
+  build-docker-container:
+    name: Build and Deploy Docker Container with latest CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: GitHub Container Registry Login
+        run: echo ${{ github.token }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build Container
+        run: |
+            docker build \
+              --build-arg IONIC_CLI_VERSION=$(npm info @ionic/cli dist-tags.latest) \
+              --tag ghcr.io/${{ github.repository }}:latest \
+              --tag ghcr.io/${{ github.repository}}:$(npm info @ionic/cli dist-tags.latest) \
+              .
+      - name: Push Container as latest
+        run: docker push ghcr.io/${{ github.repository }}:latest
+      - name: Push Container as version
+        run: docker push ghcr.io/${{ github.repository }}:$(npm info @ionic/cli dist-tags.latest)

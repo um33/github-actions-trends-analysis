@@ -1,0 +1,32 @@
+name: 🚀 Feature request
+description: Suggest an idea for this project
+labels:
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thanks for your interest on this project
+
+        **Please use English or French**, I don't speak other languages.
+
+        Consider searching [the documentation](https://photo-sphere-viewer.js.org/guide/) to verify the feature does not already exists.
+
+        Use [markdown codeblocks](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks) when posting code samples, **do not use screenshots**!
+  - id: description
+    type: textarea
+    attributes:
+      label: Describe the feature
+      placeholder: A clear and complete description of the feature you'd like to see in Photo Sphere Viewer.
+    validations:
+      required: true
+  - id: alternatives
+    type: textarea
+    attributes:
+      label: Alternatives you've considered
+      placeholder: A description of any alternative solutions or features you've considered. If possible provided an online demo of your progression.
+  - id: context
+    type: textarea
+    attributes:
+      label: Additional context
+      placeholder: Add any other context about the feature request here.

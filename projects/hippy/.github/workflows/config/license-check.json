@@ -1,0 +1,49 @@
+{
+  "copyright": [
+    "Copyright",
+    "Licensed under the Apache License, Version 2.0 (the \"License\")"
+  ],
+  "include": [
+    "**/*.{ts,tsx,js,jsx,vue,ejs,mjs,es6}",
+    "**/*.{css,less,scss}",
+    "**/*.{h,hpp,hh,h++,hxx}",
+    "**/*.{c,cc,c++,cpp,C,cxx}",
+    "**/*.{m,mm,swift}",
+    "**/*.cmake",
+    "**/*.java",
+    "**/*.txt",
+    "**/*.sh",
+    "**/*.yaml",
+    "**/*.bat",
+    "**/*.dart",
+    "**/*.py"
+  ],
+  "ignore": [
+    "**/node_modules/**",
+    "**/AUTHORS/**",
+    "**/.git/**",
+    "**/.gradle/**",
+    "**/.DS_Store/**",
+    "**/.nyc_output/**",
+    "**/.vscode/**",
+    "**/.vs/**",
+    "**/.idea/**",
+    "**/.externalNativeBuild/**",
+    "**/.cxx/**",
+    "**/*.xcworkspace/**",
+    ".github/**",
+    ".husky/**",
+    "docs/**",
+    "framework/examples/android-demo/res/**",
+    "framework/examples/ios-demo/res/**",
+    "framework/examples/ios-demo/*.sh",
+    "framework/examples/voltron-demo/flutter_module/assets/**",
+    "framework/examples/voltron-demo/flutter_proj/assets/**",
+    "driver/js/examples/static/**",
+    "driver/js/examples/hippy-**-demo/**",
+    "framework/voltron/example/assets/**",
+    "framework/voltron/script/android/gradlew.bat",
+    "framework/voltron/script/ios.toolchain.cmake",
+    "modules/voltron/ffi/core/third_party/**"
+  ]
+}

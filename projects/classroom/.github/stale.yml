@@ -1,0 +1,10 @@
+daysUntilStale: 60
+daysUntilClose: false
+exemptLabels:
+  - Security
+  - feature request
+staleLabel: stale
+markComment: >
+  This issue has been automatically marked as stale because it has not had
+  recent activity. Thank you for your contributions.
+closeComment: false

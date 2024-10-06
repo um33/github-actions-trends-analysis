@@ -1,0 +1,107 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Python package
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-13", "macos-14", "windows-latest"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        exclude:
+        - os: "macos-14"
+          python-version: "3.7"
+        - os: "macos-14"
+          python-version: "3.8"
+        - os: "macos-14"
+          python-version: "3.9"
+        include:
+        - experimental: false
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc -exo pipefail {0}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        allow-prereleases: ${{ matrix.experimental }}
+
+    - name: Set up WSL (Windows)
+      if: startsWith(matrix.os, 'windows')
+      uses: Vampire/setup-wsl@v3.0.0
+      with:
+        distribution: Debian
+
+    - name: Prepare this repo for tests
+      run: |
+        ./init-tests-after-clone.sh
+
+    - name: Set git user identity and command aliases for the tests
+      run: |
+        git config --global user.email "travis@ci.com"
+        git config --global user.name "Travis Runner"
+        # If we rewrite the user's config by accident, we will mess it up
+        # and cause subsequent tests to fail
+        cat test/fixtures/.gitconfig >> ~/.gitconfig
+
+    - name: Update PyPA packages
+      run: |
+        # Get the latest pip, wheel, and prior to Python 3.12, setuptools.
+        python -m pip install -U pip $(pip freeze --all | grep -ow ^setuptools) wheel
+
+    - name: Install project and test dependencies
+      run: |
+        pip install ".[test]"
+
+    - name: Show version and platform information
+      run: |
+        uname -a
+        command -v git python
+        git version
+        python --version
+        python -c 'import os, sys; print(f"sys.platform={sys.platform!r}, os.name={os.name!r}")'
+
+    # For debugging hook tests on native Windows systems that may have WSL.
+    - name: Show bash.exe candidates (Windows)
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        set +e
+        bash.exe -c 'printenv WSL_DISTRO_NAME; uname -a'
+        python -c 'import subprocess; subprocess.run(["bash.exe", "-c", "printenv WSL_DISTRO_NAME; uname -a"])'
+      continue-on-error: true
+
+    - name: Check types with mypy
+      run: |
+        mypy --python-version=${{ matrix.python-version }}
+      env:
+        MYPY_FORCE_COLOR: "1"
+        TERM: "xterm-256color"  # For color: https://github.com/python/mypy/issues/13817
+      # With new versions of mypy new issues might arise. This is a problem if there is
+      # nobody able to fix them, so we have to ignore errors until that changes.
+      continue-on-error: true
+
+    - name: Test with pytest
+      run: |
+        pytest --color=yes -p no:sugar --instafail -vv
+      continue-on-error: false
+
+    - name: Documentation
+      run: |
+        pip install ".[doc]"
+        make -C doc html

@@ -1,0 +1,21 @@
+name: Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  phpunit8:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        php-versions: ['7.4', '8.0', '8.1']
+    steps:
+      - uses: actions/checkout@v3
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+      - run: composer install
+      - run: composer test

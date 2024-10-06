@@ -1,0 +1,31 @@
+version: 2
+updates:
+- package-ecosystem: "github-actions"
+  directory: "/"
+  schedule:
+    interval: weekly
+    day: thursday
+    time: "12:00"
+    timezone: "America/New_York"
+- package-ecosystem: nuget
+  directory: "/"
+  groups:
+    xunit:
+      patterns:
+        - xunit*
+  schedule:
+    interval: weekly
+    day: thursday
+    time: "12:00"
+    timezone: "America/New_York"
+  ignore:
+    # Ignore the libraries which are pinned
+    - dependency-name: "Microsoft.Bcl.AsyncInterfaces"
+    - dependency-name: "Microsoft.Extensions.Logging"
+    - dependency-name: "Microsoft.Extensions.Logging.Abstractions"
+    - dependency-name: "Microsoft.Extensions.Options"
+    - dependency-name: "System.ComponentModel.Annotations"
+    - dependency-name: "System.Diagnostics.DiagnosticSource"
+    - dependency-name: "System.Threading.RateLimiting"
+    - dependency-name: "System.Threading.Tasks.Extensions"
+    - dependency-name: "System.ValueTuple"

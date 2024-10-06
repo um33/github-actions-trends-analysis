@@ -1,0 +1,121 @@
+name: Release
+
+# 用于发布release
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: ''
+        required: true
+        default: 'v'
+      prerelease:
+        description: ''
+        required: true
+        default: 'false'
+      techxuexi_text:
+        description: ''
+        required: true
+        default: '更新日志请查看 https://github.com/TechXueXi/TechXueXi/blob/developing/SourcePackages/pdlearn/version_info.json 这个版本主要更新docker，其他用户可以不更新。交流群： https://github.com/TechXueXi/TechXueXi/issues/14 ，使用方法：https://github.com/TechXueXi/TechXueXi/blob/dev/%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95-%E6%9B%B4%E6%96%B0%E6%96%B9%E6%B3%95-%E4%B8%8B%E8%BD%BD%E6%96%B9%E5%BC%8F.md 。这下面只是下载源码包，不能直接运行，请阅读说明。'
+  
+
+jobs:
+  Release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Get tag
+        id: tag
+        run: |
+          echo ::set-output name=tag::${GITHUB_REF#refs/tags/}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.version_tag }}
+          release_name: ${{ github.event.inputs.version_tag }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+          body: ${{ github.event.inputs.techxuexi_text }}
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry 
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@28218f9b04b4f3f62068d7b6ce6ca5b26e35336c
+        with:
+          username: techxuexi
+          password: ${{ secrets.TECHXUEXI_DOCKER_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: techxuexi/techxuexi
+      - name: Docker Setup QEMU
+        # You may pin to the exact commit or the version.
+        # uses: docker/setup-qemu-action@27d0a4f181a40b142cce983c5393082c365d1480
+        uses: docker/setup-qemu-action@v1.2.0
+        with:
+          # QEMU static binaries Docker image (e.g. tonistiigi/binfmt:latest)
+          image: tonistiigi/binfmt:latest
+          # Platforms to install (e.g. arm64,riscv64,arm)
+          # platforms: arm64,arm/v7,amd64
+          platforms: all
+ 
+      - name: Build and push Docker image
+        run: |
+              
+              docker buildx create --use
+              docker buildx build --platform linux/amd64 \
+                      -t techxuexi/techxuexi-amd64 \
+                      --push \
+                      -f ./Dockerfile .
+              docker buildx build --platform linux/arm64 \
+                      -t techxuexi/techxuexi-arm64v8 \
+                      --push \
+                      -f ./Dockerfile_arm64v8 .
+              docker buildx build --platform linux/arm/v7 \
+                      -t techxuexi/techxuexi-arm32v7 \
+                      --push \
+                      -f ./Dockerfile_arm32v7 .
+
+      - uses: actions/checkout@master
+      - name: update url 
+        env:
+          UPDATE_1: ${{ secrets.UPDATE_1 }}
+        run: |
+          wget ${{ secrets.UPDATE_1 }}
+      - name: send telegram message on push
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          disable_web_page_preview: true
+          disable_notification: false
+          format: markdown
+          message: |
+            #python稳定版发布通知
+            仓库: ${{ github.repository }}
+            `${{ github.event.inputs.version_tag }}` 版本的稳定版已经发布， docker tag 为 `latest`。
+            [点击查看这个Github release的详细信息](https://github.com/${{ github.repository }}/releases/tag/${{ github.event.inputs.version_tag }})
+            [点击查看docker](https://hub.docker.com/u/techxuexi/)
+      #- name: Delete Workflow Runs
+      #  uses: Mattraks/delete-workflow-runs@main
+      #  with:
+      #    token: ${{ github.token }}
+      #    repository: ${{ github.repository }}
+      #    retain_days: 1
+      #    keep_minimum_runs: 0
+

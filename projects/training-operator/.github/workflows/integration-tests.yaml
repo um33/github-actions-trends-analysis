@@ -1,0 +1,126 @@
+name: integration test
+on:
+  - pull_request
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    # Almost similar to the following:
+    #
+    # ```yaml
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     kubernetes-version: ["v1.27.11", "v1.28.7", "v1.29.2"]
+    #     gang-scheduler-name: ["none", "scheduler-plugins", "volcano"]
+    # ```
+    # The difference is that each combination is randomly assigned various Python versions
+    # to verify Python SDK operations.
+    strategy:
+      fail-fast: false
+      matrix:
+        # TODO (tenzen-y): Add volcano.
+        include:
+          - kubernetes-version: v1.29.2
+            gang-scheduler-name: "none"
+            python-version: "3.10"
+          - kubernetes-version: v1.27.11
+            gang-scheduler-name: "none"
+            python-version: "3.7"
+          - kubernetes-version: v1.28.7
+            gang-scheduler-name: "none"
+            python-version: "3.8"
+          - kubernetes-version: v1.29.2
+            gang-scheduler-name: "scheduler-plugins"
+            python-version: "3.9"
+          - kubernetes-version: v1.27.11
+            gang-scheduler-name: "scheduler-plugins"
+            python-version: "3.10"
+          - kubernetes-version: v1.28.7
+            gang-scheduler-name: "scheduler-plugins"
+            python-version: "3.10"
+          - kubernetes-version: v1.29.2
+            gang-scheduler-name: "volcano"
+            python-version: "3.9"
+          - kubernetes-version: v1.27.11
+            gang-scheduler-name: "volcano"
+            python-version: "3.10"
+          - kubernetes-version: v1.28.7
+            gang-scheduler-name: "volcano"
+            python-version: "3.10"
+
+    steps:
+      # This step is a Workaround to avoid the "No space left on device" error.
+      # ref: https://github.com/actions/runner-images/issues/2840
+      - name: Remove unnecessary files
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/share/swift
+
+          echo "Disk usage after cleanup:"
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: go.mod
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.3.0
+        with:
+          node_image: kindest/node:${{ matrix.kubernetes-version }}
+          cluster_name: training-operator-cluster
+          kubectl_version: ${{ matrix.kubernetes-version }}
+
+      - name: Build training-operator
+        run: |
+          ./scripts/gha/build-image.sh
+        env:
+          TRAINING_CI_IMAGE: kubeflowtraining/training-operator:test
+
+      - name: Deploy training operator
+        run: |
+          ./scripts/gha/setup-training-operator.sh
+        env:
+          KIND_CLUSTER: training-operator-cluster
+          TRAINING_CI_IMAGE: kubeflowtraining/training-operator:test
+          GANG_SCHEDULER_NAME: ${{ matrix.gang-scheduler-name }}
+          KUBERNETES_VERSION: ${{ matrix.kubernetes-version }}
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          python3 -m pip install -e sdk/python; pytest -s sdk/python/test --log-cli-level=debug --namespace=default
+        env:
+          GANG_SCHEDULER_NAME: ${{ matrix.gang-scheduler-name }}
+
+      - name: Collect volcano logs
+        if: ${{ failure() &&  matrix.gang-scheduler-name == 'volcano' }}
+        run: |
+          echo "dump volcano-scheduler logs..."
+          kubectl logs -n volcano-system -l app=volcano-scheduler --tail=-1
+          echo "dump volcano-admission logs..."
+          kubectl logs -n volcano-system -l app=volcano-admission --tail=-1
+          echo "dump volcano-controllers logs..."
+          kubectl logs -n volcano-system -l app=volcano-controller --tail=-1
+          echo "dump podgroups description..."
+          kubectl describe podgroups.scheduling.volcano.sh -A

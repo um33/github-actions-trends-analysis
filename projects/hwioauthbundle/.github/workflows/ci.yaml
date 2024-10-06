@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'phpstan.neon'
+      - 'phpunit.xml.dist'
+      - 'composer.json'
+
+# See https://stackoverflow.com/a/72408109
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-cs-fixer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PHP_CS_FIXER_FUTURE_MODE: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: curl, openssl, mbstring
+          ini-values: memory_limit=-1
+          tools: php-cs-fixer
+
+      - name: Run PHP-CS-Fixer fix
+        run: php-cs-fixer fix --dry-run --diff --ansi
+
+  phpstan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: curl, openssl, mbstring
+          ini-values: memory_limit=-1
+          tools: composer
+
+      - name: Update project dependencies
+        run: |
+          composer global config --no-plugins allow-plugins.symfony/flex true
+          composer global require symfony/flex --no-progress --no-scripts --no-plugins
+          composer config extra.symfony.require "5.4"
+          composer update --no-interaction --no-progress --ansi
+
+      - name: Run phpstan
+        run: composer phpstan
+
+  phpunit:
+    name: PHPUnit (PHP ${{ matrix.php }} + ${{ matrix.symfony-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - php: '8.1'
+            symfony-version: '^5.4'
+            bc: true
+          - php: '8.1'
+            symfony-version: '^5.4'
+          - php: '8.1'
+            symfony-version: '^6.3'
+          - php: '8.2'
+            symfony-version: '^6.3'
+          - php: '8.2'
+            symfony-version: '^7.0'
+          - php: '8.3'
+            symfony-version: '^6.3'
+          - php: '8.3'
+            symfony-version: '^7.0'
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "${{ matrix.php }}"
+          tools: pecl, composer
+          extensions: intl, bcmath, curl, openssl, mbstring
+          ini-values: memory_limit=-1
+
+      - name: Update project dependencies
+        run: |
+          composer global config --no-plugins allow-plugins.symfony/flex true
+          composer global require symfony/flex --no-progress --no-scripts --no-plugins
+          composer config extra.symfony.require "${{ matrix.symfony-version }}"
+
+      - name: Install dependencies with Composer
+        uses: "ramsey/composer-install@v2"
+        with:
+          custom-cache-key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+
+      - name: Run PHPUnit tests
+        env:
+          USE_NEW_SYMFONY_SECURITY: matrix.bc != 'true'
+        run: |
+          mkdir -p build/logs/phpunit
+          vendor/bin/phpunit --log-junit build/logs/phpunit/junit.xml
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: phpunit-logs-php${{ matrix.php }}
+          path: build/logs/phpunit
+        continue-on-error: true

@@ -1,0 +1,18 @@
+"🌶️ green donut":
+  - changed-files:
+    - any-glob-to-any-file: "src/GreenDonut/**"
+"🌶️ hot chocolate":
+  - changed-files:
+    - any-glob-to-any-file: "src/HotChocolate/**"
+"🌶️ strawberry shake":
+  - changed-files:
+    - any-glob-to-any-file: "src/StrawberryShake/**"
+"🌶️ website":
+  - changed-files:
+    - all-globs-to-any-file: ["website/**", "!website/src/docs/**/*.md"]
+"📚 documentation":
+  - changed-files:
+    - any-glob-to-any-file: "website/src/docs/**/*.md"
+"🧰 maintenance":
+  - changed-files:
+    - any-glob-to-any-file: [".build/**", ".github/**", ".devops/**"]

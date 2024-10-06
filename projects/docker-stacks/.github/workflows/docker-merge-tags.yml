@@ -1,0 +1,66 @@
+name: Download all tags from GitHub artifacts and create multi-platform manifests
+
+env:
+  OWNER: ${{ github.repository_owner }}
+  PUSH_TO_REGISTRY: ${{ (github.repository_owner == 'jupyter' || github.repository_owner == 'mathbunnyru') && (github.ref == 'refs/heads/main' || github.event_name == 'schedule') }}
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        description: Variant tag prefix
+        required: true
+        type: string
+      image:
+        description: Image name
+        required: true
+        type: string
+    secrets:
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_TOKEN:
+        required: true
+
+jobs:
+  merge-tags:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo ⚡️
+        uses: actions/checkout@v4
+      - name: Create dev environment 📦
+        uses: ./.github/actions/create-dev-env
+
+      - name: Download x86_64 tags file 📥
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.image }}-x86_64-${{ inputs.variant }}-tags
+          path: /tmp/jupyter/tags/
+      - name: Download aarch64 tags file 📥
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.image }}-aarch64-${{ inputs.variant }}-tags
+          path: /tmp/jupyter/tags/
+        if: github.repository_owner == 'jupyter' && !contains(inputs.variant, 'cuda')
+
+      # Docker might be stuck when pulling images
+      # https://github.com/docker/for-mac/issues/2083
+      # https://stackoverflow.com/questions/38087027/docker-compose-stuck-downloading-or-pulling-fs-layer
+      - name: Reset docker state 🗑️
+        run: |
+          docker system prune --all --force
+          sudo systemctl restart docker
+        shell: bash
+
+      - name: Login to Registry 🔐
+        if: env.PUSH_TO_REGISTRY == 'true'
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
+        with:
+          registry: quay.io
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Merge tags for the images 🔀
+        if: env.PUSH_TO_REGISTRY == 'true'
+        run: python3 -m tagging.merge_tags --short-image-name ${{ inputs.image }} --tags-dir /tmp/jupyter/tags/ --variant ${{ inputs.variant }}
+        shell: bash

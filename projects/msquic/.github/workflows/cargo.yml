@@ -1,0 +1,48 @@
+name: Cargo
+
+on:
+  push:
+    branches:
+    - main
+    - release/*
+  pull_request:
+    branches:
+    - main
+    - release/*
+
+permissions: read-all
+
+jobs:
+  cargo:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: Cargo
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+      with:
+        egress-policy: audit
+    - name: Checkout repository
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: Prepare Machine
+      run: scripts/prepare-machine.ps1 -Tls openssl -ForBuild
+      shell: pwsh
+    - name: Install Perl
+      if: runner.os == 'Windows'
+      uses: shogo82148/actions-setup-perl@28eae78d12c2bba1163aec45d123f6d9228bc307
+      with:
+        perl-version: '5.34'
+    - name: Install NASM
+      if: runner.os == 'Windows'
+      uses: ilammy/setup-nasm@13cbeb366c45c4379d3478cdcbadd8295feb5028
+    - name: Install Cargo
+      if: runner.os == 'Linux'
+      run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - name: Cargo build
+      run: cargo build --all
+    - name: Cargo test
+      run: cargo test --all
+    - name: Cargo Publish (dry run)
+      run: cargo publish --dry-run --allow-dirty

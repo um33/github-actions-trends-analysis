@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'fix/*'
+      - 'feature/*'
+      - 'poc/*'
+      - 'support/*'
+    paths:
+      - '**'
+      - '!docs/**'
+
+  pull_request:
+    branches:
+      - main
+      - 'support/*'
+    paths:
+      - '**'
+      - '!docs/**'
+  merge_group:
+    types: [checks_requested]
+    
+  repository_dispatch:
+    types: [ ci-release ]
+
+env:
+  DOTNET_ROLL_FORWARD: "Major"
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: 1
+
+  ENABLED_DIAGNOSTICS: ${{ secrets.ENABLED_DIAGNOSTICS }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    name: Prepare
+    uses: ./.github/workflows/_prepare.yml
+
+  build:
+    name: Build & Package
+    needs: [ prepare ]
+    uses: ./.github/workflows/_build.yml
+
+  unit_test:
+    name: Test
+    needs: [ prepare ]
+    uses: ./.github/workflows/_unit_tests.yml
+    secrets: inherit
+
+  artifacts_windows_test:
+    name: Artifacts Windows
+    needs: [ build ]
+    uses: ./.github/workflows/_artifacts_windows.yml
+
+  artifacts_linux_test:
+    needs: [ build ]
+    name: Artifacts Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-latest
+    uses: ./.github/workflows/_artifacts_linux.yml
+    with:
+      runner: ${{ matrix.runner }}
+      arch: ${{ matrix.arch }}
+
+  docker_linux_images:
+    needs: [ build ]
+    name: Docker Images (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-latest
+
+    uses: ./.github/workflows/_docker.yml
+    with:
+      runner: ${{ matrix.runner }}
+      arch: ${{ matrix.arch }}
+    secrets: inherit
+
+  docker_linux_manifests:
+    needs: [ docker_linux_images ]
+    name: Docker Manifests
+    uses: ./.github/workflows/_docker_manifests.yml
+    secrets: inherit
+
+  publish:
+    name: Publish
+    needs: [ artifacts_windows_test, artifacts_linux_test ]
+    uses: ./.github/workflows/_publish.yml
+    secrets: inherit
+
+  release:
+    name: Release
+    needs: [ publish, docker_linux_manifests ]
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+    steps:
+    -
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    -
+      name: Restore State
+      uses: ./.github/actions/artifacts-restore
+    -
+      uses: actions/download-artifact@v4
+      name: Download native linux packages
+      with:
+        name: native-Linux
+        path: ${{ github.workspace }}/artifacts/packages/native
+    -
+      uses: actions/download-artifact@v4
+      name: Download native windows packages
+      with:
+        name: native-Windows
+        path: ${{ github.workspace }}/artifacts/packages/native
+    -
+      uses: actions/download-artifact@v4
+      name: Download native macos packages
+      with:
+        name: native-macOS
+        path: ${{ github.workspace }}/artifacts/packages/native
+    -
+      name: '[Release]'
+      shell: pwsh
+      run: dotnet run/release.dll --target=PublishRelease
+    -
+      name: '[Publish Release]'
+      if: ${{ github.event_name == 'repository_dispatch' }}
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
+        event-type: publish-release
+        client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "tag": "${{ github.event.client_payload.tag }}"}' 

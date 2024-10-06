@@ -1,0 +1,35 @@
+name: Docker
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    paths:
+      - "compose.yaml"
+      - "Dockerfile"
+      - "docker/**"
+  # Allow running on demand using Github UI
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * *"
+
+jobs:
+  docker-compose-build:
+    name: Compose build PHP ${{ matrix.php-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - php-version: '7.4'
+          - php-version: '8.0'
+          - php-version: '8.1'
+          - php-version: '8.2'
+          - php-version: '8.3'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker Compose build
+        run: docker compose build --no-cache --pull php-${{ matrix.php-version }}

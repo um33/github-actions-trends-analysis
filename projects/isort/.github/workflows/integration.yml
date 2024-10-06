@@ -1,0 +1,48 @@
+---
+name: Integration
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: pip cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: integration-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            integration-pip-
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade pip
+        run: |
+          pip install --constraint=.github/workflows/constraints.txt pip
+          pip --version
+
+      - name: Install Poetry
+        run: |
+          pipx install --pip-args=--constraint=.github/workflows/poetry-constraints.txt poetry
+          poetry --version
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Test integration
+        run: ./scripts/test_integration.sh

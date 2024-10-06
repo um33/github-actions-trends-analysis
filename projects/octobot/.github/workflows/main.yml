@@ -1,0 +1,163 @@
+name: OctoBot-CI
+on:
+  push:
+    branches:
+      - 'master'
+      - 'dev'
+    tags:
+      - '*'
+  pull_request:
+
+jobs:
+  lint:
+    name: ${{ matrix.os }}${{ matrix.arch }} - Python ${{ matrix.version }} - lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        arch: [ x64 ]
+        version: [ "3.10.x" ]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.version }}
+        architecture: ${{ matrix.arch }}
+
+    - name: Install dependencies
+      run: pip install wheel && pip install --prefer-binary -r dev_requirements.txt -r requirements.txt
+
+#    - name: Black lint
+#      run: black ${{ secrets.PACKAGE_FOLDER }} --diff --check
+
+    - name: Pylint
+      run: |
+        pylint --rcfile=standard.rc octobot
+        if [ $? -ne 1 ]; then exit 0; fi
+
+  tests:
+    needs: lint
+    name: ${{ matrix.os }}${{ matrix.arch }} - Python ${{ matrix.version }} - tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest, ubuntu-latest ]
+        arch: [ x64 ]
+        version: [ "3.10.x" ]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.version }}
+        architecture: ${{ matrix.arch }}
+
+    - name: Wait for tentacles
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+      uses: fountainhead/action-wait-for-check@v1.0.0
+      id: wait-for-build
+      with:
+        token: ${{ secrets.AUTH_TOKEN }}
+        checkName: "ubuntu-latestx64 - Python - 3.10 - Upload"
+        ref: ${{ github.ref }}
+        repo: OctoBot-Tentacles
+        timeoutSeconds: 3600
+
+    - name: Trigger fail when Tentacles failed
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && steps.wait-for-build.outputs.conclusion == 'failure'
+      run: exit 1
+
+    - name: Install dependencies
+      run: pip install wheel && pip install --prefer-binary -r dev_requirements.txt -r requirements.txt
+
+    - name: Install tentacles on Unix
+      env:
+        DISABLE_SENTRY: True
+      if: matrix.os != 'windows-latest'
+      run: |
+        mkdir user
+        cp ./octobot/config/default_config.json ./user/config.json
+        branch="${GITHUB_HEAD_REF}"
+        echo "Trying to download tentacles package ${branch////_}.zip ..."
+        TENTACLES_REPOSITORY=dev-tentacles TENTACLES_URL_TAG=${branch////_} python3 start.py tentacles -q --install --all || TENTACLES_URL_TAG=latest python3 start.py tentacles --install --all
+
+    - name: Install tentacles on Windows
+      env:
+        DISABLE_SENTRY: True
+      if: matrix.os == 'windows-latest'
+      run: |
+        mkdir user
+        copy octobot\config\default_config.json user\config.json
+        $Env:TENTACLES_REPOSITORY = "dev-tentacles"
+        $Env:TENTACLES_URL_TAG = $env:GITHUB_HEAD_REF -replace "/", "_"
+        echo "Trying to download tentacles package $Env:TENTACLES_URL_TAG.zip ..."
+        python start.py tentacles -q --install --all
+        if ($LastExitCode -ne 0)
+        {
+          $Env:TENTACLES_URL_SUBCATEGORY = ""
+          If ($env:GITHUB_REF -like "*refs/tags/*") {
+            $Env:TENTACLES_URL_TAG = ""
+            $Env:TENTACLES_REPOSITORY = ""
+          } else {
+            $Env:TENTACLES_URL_TAG = "latest"
+            $Env:TENTACLES_REPOSITORY = ""
+          }
+          echo "Failed to download branch tentacles, trying to download tentacles package $Env:TENTACLES_URL_TAG.zip ..."
+          python start.py tentacles --install --all
+        }
+      shell: powershell
+
+    - name: Pytests
+      env:
+        DISABLE_SENTRY: True
+      run: |
+        pytest --cov=. --cov-config=.coveragerc --durations=0 -rw tests
+        pytest --durations=0 -rw --ignore=tentacles/Trading/Exchange tentacles
+
+    - name: Publish coverage
+      if: github.event_name == 'push'
+      run: coveralls --service=github
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_sdist:
+    needs: tests
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    name: Source distribution - Python ${{ matrix.version }} - Deploy
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        arch: [ x64 ]
+        version: [ "3.10.x" ]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.version }}
+          architecture: ${{ matrix.arch }}
+
+      - name: Install dependencies
+        run: pip install --prefer-binary -r dev_requirements.txt -r requirements.txt
+
+      - name: Build sdist
+        run: python setup.py sdist
+
+      - name: Publish package
+        run: |
+          python -m twine upload --repository-url ${{ secrets.PYPI_OFFICIAL_UPLOAD_URL }} -u __token__ -p ${{ secrets.PYPI_TOKEN }} --skip-existing dist/*
+
+  notify:
+    if: ${{ failure() }}
+    needs:
+      - lint
+      - tests
+      - build_sdist
+    uses: Drakkar-Software/.github/.github/workflows/failure_notify_workflow.yml@master
+    secrets:
+      DISCORD_GITHUB_WEBHOOK: ${{ secrets.DISCORD_GITHUB_WEBHOOK }}

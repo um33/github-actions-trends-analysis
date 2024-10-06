@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discord server
+    url: https://discord.gg/djs
+    about: Visit our Discord server for questions and support requests.
+  - name: Guide discussion boards
+    url: https://github.com/discordjs/discord.js/discussions
+    about: Ask questions and receive answers.
+  - name: discord.js issues
+    url: https://github.com/discordjs/discord.js/issues/new/choose
+    about: Issue tracker for the library discord.js.

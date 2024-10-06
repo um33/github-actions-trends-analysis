@@ -1,0 +1,132 @@
+name: Issue Report
+description: File an issue report
+title: "[Issue]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue. Before submitting a report, please do the following:
+        1. Please head to our forum or chat rooms and troubleshoot with volunteers if you haven't already. Links can be found here: https://jellyfin.org/contact/
+        2. Please search the bug tracker for similar issues. If you do find one, please comment there instead of opening a new bug report.
+        3. If you decide to open a new report, please provide as much detail as possible.
+        4. Please **ONLY** report **ONE** issue per report. If you are experiencing multiple issues, please open multiple reports.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Please describe your bug
+      description: Also tell us, what did you expect to happen?
+      placeholder: |
+        The more information that you are able to provide, the better. Did you do anything before this happened? Did you upgrade or change anything? Any screenshots or logs you can provide will be helpful.
+        If you are using an old release of Jellyfin, please also explain why.
+    validations:
+      required: true
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Reproduction Steps
+      placeholder: |
+        1. In this environment...
+        2. With this config...
+        3. Run '...'
+        4. See error...
+    validations:
+      required: true
+  - type: dropdown
+    id: version
+    attributes:
+      label: Jellyfin Version
+      description: What version of Jellyfin are you running?
+      options:
+        - 10.8.13
+        - 10.8.12
+        - 10.8.11 or older (please specify)
+        - Unstable (master branch)
+    validations:
+      required: true
+  - type: input
+    id: version-other
+    attributes:
+      label: "if other:"
+      placeholder: Other
+  - type: textarea
+    attributes:
+      label: Environment
+      description: |
+        Examples:
+        - **OS**: [e.g. Debian 11, Windows 10]
+        - **Linux Kernel**: [e.g. none, 5.15, 6.1, etc.]
+        - **Virtualization**: [e.g. Docker, KVM, LXC]
+        - **Clients**: [Browser, Android, Fire Stick, etc.]
+        - **Browser**: [e.g. Firefox 91, Chrome 93, Safari 13]
+        - **FFmpeg Version**: [e.g. 5.1.2-Jellyfin]
+        - **Playback**: [Direct Play, Remux, Direct Stream, Transcode]
+        - **Hardware Acceleration**: [e.g. none, VAAPI, NVENC, etc.]
+        - **GPU Model**: [e.g. none, UHD630, GTX1050, etc.]
+        - **Installed Plugins**: [e.g. none, Fanart, Anime, etc.]
+        - **Reverse Proxy**: [e.g. none, nginx, apache, etc.]
+        - **Base URL**: [e.g. none, yes: /example]
+        - **Networking**: [e.g. Host, Bridge/NAT]
+        - **Storage**: [e.g. local, NFS, cloud]
+      value: |
+        - OS:
+        - Linux Kernel:
+        - Virtualization:
+        - Clients:
+        - Browser:
+        - FFmpeg Version:
+        - Playback Method:
+        - Hardware Acceleration:
+        - GPU Model:
+        - Plugins:
+        - Reverse Proxy:
+        - Base URL:
+        - Networking:
+        - Storage:
+      render: markdown
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        When providing logs, please keep the following things in mind.
+        1. **DO NOT** use external paste services.
+        2. Please provide complete logs.
+          - For server logs, include everything you think is important plus *10 lines before and after*
+          - For ffmpeg logs, please provide the entire file unmodified.
+        3. Please do not run logs through any translation program. Especially beware if your browser translates pages by default.
+        4. Please do not include logs as screenshots, with the only exception being client logs in browsers.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Jellyfin logs
+      description: Please copy and paste any relevant log output. This can be found in Dashboard > Logs.
+      placeholder: For playback issues, browser/client and FFmpeg logs may be more useful.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: ffmpeg-logs
+    attributes:
+      label: FFmpeg logs
+      description: Please copy and paste recent FFmpeg log output. This can be found in Dashboard > Logs > FFmpeg*.log.
+      placeholder: This field is mandatory for debugging hardware transcoding issues. It's important to include the specific codec details. If no FFmpeg logs appear, the file was Direct Played and did not use FFmpeg.
+      render: shell
+  - type: textarea
+    id: browserlogs
+    attributes:
+      label: Please attach any browser or client logs here
+      placeholder: Access browser logs by using the F12 to bring up the console. Screenshots are typically easier to read than raw logs. For clients such as Android or iOS, please see our documentation.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Please attach any screenshots here
+      placeholder: Images can be pasted directly into the textbox and will be hosted by github.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://jellyfin.org/docs/general/community-standards.html#code-of-conduct)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

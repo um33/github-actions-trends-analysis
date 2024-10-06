@@ -1,0 +1,88 @@
+name: PlatformIO Build
+
+on:
+  push:
+    branches:
+      - dev
+      - 'test/**'
+    tags-ignore: '**'
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    - name: Cache CMake
+      uses: actions/cache@v3
+      with:
+        path: code/test/unit/cache
+        key: ${{ runner.os }}-cmake-${{ hashFiles('code/test/unit/CMakeLists.txt') }}
+    - name: Host tests
+      run: |
+        ./ci_install.sh host
+        ./ci_script.sh host
+
+  webui:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    - name: Cache Node
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-npm-${{ hashFiles('code/package-lock.json', 'code/package.json') }}
+    - name: WebUI tests
+      run: |
+        ./ci_install.sh webui
+        ./ci_script.sh webui
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [nodemcu-lolin, esp8266-4m-base, esp8266-4m-latest-base]
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('ci_install.sh') }}
+    - name: Cache PlatformIO
+      uses: actions/cache@v3
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-build-${{ matrix.env }}-${{ hashFiles('code/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ matrix.env }}-
+          ${{ runner.os }}-build-
+    - name: Cache libraries
+      uses: actions/cache@v3
+      with:
+        path: libraries/
+        key: ${{ runner.os }}-libraries-${{ hashFiles('code/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-libraries-
+    - name: PlatformIO prepare
+      run: |
+        git config --global advice.detachedHead false
+        ./ci_install.sh build ${{ matrix.env }}
+    - if: ${{ matrix.env == 'nodemcu-lolin' }}
+      name: Basic build
+      run: |
+        ./ci_script.sh build ${{ matrix.env }}
+    - if: ${{ endsWith(matrix.env, '-base') }}
+      name: Test build
+      run: |
+        ./ci_script.sh test ${{ matrix.env }}

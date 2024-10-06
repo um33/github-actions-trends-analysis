@@ -1,0 +1,51 @@
+name: MacOS
+
+on:
+  push:
+  pull_request:
+    types: [ opened, reopened, synchronize ]
+
+jobs:
+  builds:
+    strategy:
+      fail-fast: false
+      matrix: 
+        os: [ 'macos-11', 'macos-12' ]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        # Unlink and re-link to prevent errors when github mac runner images
+        # install python outside of brew, for example:
+        # https://github.com/orgs/Homebrew/discussions/3895
+        # https://github.com/actions/setup-python/issues/577
+        # https://github.com/actions/runner-images/issues/6459
+        # https://github.com/actions/runner-images/issues/6507
+        # https://github.com/actions/runner-images/issues/2322
+        brew list -1 | grep python | while read formula; do brew unlink $formula; brew link --overwrite $formula; done
+
+        brew update
+        brew install \
+            wget \
+            pkg-config \
+            libevent \
+            openssl@1.1 \
+            sqlite \
+            hiredis \
+            mongo-c-driver \
+            libmicrohttpd
+
+    - name: Configure
+      run: PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/opt/openssl@1.1/lib/pkgconfig ./configure
+    - name: Compile
+      run: make
+    - name: Unit Test
+      run: make check
+    - name: Integration Test
+      working-directory: examples
+      run: ./run_tests.sh

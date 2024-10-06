@@ -1,0 +1,16 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "cargo-test",
+      "pattern": [
+        {
+          "regexp": "^.*panicked\\s+at\\s+'(.*)',\\s+(.*):(\\d+):(\\d+)$",
+          "message": 1,
+          "file": 2,
+          "line": 3,
+          "column": 4
+        }
+      ]
+    }
+  ]
+}

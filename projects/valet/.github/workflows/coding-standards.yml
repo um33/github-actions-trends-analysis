@@ -1,0 +1,13 @@
+name: fix code styling
+
+on:
+  push:
+    branches:
+      - master
+      - '*.x'
+
+jobs:
+  lint:
+    uses: laravel/.github/.github/workflows/coding-standards.yml@main
+    with:
+      fix: ${{ github.ref_name == 'master' }}

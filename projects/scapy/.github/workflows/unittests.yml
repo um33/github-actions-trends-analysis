@@ -1,0 +1,178 @@
+name: Scapy unit tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Code health check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Scapy
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tox
+        run: pip install tox
+      - name: Run flake8 tests
+        run: tox -e flake8
+      - name: Run codespell
+        run: tox -e spell
+      - name: Run twine check
+        run: tox -e twine
+      - name: Run gitarchive check
+        run: tox -e gitarchive
+  docs:
+    # 'runs-on' and 'python-version' should match the ones defined in .readthedocs.yml
+    name: Build doc
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Scapy
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tox
+        run: pip install tox
+      - name: Build docs
+        run: tox -e docs
+  spdx:
+    name: Check SPDX identifiers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Scapy
+        uses: actions/checkout@v4
+      - name: Launch script
+        run: bash scapy/tools/check_spdx.sh
+  mypy:
+    name: Type hints check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Scapy
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tox
+        run: pip install tox
+      - name: Run mypy
+        run: tox -e mypy
+
+  utscapy:
+    name: ${{ matrix.os }} ${{ matrix.installmode }} ${{ matrix.python }} ${{ matrix.mode }} ${{ matrix.flags }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.allow-failure == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        mode: [non_root]
+        installmode: ['']
+        flags: [" -K scanner"]
+        allow-failure: ['false']
+        include:
+          # Linux root tests
+          - os: ubuntu-latest
+            python: "3.12"
+            mode: root
+            flags: " -K scanner"
+          # PyPy tests: root only
+          - os: ubuntu-latest
+            python: "pypy3.9"
+            mode: root
+            flags: " -K scanner"
+          # Libpcap test
+          - os: ubuntu-latest
+            python: "3.12"
+            mode: root
+            installmode: 'libpcap'
+            flags: " -K scanner"
+          # macOS tests
+          - os: macos-12
+            python: "3.12"
+            mode: both
+            flags: " -K scanner"
+          # Scanner tests
+          - os: ubuntu-latest
+            python: "3.12"
+            mode: root
+            allow-failure: 'true'
+            flags: " -k scanner"
+          - os: ubuntu-latest
+            python: "pypy3.9"
+            mode: root
+            allow-failure: 'true'
+            flags: " -k scanner"
+          - os: macos-12
+            python: "3.12"
+            mode: both
+            allow-failure: 'true'
+            flags: " -k scanner"
+    steps:
+      - name: Checkout Scapy
+        uses: actions/checkout@v4
+        # Codecov requires a fetch-depth > 1
+        with:
+          fetch-depth: 2
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Tox and any other packages
+        run: ./.config/ci/install.sh ${{ matrix.installmode }}
+      - name: Run Tox
+        run: UT_FLAGS="${{ matrix.flags }}" ./.config/ci/test.sh ${{ matrix.python }} ${{ matrix.mode }}
+      - name: Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  cryptography:
+    name: pyca/cryptography test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install tox
+      run: pip install tox
+    # pyca/cryptography's CI installs cryptography
+    # then runs the tests. We therefore didn't include it in tox
+    - name: Install cryptography
+      run: pip install cryptography
+    - name: Run tests
+      run: tox -e cryptography
+
+  # CODE-QL
+  analyze:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+         languages: 'python'
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3

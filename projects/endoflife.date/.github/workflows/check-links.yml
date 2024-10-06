@@ -1,0 +1,26 @@
+name: Check URLs
+
+on:
+  workflow_dispatch: # Manually run workflow.
+  schedule:
+    - cron: '0 0 * * 0' # At 00:00 on Sunday.
+
+jobs:
+  check_urls:
+    runs-on: ubuntu-latest
+    # Do not run this job on forks, as it's not cool to query servers for nothing.
+    if: ${{ github.repository == 'endoflife-date/endoflife.date' }}
+    steps:
+      - name: Checkout site
+        uses: actions/checkout@v4
+
+      - name: Setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.1
+          bundler-cache: true
+
+      - name: Perform URLs check
+        run: bundle exec jekyll build
+        env:
+          MUST_CHECK_URLS: true

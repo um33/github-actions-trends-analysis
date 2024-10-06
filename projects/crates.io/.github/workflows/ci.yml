@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # renovate: datasource=crate depName=cargo-deny versioning=semver
+  CARGO_DENY_VERSION: 0.14.21
+  # renovate: datasource=crate depName=grcov versioning=semver
+  GRCOV_VERSION: 0.8.19
+  # renovate: datasource=npm depName=pnpm
+  PNPM_VERSION: 9.0.4
+
+jobs:
+  changed-files:
+    name: Changed Files
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: tj-actions/changed-files@0874344d6ebbaa00a27da73276ae7162fadcaf69 # v44.3.0
+        id: changed-files-non-js
+        with:
+          files_ignore: |
+            app/**
+            mirage/**
+            public/**
+            tests/**
+            .eslintrc
+            .template-lintrc.js
+            ember-cli-build.js
+            package.json
+            pnpm-lock.yaml
+            testem.js
+
+      - uses: tj-actions/changed-files@0874344d6ebbaa00a27da73276ae7162fadcaf69 # v44.3.0
+        id: changed-files-non-rust
+        with:
+          files_ignore: |
+            crates/**
+            migrations/**
+            src/**
+            build.rs
+            Cargo.lock
+            Cargo.toml
+            rust-toolchain.toml
+
+      - uses: tj-actions/changed-files@0874344d6ebbaa00a27da73276ae7162fadcaf69 # v44.3.0
+        id: changed-files-rust-lockfile
+        with:
+          files: Cargo.lock
+
+    outputs:
+      non-js: ${{ steps.changed-files-non-js.outputs.any_modified }}
+      non-rust: ${{ steps.changed-files-non-rust.outputs.any_modified }}
+      rust-lockfile: ${{ steps.changed-files-rust-lockfile.outputs.any_modified }}
+
+  backend-lint:
+    name: Backend / Lint
+    runs-on: ubuntu-22.04
+    needs: changed-files
+    if: needs.changed-files.outputs.non-js == 'true'
+
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - run: rustup component add rustfmt
+      - run: rustup component add clippy
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+
+      - run: cargo fmt --check --all
+      - run: cargo clippy --all-targets --all-features --workspace
+      - run: cargo doc --no-deps --document-private-items
+
+  backend-cargo-deny:
+    name: Backend / cargo-deny
+    runs-on: ubuntu-22.04
+    needs: changed-files
+    if: github.event_name != 'pull_request' || needs.changed-files.outputs.rust-lockfile == 'true'
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+
+      - run: cargo install cargo-deny --vers ${{ env.CARGO_DENY_VERSION }}
+      - run: cargo deny check
+
+  backend-test:
+    name: Backend / Test
+    runs-on: ubuntu-22.04
+    needs: changed-files
+    if: needs.changed-files.outputs.non-js == 'true'
+
+    env:
+      RUST_BACKTRACE: 1
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost/postgres
+      RUSTFLAGS: "-D warnings -Cinstrument-coverage"
+      MALLOC_CONF: "background_thread:true,abort_conf:true,abort:true,junk:true"
+
+    services:
+      postgres:
+        image: postgres:13@sha256:eee22204934b36935237e7c92355e3178cfdf3c5377dec9c19c848115cc4637b
+        env:
+          POSTGRES_PASSWORD: postgres
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+      - run: cargo build --tests --workspace
+      - run: cargo test --workspace
+
+      - run: curl -sL https://github.com/mozilla/grcov/releases/download/v${{ env.GRCOV_VERSION }}/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar xjf -
+      - run: rustup component add llvm-tools
+      - run: ./grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" --ignore "target/debug/build/**" -o target/coverage.lcov
+
+      - uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+        with:
+          files: target/coverage.lcov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  frontend-lint:
+    name: Frontend / Lint
+    runs-on: ubuntu-22.04
+    needs: changed-files
+    if: needs.changed-files.outputs.non-rust == 'true'
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3.0.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          cache: pnpm
+          node-version-file: package.json
+
+      - run: pnpm install
+
+      - run: pnpm lint:hbs
+      - run: pnpm lint:js
+      - run: pnpm lint:deps
+      - run: pnpm prettier:check
+
+  frontend-test:
+    name: Frontend / Test
+    runs-on: ubuntu-22.04
+    needs: changed-files
+    if: needs.changed-files.outputs.non-rust == 'true'
+
+    env:
+      JOBS: 1 # See https://git.io/vdao3 for details.
+
+      # Percy secrets are included here to enable Percy's GitHub integration
+      # on community-submitted PRs
+      PERCY_TOKEN: web_0a783d8086b6f996809f3e751d032dd6d156782082bcd1423b9b860113c75054
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3.0.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          cache: pnpm
+          node-version-file: package.json
+
+      - run: pnpm install
+
+      - if: github.repository == 'rust-lang/crates.io'
+        run: pnpm percy exec -- pnpm test-coverage
+
+      - if: github.repository != 'rust-lang/crates.io'
+        run: pnpm test-coverage

@@ -1,0 +1,27 @@
+name: Elixir
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths-ignore:
+      - ".github/workflows/elixir.yml"
+      - ".github/actions/**"
+      - "**.ex"
+      - "**.exs"
+      - "**/mix.lock"
+      - "**/priv/**"
+      - "**/native/**"
+      - "**.rs"
+      - "**.toml"
+      - "**/Cargo.lock"
+      - "**/Makefile"
+      - "tools/nix/**"
+
+jobs:
+  lint:
+    name: Elixir - test
+    runs-on: ubuntu-22.04
+    steps:
+      - run: 'echo "Elixir - test - Ignored"'

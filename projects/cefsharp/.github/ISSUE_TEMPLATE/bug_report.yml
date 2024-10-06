@@ -1,0 +1,153 @@
+name: Bug Report
+description: Create a report for a reproducible bug
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please only open an issue if you have a **BUG** to report. for questions/assistance use [Discussions](https://github.com/cefsharp/CefSharp/discussions). If you are new to the project then please review the following:
+        1. [General Usage guide](https://github.com/cefsharp/CefSharp/wiki/General-Usage) includes examples and details of many common questions.
+        2. [Frequently Asked Questions](https://github.com/cefsharp/CefSharp/wiki/Frequently-asked-questions), lots of useful information there, specially if your having trouble deploying to a different machine.
+        3. GitHub has a fantastic search feature, it'll search through past issues/code. Use the Search box at the top of this page).
+        4. You can see all the `CefSharp` tagged issues on [Stackoverflow](http://stackoverflow.com/questions/tagged/cefsharp), lots of questions/answers.
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if an issue already exists for the bug you encountered.
+      options:
+      - label: I have searched both open/closed issues, no issue already exists.
+        required: true
+  - type: input
+    id: cefsharp-version
+    attributes:
+      label: CefSharp Version
+      description: What version are you using? Please only open an issue if you can reproduce the problem with version 122.1.120 or later.
+      placeholder: 122.1.120
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating System
+      multiple: false
+      options:
+        - Windows 10
+        - Windows 11
+        - Windows Server 2016
+        - Windows Server 2019
+        - Windows Server 2022
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      multiple: false
+      options:
+        - x64
+        - x86
+        - arm64
+        - AnyCPU
+    validations:
+      required: true
+  - type: input
+    id: dotnet-version
+    attributes:
+      label: .Net Version
+      description: |
+        What .Net version are you using?
+      placeholder: e.g. .Net 4.8 or .Net 6.0
+    validations:
+      required: true
+  - type: dropdown
+    id: cefsharp-implementation
+    attributes:
+      label: Implementation
+      multiple: false
+      options:
+        - WinForms
+        - WPF
+        - OffScreen
+    validations:
+      required: true
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Reproduction Steps
+      description: |
+        Please include minimal steps to reproduce the problem. E.g.: the smallest possible code snippet; or a small example project here on GitHub, with steps to run it. Include text/code as text rather than screenshots (so it shows up in searches and can copy/paste).
+        Does the problem reproduce using the [MinimalExample](https://github.com/cefsharp/CefSharp.MinimalExample)? You can fork the MinimalExample and use this as a base for your example.
+      placeholder: Minimal Reproduction
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: |
+        Provide a description of the expected behavior.
+      placeholder: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: |
+        Provide a description of the actual behavior observed. If applicable please include any error messages, exception or stacktraces.
+      placeholder: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression?
+      description: |
+        Did this work in a previous build or release of CefSharp? If you can try a previous release or build to find out, that can help us narrow down the problem. If you don't know, that's OK.
+      placeholder: Regression?
+    validations:
+      required: false
+  - type: textarea
+    id: known-workarounds
+    attributes:
+      label: Known Workarounds
+      description: |
+        Please provide a description of any known workarounds.
+      placeholder: Known Workarounds
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        To help determine where the problem needs to be fixed please download and test using the `CEF Sample Application(cefclient)`.
+          1. Download for [x86](https://cef-builds.spotifycdn.com/cef_binary_122.1.12%2Bg6e69d20%2Bchromium-122.0.6261.112_windows32_client.tar.bz2) or [x64](https://cef-builds.spotifycdn.com/cef_binary_122.1.12%2Bg6e69d20%2Bchromium-122.0.6261.112_windows64_client.tar.bz2) or [arm64](https://cef-builds.spotifycdn.com/cef_binary_122.1.12%2Bg6e69d20%2Bchromium-122.0.6261.112_windowsarm64_client.tar.bz2).
+          2. Extract tar.bz2 file
+          3. Execute cefclient.exe using the **command line args below**:
+          
+          For WPF/OffScreen `cefclient.exe --multi-threaded-message-loop --no-sandbox --off-screen-rendering-enabled --enable-gpu`
+          For WinForms `cefclient.exe --multi-threaded-message-loop --no-sandbox`
+  - type: dropdown
+    id: cefclient-testing
+    attributes:
+      label: Does this problem also occur in the CEF Sample Application
+      multiple: false
+      options:
+        - 'Yes using WPF/OffScreen command line args'
+        - 'Yes using WinForms command line args'
+        - 'No'
+        - Not Tested
+      description: |
+        If you can reproduce the problem with `cefclient` then please report the issue on [CEF Issue Tracker](https://github.com/chromiumembedded/cef/issues) (Make sure you search before opening an issue). If you open an issue here it will most likely be closed as `upstream` as the bug needs to be fixed in `CEF`.
+    validations:
+      required: true
+  - type: textarea
+    id: other-info
+    attributes:
+      label: Other information
+      description: |
+        If you are seeing a crash in `libcef.dll` then please download `libcef.dll.pdb` and place it next to `libcef.dll` to obtain a detailed stack trace, see [FAQ](https://github.com/cefsharp/CefSharp/wiki/Trouble-Shooting#loading-native-symbols-for-easier-diagnosis) for details.
+        Does the cef log provide any relevant information? (By default there should be a debug.log file in your bin directory)
+        Any other background information that's relevant? Are you doing something out of the ordinary? 3rd party controls?
+      placeholder: Other information
+    validations:
+      required: false

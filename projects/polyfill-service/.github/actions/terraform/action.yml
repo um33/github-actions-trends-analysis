@@ -1,0 +1,56 @@
+name: 'Terraform init/import/validate/plan/deploy'
+description: 'Do all the steps to deploy the application and infrastrcture changes'
+
+inputs:
+  fastly_vcl_service_id:
+    description: 'The Fastly VCL Service ID'
+    required: true
+  fastly_compute_service_id:
+    description: 'The Fastly Compute Service ID'
+    required: true
+  fastly_top_pops_config:
+    description: 'The Fastly VCL Service Top Pops Dictionary ID'
+    required: true
+  fastly_compute_edge_config:
+    description: 'The Fastly VCL Service Compute Dictionary ID'
+    required: true
+  fastly-api-token:
+    description: 'The Fastly API token to use for interacting with Fastly API'
+    required: true
+  terraform_version:
+    description: 'The Terraform version to use'
+    default: '1.4.0'
+  terraform_working_dir:
+    description: 'The directory container to run terraform within'
+    required: true
+  cli_config_credentials_token:
+    description: 'Terraform token'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.terraform_version }}
+        cli_config_credentials_token: ${{ inputs.cli_config_credentials_token }}
+    - name: 'Terraform Init'
+      shell: bash
+      run: terraform init
+      working-directory: ${{ inputs.terraform_working_dir }}
+    - name: 'Terraform Validate'
+      shell: bash
+      run: terraform validate
+      working-directory: ${{ inputs.terraform_working_dir }}
+    - name: 'Terraform Plan'
+      shell: bash
+      run: terraform plan -out=plan.tfplan -var-file="inputs.tfvars"
+      working-directory: ${{ inputs.terraform_working_dir }}
+      env:
+        FASTLY_API_KEY: ${{ inputs.fastly-api-token }}
+    - name: 'Terraform Apply'
+      shell: bash
+      run: terraform apply --auto-approve "plan.tfplan"
+      working-directory: ${{ inputs.terraform_working_dir }}
+      env:
+        FASTLY_API_KEY: ${{ inputs.fastly-api-token }}

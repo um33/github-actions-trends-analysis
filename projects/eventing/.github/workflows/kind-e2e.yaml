@@ -1,0 +1,175 @@
+name: KinD e2e tests
+
+on:
+  pull_request:
+    branches: [ 'main', 'master' ]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  e2e-tests:
+    name: e2e tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Keep running if one leg fails.
+      matrix:
+        k8s-version:
+        - v1.28.7
+        - v1.29.0
+
+        test-suite:
+        - ./test/rekt/...
+        - ./test/e2e
+        - ./test/conformance
+        - ./test/experimental
+
+        # Map between K8s and KinD versions.
+        # This is attempting to make it a bit clearer what's being tested.
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.20.0
+        include:
+        - k8s-version: v1.28.7
+          kind-version: v0.21.0
+          kind-image-sha: sha256:9bc6c451a289cf96ad0bbaf33d416901de6fd632415b076ab05f5fa7e4f65c58
+        - k8s-version: v1.29.0
+          kind-version: v0.21.0
+          kind-image-sha: sha256:eaa1450915475849a73a9227b8f201df25e55e268e5d619312131292e324d570
+
+        # Add the flags we use for each of these test suites.
+        - test-suite: ./test/e2e
+          extra-test-flags: >
+            -channels=messaging.knative.dev/v1:Channel,messaging.knative.dev/v1:InMemoryChannel
+            -sources=sources.knative.dev/v1:ApiServerSource,sources.knative.dev/v1:ContainerSource,sources.knative.dev/v1beta2:PingSource
+        - test-suite: ./test/conformance
+          extra-test-flags: >
+            -brokers=eventing.knative.dev/v1:MTChannelBasedBroker
+            -channels=messaging.knative.dev/v1:Channel,messaging.knative.dev/v1:InMemoryChannel
+            -sources=sources.knative.dev/v1:ApiServerSource,sources.knative.dev/v1:ContainerSource,sources.knative.dev/v1beta2:PingSource
+    env:
+      KO_DOCKER_REPO: kind.local
+      SYSTEM_NAMESPACE: knative-eventing
+      # Use a semi-random cluster suffix, but somewhat predictable
+      # so reruns don't just give us a completely new value.
+      CLUSTER_SUFFIX: c${{ github.run_id }}.local
+      ARTIFACTS: ${{ github.workspace }}/artifacts
+
+      NODE_VERSION: ${{ matrix.k8s-version }}
+      NODE_SHA: ${{ matrix.kind-image-sha }}
+
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.21.x
+
+    # Install the latest release of ko
+    - name: Install ko
+      uses: ko-build/setup-ko@v0.6
+
+    - name: Check out code onto GOPATH
+      uses: actions/checkout@v2
+
+    - name: Install KinD
+      run: |
+        set -x
+
+        # Disable swap otherwise memory enforcement doesn't work
+        # See: https://kubernetes.slack.com/archives/CEKK1KTN2/p1600009955324200
+        sudo swapoff -a
+        sudo rm -f /swapfile
+
+        curl -Lo ./kind https://github.com/kubernetes-sigs/kind/releases/download/${{ matrix.kind-version }}/kind-$(uname)-amd64
+        chmod +x ./kind
+        sudo mv kind /usr/local/bin
+
+    - name: Create KinD Cluster
+      run: ./hack/create-kind-cluster.sh
+
+    - name: Install Knative Eventing
+      run: |
+        set -o pipefail
+
+        kubectl create namespace ${SYSTEM_NAMESPACE}
+
+        export KO_FLAGS="--platform=linux/amd64"
+        source ./test/e2e-common.sh
+        knative_setup
+
+        # Be KinD to these tests.
+        kubectl scale -n${SYSTEM_NAMESPACE} deployment/chaosduck --replicas=0
+
+    - name: Test Setup
+      run: |
+        source ./test/e2e-common.sh
+        test_setup
+
+    - name: Apply experimental features config
+      if: matrix.test-suite == './test/experimental'
+      run: |
+        kubectl apply -f ./test/experimental/config
+
+    - name: Wait for things to be up
+      run: |
+        set -e
+        source ./vendor/knative.dev/hack/infra-library.sh
+        wait_until_pods_running ${SYSTEM_NAMESPACE}
+
+    - name: Run e2e Tests
+      run: |
+        export CLUSTER_DOMAIN=${CLUSTER_SUFFIX}
+        # Run the tests tagged as e2e on the KinD cluster.
+        go test -race -count=1 -parallel=12 -timeout=90m -tags=e2e \
+           ${{ matrix.test-suite }} ${{ matrix.extra-test-flags }}
+
+    - name: Collect system diagnostics
+      if: ${{ failure() }}
+      run: |
+        echo '::group:: all pods'
+        kubectl get pods --all-namespaces=true
+        echo '::endgroup::'
+
+        echo '::group:: describe system pods'
+        kubectl -n${SYSTEM_NAMESPACE} describe pods
+        echo '::endgroup::'
+
+        for x in $(kubectl get pods -n${SYSTEM_NAMESPACE} -oname); do
+          echo "::group:: describe system $x"
+          kubectl -n${SYSTEM_NAMESPACE} describe $x
+          echo '::endgroup::'
+
+          echo "::group:: $x system logs"
+          kubectl -n${SYSTEM_NAMESPACE} logs $x --all-containers
+          echo '::endgroup::'
+        done
+
+        echo "::group:: all events"
+          kubectl get events --all-namespaces=true
+        echo '::endgroup::'
+
+    - name: Dump Artifacts
+      if: ${{ failure() }}
+      run: |
+        if [[ -d ${{ env.ARTIFACTS }} ]]; then
+          cd ${{ env.ARTIFACTS }}
+          for x in $(find . -type f); do
+            echo "::group:: artifact $x"
+            cat $x
+            echo '::endgroup::'
+          done
+        fi
+
+    - name: Post failure notice to Slack
+      uses: rtCamp/action-slack-notify@v2.1.0
+      if: ${{ failure() && github.event_name != 'pull_request' }}
+      env:
+        SLACK_ICON: http://github.com/knative.png?size=48
+        SLACK_USERNAME: github-actions
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+        SLACK_CHANNEL: 'eventing'
+        MSG_MINIMAL: 'true'
+        SLACK_TITLE: Periodic e2e on kind on ${{ matrix.k8s-version }} failed.
+        SLACK_MESSAGE: |
+          For detailed logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -1,0 +1,20 @@
+name: Check PR change log
+
+on:
+  # So it cannot be skipped.
+  pull_request_target:
+    types: [opened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog_checker:
+    name: Check if towncrier change log entry is correct
+    runs-on: ubuntu-latest
+    steps:
+    - uses: scientific-python/action-towncrier-changelog@4755e7510a07c6f6817cb607ffb9a711d3d62422  # 0.1.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        BOT_USERNAME: gilesbot

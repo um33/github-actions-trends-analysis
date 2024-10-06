@@ -1,0 +1,89 @@
+name: Lint and Test Chart
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/lint-test-chart.yaml
+      - "charts/metrics-server/**"
+
+jobs:
+  lint-test:
+    name: Lint & Test
+    if: github.repository == 'kubernetes-sigs/metrics-server'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 #v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: Set-up Python
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+        with:
+          python-version: "3.x"
+
+      - name: Set-up Helm
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+
+      - name: Set-up chart-testing
+        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+
+      - name: Check for changes
+        id: changes
+        run: |
+          changed="$(ct list-changed)"
+          if [[ -n "${changed}" ]]
+          then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Get chart version
+        id: chart_version
+        if: steps.changes.outputs.changed == 'true'
+        uses: mikefarah/yq@9adde1ac14bb283b8955d2b0d567bcaf3c69e639 # v4.42.1
+        with:
+          cmd: yq eval '.version' './charts/metrics-server/Chart.yaml'
+
+      - name: Get changelog entry
+        if: steps.changes.outputs.changed == 'true'
+        uses: mindsers/changelog-reader-action@32aa5b4c155d76c94e4ec883a223c947b2f02656 # v2.2.3
+        with:
+          path: charts/metrics-server/CHANGELOG.md
+          version: ${{ steps.chart_version.outputs.result }}
+
+      - name: Set-up Artifact Hub CLI
+        if: steps.changes.outputs.changed == 'true'
+        uses: action-stars/install-tool-from-github-release@9019d0a3125e2f45a48858afb632e6dbef663d79 # v0.2.2
+        with:
+          github_token: ${{ github.token }}
+          owner: artifacthub
+          repository: hub
+          name: ah
+          check_command: ah version
+          version: latest
+
+      - name: Run Artifact Hub lint
+        if: steps.changes.outputs.changed == 'true'
+        run: ah lint --kind helm || exit 1
+
+      - name: Run chart-testing lint
+        if: steps.changes.outputs.changed == 'true'
+        run: ct lint --check-version-increment=false
+
+      - name: Create Kind cluster
+        if: steps.changes.outputs.changed == 'true'
+        uses: helm/kind-action@99576bfa6ddf9a8e612d83b513da5a75875caced # v1.9.0
+        with:
+          wait: 120s
+
+      - name: Run chart-testing install
+        if: steps.changes.outputs.changed == 'true'
+        run: ct install

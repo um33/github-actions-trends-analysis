@@ -1,0 +1,39 @@
+name: Chromatic
+
+# Runs chromatic on:
+# - every push to main (to create a chromatic baseline)
+# - every pull request where there are changes in stories/ or packages/ and the PR is not in draft mode
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'stories/**'
+      - 'packages/**'
+
+jobs:
+  chromatic:
+    name: Storybook Publish
+    if: github.event.pull_request.draft == false && github.repository == 'FormidableLabs/victory'
+    runs-on: ubuntu-latest
+    steps:
+      # requires all branches and tags to be fetched for chromatic
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+        with:
+          node-version: 18.x
+
+      - name: Build Victory
+        run: pnpm run build:lib:esm
+
+      - name: Publish to Chromatic
+        uses: chromaui/action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}

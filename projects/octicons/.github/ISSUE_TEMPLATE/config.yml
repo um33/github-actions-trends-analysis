@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+
+contact_links:
+    - name: Add to the Octicon library?
+      url: https://github.com/github/primer
+      about: Open an issue in github/primer (for GitHub staff only!)

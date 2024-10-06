@@ -1,0 +1,51 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        env:
+          CI: true
+        run: npm install
+
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        run: npm audit signatures
+
+      - name: Build the plugin
+        run: npm run build
+
+      - name: Publish the plugin
+        if: success()
+        run: npx semantic-release
+
+      - name: Get npm package version using jq
+        if: success()
+        id: get_version
+        run: |
+          VERSION=$(jq -r ".version" package.json)
+          echo "::set-output name=version::$VERSION"

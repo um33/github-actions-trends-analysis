@@ -1,0 +1,67 @@
+name: "Update searx.data"
+on:
+  schedule:
+    - cron: "59 23 28 * *"
+  workflow_dispatch:
+
+jobs:
+  updateData:
+    name: Update data - ${{ matrix.fetch }}
+    runs-on: ubuntu-20.04
+    if: ${{ github.repository_owner == 'searxng'}}
+    strategy:
+      fail-fast: false
+      matrix:
+        fetch:
+          - update_ahmia_blacklist.py
+          - update_currencies.py
+          - update_external_bangs.py
+          - update_firefox_version.py
+          - update_engine_traits.py
+          - update_wikidata_units.py
+          - update_engine_descriptions.py
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ubuntu packages
+        run: |
+          sudo ./utils/searxng.sh install packages
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+          architecture: 'x64'
+
+      - name: Install Python dependencies
+        run: |
+          make V=1 install
+
+      - name: Fetch data
+        env:
+          FETCH_SCRIPT: ./searxng_extra/update/${{ matrix.fetch }}
+        run: |
+          V=1 ./manage pyenv.cmd python "$FETCH_SCRIPT"
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v3
+        with:
+          commit-message: '[data] update searx.data - ${{ matrix.fetch }}'
+          committer: searxng-bot <noreply@github.com>
+          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          signoff: false
+          branch: update_data_${{ matrix.fetch }}
+          delete-branch: true
+          draft: false
+          title: '[data] update searx.data - ${{ matrix.fetch }}'
+          body: |
+            update searx.data - ${{ matrix.fetch }}
+          labels: |
+            data
+
+      - name: Check outputs
+        run: |
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"

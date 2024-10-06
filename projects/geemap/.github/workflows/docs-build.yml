@@ -1,0 +1,55 @@
+name: docs-build
+on:
+    pull_request:
+        branches:
+            - master
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+            - name: Install GDAL
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install --find-links=https://girder.github.io/large_image_wheels --no-cache GDAL pyproj
+            - name: Test GDAL installation
+              run: |
+                  python -c "from osgeo import gdal"
+                  gdalinfo --version
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install --user --no-cache-dir Cython
+                  pip install .[all]
+            - name: LOAD EE CREDENTIALS
+              run: python ./.github/ee_token.py
+              env:
+                  EARTHENGINE_TOKEN: ${{ secrets.EARTHENGINE_TOKEN }}
+            - name: GEEMAP-TEST
+              run: |
+                  python -m unittest discover tests/
+            - run: pip install -r requirements_docs.txt
+            - run: cp -R examples/data docs/data
+            - run: mkdocs build
+              env:
+                  USE_FOLIUM: ${{ secrets.USE_FOLIUM }}
+                  USE_MKDOCS: ${{ secrets.USE_MKDOCS }}
+            - name: Deploy to Netlify
+              uses: nwtgck/actions-netlify@v2.0
+              with:
+                  publish-dir: "./site"
+                  production-branch: master
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  deploy-message: "Deploy from GitHub Actions"
+                  enable-pull-request-comment: true
+                  enable-commit-comment: false
+                  overwrites-pull-request-comment: true
+              env:
+                  NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+                  NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+              timeout-minutes: 10

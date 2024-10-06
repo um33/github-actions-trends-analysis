@@ -1,0 +1,38 @@
+name: Prepare Build For Ref
+description: Composable Action for ensuring efficient build
+
+inputs:
+  ref:
+    description: ref to use
+    required: true
+  name:
+    required: true
+  ext:
+    required: false
+    default: ''
+  build:
+    required: true
+  package:
+    required: true
+
+runs:
+  using: composite
+    - name: Restore ${{ inputs.name }}
+      id: restore-ref-artifact
+      uses: actions/cache@v4
+      with:
+        path: |
+          ./${{ inputs.package }}/dist-${{ inputs.ref }}${{ inputs.ext }}
+        key: ${{ inputs.ref }}
+        restore-keys: |
+          main
+
+    - if: ${{ steps.restore-ref-artifact.outputs.cache-hit != 'true' }}
+      name: Build ${{ inputs.name }}
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+          show-progress: false
+      run: pnpm install
+      run: ${{ inputs.build }} --output-path ./dist-${{ inputs.ref }}${{ inputs.ext }}

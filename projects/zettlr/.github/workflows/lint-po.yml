@@ -1,0 +1,42 @@
+name: Lint PO-Files
+
+# On every push to the lang folder, and whenever another workflow calls this one
+on:
+  workflow_call: {}
+  push:
+    paths:
+      - static/lang/**
+  pull_request:
+    paths:
+      - static/lang/**
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+# Ensure only a single linter workflow runs at any one time for any event and
+# ref. This allows multiple linters to run, but at most one per ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  po_lint:
+    name: Lint PO-Files
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # Always fetch the branch that triggered the event (develop or master)
+        ref: ${{ github.ref }}
+    - name: Setup NodeJS ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'yarn'
+    - name: Install packages
+      run: yarn install --immutable
+    - name: Run lint:po
+      run: yarn lint:po

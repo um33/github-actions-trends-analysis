@@ -1,0 +1,27 @@
+name: docs
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "www/**/*"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "www/**/*"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  htmltest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v3
+      - uses: cachix/install-nix-action@v26
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: nix develop .#docs --command task docs:test

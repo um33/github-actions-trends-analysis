@@ -1,0 +1,26 @@
+# Comment to be posted to on first time issues
+newIssueWelcomeComment: >
+  ![Welcome Banner](https://raw.githubusercontent.com/pymc-devs/brand/main/welcome-bot/BannerWelcome.jpg)]
+
+  :tada: Welcome to _PyMC_! :tada:
+  We're really excited to have your input into the project! :sparkling_heart:
+
+  <br>If you haven't done so already, please make sure you check out our [Contributing Guidelines](https://www.pymc.io/projects/docs/en/latest/contributing/index.html) and [Code of Conduct](https://github.com/pymc-devs/pymc/blob/main/CODE_OF_CONDUCT.md).
+
+
+# Comment to be posted to on PRs from first time contributors in your repository
+newPRWelcomeComment: >
+  ![Thank You Banner](https://raw.githubusercontent.com/pymc-devs/brand/main/welcome-bot/BannerThanks.jpg)]
+
+  :sparkling_heart: Thanks for opening this pull request! :sparkling_heart:
+  The _PyMC_ community really appreciates your time and effort to contribute to the project.
+  Please make sure you have read our [Contributing Guidelines](https://www.pymc.io/projects/docs/en/latest/contributing/index.html) and filled in our pull request template to the best of your ability.
+
+
+# Comment to be posted to on pull requests merged by a first time user
+firstPRMergeComment: >
+  ![Congratulations Banner](https://raw.githubusercontent.com/pymc-devs/brand/main/welcome-bot/BannerCongratulations.jpg)]
+
+  Congrats on merging your first pull request! :tada:
+  We here at _PyMC_ are proud of you! :sparkling_heart:
+  Thank you so much for your contribution :gift:

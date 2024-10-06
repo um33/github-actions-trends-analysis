@@ -1,0 +1,68 @@
+name: validate-atomics
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  validate-atomics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+      - name: Install poetry
+        run: pipx install poetry
+      - name: setup python3.11
+        uses: actions/setup-python@v5
+        id: setup-python
+        with:
+          python-version: "3.11.2"
+          cache: "poetry"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: validate the format of atomics tests against the spec
+        run: poetry run python atomic_red_team/runner.py validate
+
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+      - name: Install poetry
+        run: pipx install poetry
+      - name: setup python3.11
+        uses: actions/setup-python@v5
+        id: setup-python
+        with:
+          python-version: "3.11.2"
+          cache: "poetry"
+      - uses: actions/github-script@v7
+        id: get_pr_number
+        with:
+          script: |
+            if (context.issue.number) {
+              // Return issue number if present
+              return context.issue.number;
+            } else {
+              // Otherwise return issue number from commit
+              return (
+                await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  commit_sha: context.sha,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                })
+              ).data[0].number;
+            }
+          result-encoding: string
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+      - name: save labels and reviewers into a file.
+        run: |
+          poetry run python atomic_red_team/runner.py generate-labels --pr '${{steps.get_pr_number.outputs.result}}' --token ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: labels.json
+          path: pr/

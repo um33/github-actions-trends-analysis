@@ -1,0 +1,79 @@
+name: Elixir
+
+permissions:
+  contents: read
+
+on:
+  merge_group:
+  pull_request:
+    paths:
+      - ".github/workflows/elixir.yml"
+      - ".github/actions/**"
+      - "**.ex"
+      - "**.exs"
+      - "**/mix.lock"
+      - "**/priv/**"
+      - "**/native/**"
+      - "**.rs"
+      - "**.toml"
+      - "**/Cargo.lock"
+      - "**/Makefile"
+      - "tools/nix/**"
+  push:
+    paths:
+      - ".github/workflows/elixir.yml"
+      - ".github/actions/**"
+      - "**.ex"
+      - "**.exs"
+      - "**/mix.lock"
+      - "**/priv/**"
+      - "**/native/**"
+      - "**.rs"
+      - "**.toml"
+      - "**/Cargo.lock"
+      - "**/Makefile"
+      - "tools/nix/**"
+    branches:
+      - develop
+  schedule:
+    # We only save cache when a cron job is started, this is to ensure
+    # that we don't save cache on every push causing excessive caching
+    # and github deleting useful caches we use in our workflows, we now
+    # run a cron job every 2 hours so as to update the cache store with the
+    # latest data so that we don't have stale cache.
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Git commit sha, on which, to run this workflow
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: nix develop ../../tools/nix#elixir --command bash {0}
+
+jobs:
+  test:
+    name: Elixir - test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
+      - uses: ./.github/actions/cache_nix
+        with:
+          cache-unique-id: elixir
+        id: nix-installer
+      - uses: ./.github/actions/cache_elixir
+      - uses: ./.github/actions/cache_rust
+        with:
+          job_name: "elixir-cache"
+      - run: make test
+        working-directory: implementations/elixir
+      - run: make lint
+        working-directory: implementations/elixir
+      - uses: ./.github/actions/nix_upload_store
+        if: ${{ steps.nix-installer.outputs.cache-hit != 'true' }}

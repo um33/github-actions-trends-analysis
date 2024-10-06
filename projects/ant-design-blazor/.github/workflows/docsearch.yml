@@ -1,0 +1,21 @@
+name: DocSearch Scraper
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+
+jobs:
+  docsearch-scrape:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'ant-design-blazor'
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run algolia/docsearch-scraper
+        run: |
+          docker pull algolia/docsearch-scraper
+          docker run \
+            -e ALGOLIA_APP_ID=${{ secrets.algolia_application_id }} \
+            -e API_KEY=${{ secrets.algolia_api_key }} \
+            -e "CONFIG=$(cat ./algolia-config.json | jq -r tostring)" \
+            algolia/docsearch-scraper

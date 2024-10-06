@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    paths:
+      - .changeset/**
+      - .github/workflows/ci.yml
+      - 'packages/**'
+      - 'test/**'
+      - 'docker-examples/**'
+      - 'jest/**'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true  
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    name: setup verdaccio
+    services:
+      verdaccio:
+        image: verdaccio/verdaccio:5
+        ports:
+          - 4873:4873
+        env:
+          NODE_ENV: production
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - name: Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v3
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack install
+      - name: set store
+        run: |
+          mkdir ~/.pnpm-store
+          pnpm config set store-dir ~/.pnpm-store
+      - name: Install
+        run: pnpm install  --registry http://localhost:4873
+      - name: Cache .pnpm-store
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v3
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    needs: prepare
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - name: Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v3
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack install
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v3
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: set store
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+      - name: Install
+        run: pnpm install --ignore-scripts
+      - name: Lint
+        run: pnpm lint
+  format:
+    runs-on: ubuntu-latest
+    name: Format
+    needs: prepare
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - name: Use Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v3
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack install
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v3
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: set store
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+      - name: Install
+        run: pnpm install --ignore-scripts
+      - name: Lint
+        run: pnpm format:check
+  test:
+    needs: [prepare]
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest]
+        node_version: [18, 20, 21]
+    name: ${{ matrix.os }} / Node ${{ matrix.node_version }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - name: Use Node ${{ matrix.node_version }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v3
+        with:
+          node-version: ${{ matrix.node_version }}
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack prepare
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v3
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: set store
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+      - name: Install
+        run: pnpm install --ignore-scripts --registry http://localhost:4873
+      - name: build
+        run: pnpm build
+      - name: Test
+        run: pnpm test
+  sync-translations:
+    needs: [test]
+    runs-on: ubuntu-latest
+    name: synchronize translations
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v3
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack install
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v3
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: set store
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+      - name: Install
+        ## we need scripts, pupetter downloads aditional content
+        run: pnpm install --registry http://localhost:4873
+      - name: build
+        run: pnpm build
+      - name: generate website translations
+        run: pnpm --filter ...@verdaccio/website write-translations
+      - name: sync
+        env:
+          CROWDIN_VERDACCIO_API_KEY: ${{ secrets.CROWDIN_VERDACCIO_API_KEY }}
+          CONTEXT: production
+        run: pnpm crowdin:sync

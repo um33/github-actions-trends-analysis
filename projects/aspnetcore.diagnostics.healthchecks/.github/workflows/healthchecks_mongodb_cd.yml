@@ -1,0 +1,16 @@
+name: HealthChecks MongoDb CD
+
+on:
+  push:
+    tags:
+      - release-mongodb-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.MongoDb/HealthChecks.MongoDb.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.MongoDb

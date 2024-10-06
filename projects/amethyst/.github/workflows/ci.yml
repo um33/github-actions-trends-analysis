@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      # bors needs CI to trigger for pushes to its staging/trying branches
+      - staging
+      - trying
+  pull_request:
+
+env:
+  RUSTFLAGS: -Cdebuginfo=0
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.toolchain == 'nightly' }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-18.04]
+        toolchain: [stable, beta, nightly]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: install linux deps
+        run: |
+          sudo apt update
+          sudo apt install gcc pkg-config openssl libasound2-dev cmake build-essential python3 libfreetype6-dev libexpat1-dev libxcb-composite0-dev libssl-dev libx11-dev pulseaudio libxkbcommon-x11-0 libxkbcommon-dev
+        if: contains(matrix.os, 'ubuntu')
+
+      - name: install ${{ matrix.toolchain }} toolchain
+        id: install_toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          profile: minimal
+          override: true
+
+      - uses: seanmiddleditch/gha-setup-ninja@master
+        if: matrix.os == 'windows-latest'
+
+      - run: rustup component add rustfmt
+        if: matrix.toolchain == 'nightly' && matrix.os == 'ubuntu-latest'
+
+      - run: cargo +nightly fmt --all -- --check
+        if: matrix.toolchain == 'nightly' && matrix.os == 'ubuntu-latest'
+
+      - run: rustup component add clippy
+        if: matrix.toolchain == 'nightly'
+
+      - run: cargo +nightly clippy -Z unstable-options --workspace --all-targets --all-features
+        if: matrix.toolchain == 'nightly'
+
+      - name: clean clippy-generated amethyst libs
+        # Remove the clippy-generated amethyst files.
+        # They mess up `mdbook test` later on for some reason
+        run: rm -rf ./target/debug/deps/libamethyst*
+        if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+
+      - run: cargo test --workspace --all-features --all-targets
+
+      - run: cargo test --workspace --all-features --doc
+        continue-on-error: true
+
+      - uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+        if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+
+      - run: cargo install mdbook-linkcheck
+        if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+
+      - run: mdbook build book
+        if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+        continue-on-error: true
+
+      - run: mdbook test -L ./target/debug/deps book
+        if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+        continue-on-error: true

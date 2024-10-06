@@ -1,0 +1,30 @@
+name: publish
+
+on:
+  release:
+    types: published
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install
+      uses: borales/actions-yarn/@v2.0.0
+      with:
+        cmd: install
+    - name: Build js & d.ts files
+      uses: borales/actions-yarn/@v2.0.0
+      with:
+        cmd: build-publish
+    - name: Publish
+      run: |
+        echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_ACCESS_TOKEN }}' >> ~/.npmrc
+        npm publish
+    - name: notification
+      if: cancelled() == false
+      uses: xinthink/action-telegram@v1.1
+      with:
+        botToken: ${{ secrets.TelegramBotToken }}
+        chatId: ${{ secrets.TelegramTarget }}
+        jobStatus: ${{ job.status }}

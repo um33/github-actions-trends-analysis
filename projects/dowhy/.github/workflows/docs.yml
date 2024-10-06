@@ -1,0 +1,39 @@
+name: Build & Deploy Docs
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docs.yml"
+      - "dowhy/**"
+      - "docs/**"
+      - "pyproject.toml"
+      - "poetry.lock"
+  workflow_run:
+    workflows: [ "Build Docker image (docs)" ]
+    types:
+      - completed
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    container:
+      image: "ghcr.io/${{ github.repository_owner }}/dowhy-docs-generation:latest"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Python Dependencies
+        run: poetry install -E plotting -E pydot -E pygraphviz -E econml --with docs
+
+      - run: git config --global --add safe.directory /__w/dowhy/dowhy
+
+      - name: Build
+        run: ./docs/generate_docs.sh
+
+      - name: Commit and push to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dowhy-docs

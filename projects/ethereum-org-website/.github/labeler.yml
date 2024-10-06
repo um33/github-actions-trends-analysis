@@ -1,0 +1,42 @@
+"needs review 👀":
+  - src/**/*
+  - public/*
+
+"documentation 📖":
+  - README.md
+
+"tooling 🔧":
+  - .github/**/*
+  - src/scripts/*
+  - src/lib/*
+  - src/hooks/*
+
+"dependencies 📦":
+  - package.json
+  - yarn.lock
+
+"internal 🏠":
+  - .all-contributorsrc
+  - i18n.config.json
+  - next.config.js
+  - next-i18next.config,js
+  - next-sitemap.config.js
+  - tsconfig.json
+  - .nvmrc
+  - .eslintignore
+  - .eslintrc.json
+  - .prettierignore
+  - .prettierrc
+  - netlify.toml
+
+"translation 🌍":
+  - src/content/translations/**/*
+  - src/intl/**/*
+  - src/lib/utils/translations.ts
+
+"content 🖋️":
+  - src/pages/*
+  - public/content/**/*
+
+"event 📅":
+  - src/data/community-events.json

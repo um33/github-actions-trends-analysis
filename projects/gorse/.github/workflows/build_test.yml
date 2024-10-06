@@ -1,0 +1,200 @@
+name: test
+
+on:
+  push:
+    branches:    
+      - master
+      - 'release-**'
+  pull_request:
+    branches:    
+      - master
+      - 'release-**'
+
+jobs:
+  unit_test:
+    name: unit tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306
+        env:
+          MYSQL_ROOT_PASSWORD: password
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+      postgres:
+        image: postgres:10.0
+        ports:
+          - 5432
+        env:
+          POSTGRES_USER: gorse
+          POSTGRES_PASSWORD: gorse_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mongo:
+        image: mongo:4.0
+        ports:
+          - 27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: password
+        options: >-
+          --health-cmd mongo
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis/redis-stack:6.2.6-v9
+        ports:
+          - 6379
+
+    steps:
+    - name: Set up dataset
+      run: |
+        mkdir -p ~/.gorse/dataset
+        mkdir -p ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/ml-100k.zip -P ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/ml-1m.zip -P ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/pinterest-20.zip -P ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/frappe.zip -P ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/ml-tag.zip -P ~/.gorse/download
+        wget https://cdn.gorse.io/datasets/criteo.zip -P ~/.gorse/download
+        unzip ~/.gorse/download/ml-100k.zip -d ~/.gorse/dataset
+        unzip ~/.gorse/download/ml-1m.zip -d ~/.gorse/dataset
+        unzip ~/.gorse/download/pinterest-20.zip -d ~/.gorse/dataset
+        unzip ~/.gorse/download/frappe.zip -d ~/.gorse/dataset
+        unzip ~/.gorse/download/ml-tag.zip -d ~/.gorse/dataset
+        unzip ~/.gorse/download/criteo.zip -d ~/.gorse/dataset
+
+    - name: Set up Go 1.22.x
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.22.x
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        fi
+        
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -timeout 20m -v ./... -coverprofile=coverage.txt -covermode=atomic
+      env:
+        # MySQL
+        MYSQL_URI: mysql://root:password@tcp(localhost:${{ job.services.mysql.ports[3306] }})/
+        # Postgres
+        POSTGRES_URI: postgres://gorse:gorse_pass@localhost:${{ job.services.postgres.ports[5432] }}/
+        # MongoDB
+        MONGO_URI: mongodb://root:password@localhost:${{ job.services.mongo.ports[27017] }}/
+        # Redis
+        REDIS_URI: redis://localhost:${{ job.services.redis.ports[6379] }}/
+
+    - name: Upload 
+      run: bash <(curl -s https://codecov.io/bash)
+
+  integrate_test:
+    name: integrate tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        database: [mysql, postgres, mongo]
+    steps:
+    - uses: actions/checkout@v1
+
+    - uses: cuchi/jinja2-action@v1.2.0
+      with:
+        template: client/docker-compose.yml.j2
+        output_file: client/docker-compose.yml
+        strict: true
+        variables: |
+          database=${{ matrix.database }}
+
+    - name: Build the stack
+      run: docker-compose -f client/docker-compose.yml --project-directory . up -d
+      env:
+        DOCKER_BUILDKIT: 1
+
+    - name: Check the deployed service URL
+      uses: jtalk/url-health-check-action@v2
+      with:
+        # Check the following URLs one by one sequentially
+        url: http://127.0.0.1:8088/metrics|http://127.0.0.1:8087/metrics|http://127.0.0.1:8089/metrics
+        # Fail this action after this many failed attempts
+        max-attempts: 5
+        # Delay between retries
+        retry-delay: 5s
+        # Retry all errors, including 404. This option might trigger curl upgrade.
+        retry-all: true
+
+    - name: Set up Go 1.22.x
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.22.x
+      id: go
+
+    - name: Test
+      run: go test -tags='integrate_test' ./client/
+
+    - name: Download dataset
+      if: ${{ matrix.database == 'mysql' }}
+      run: wget https://cdn.gorse.io/example/github.sql
+
+    - name: Import dataset
+      if: ${{ matrix.database == 'mysql' }}
+      run: mysql -h 127.0.0.1 -u gorse -pgorse_pass gorse < github.sql
+
+  compat_test:
+    name: compatibility tests
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:10.2
+        ports:
+          - 3306
+        env:
+          MYSQL_ROOT_PASSWORD: password
+
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Test MariaDB
+        run: go test ./storage/data -run ^TestMySQL_
+        env:
+          MYSQL_URI: mysql://root:password@tcp(localhost:${{ job.services.mariadb.ports[3306] }})/
+
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          args: --timeout 20m

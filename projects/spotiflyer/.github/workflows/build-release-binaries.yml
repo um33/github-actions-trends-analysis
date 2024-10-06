@@ -1,0 +1,122 @@
+name: Build Release Binaries
+
+on:
+  [ workflow_dispatch ]
+
+jobs:
+  create-linux-package:
+    runs-on: ubuntu-latest
+    name: Create Deb Package
+    steps:
+      # Setup Java environment for the next steps
+      - name: Setup Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: 15
+
+      # Check out current repository
+      - name: Fetch Sources
+        uses: actions/checkout@v2.3.1
+
+      # Build Desktop Uber Jar application
+      - name: Desktop Uber Jar
+        run: ./gradlew :desktop:packageUberJarForCurrentOS
+
+      # Build Desktop Packaged application
+      - name: Desktop App Package
+        run: ./gradlew :desktop:packageDeb
+
+      # Create a Draft Release
+      - name: Draft Release
+        uses: ncipollo/release-action@v1
+        with:
+          draft: true
+          allowUpdates: true
+          tag: "v3.6.4"
+          artifacts: "desktop/build/compose/jars/*.jar,desktop/build/compose/binaries/main/*/*"
+          token: ${{ secrets.GH_TOKEN }}
+
+
+  # Windows Package
+  create-win-package:
+    runs-on: windows-latest
+    name: Create Windows Package
+    steps:
+      # Setup Java environment for the next steps
+      - name: Setup Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: 15
+
+      # Check out current repository
+      - name: Fetch Sources
+        uses: actions/checkout@v2.3.1
+
+      # Build Desktop Uber Jar application
+      - name: Desktop Uber Jar
+        run: ./gradlew :desktop:packageUberJarForCurrentOS
+
+      # Build Desktop Packaged application
+      - name: Desktop App Package
+        run: ./gradlew :desktop:packageMsi
+
+      # Build Android App
+      - name: Generate Release APK
+        run: ./gradlew :android:assembleRelease
+
+      # Sign Android Apk
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: android/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      # Create a Draft Release
+      - name: Draft Release
+        uses: ncipollo/release-action@v1
+        with:
+          draft: true
+          allowUpdates: true
+          tag: "v3.6.4"
+          artifacts: "desktop/build/compose/jars/*.jar,desktop/build/compose/binaries/main/*/*,android/build/outputs/apk/release/*signed.apk"
+          token: ${{ secrets.GH_TOKEN }}
+
+
+  create-mac-package:
+    runs-on: macos-latest
+    name: Create Mac Package
+    steps:
+      # Setup Java environment for the next steps
+      - name: Setup Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: 15
+
+      # Check out current repository
+      - name: Fetch Sources
+        uses: actions/checkout@v2.3.1
+
+      # Build Desktop Uber Jar application
+      - name: Desktop Uber Jar
+        run: ./gradlew :desktop:packageUberJarForCurrentOS
+
+      # Build Desktop Packaged application
+      - name: Desktop App Package
+        run: ./gradlew :desktop:packageDmg
+
+      # Create a Draft Release
+      - name: Draft Release
+        uses: ncipollo/release-action@v1
+        with:
+          draft: true
+          allowUpdates: true
+          tag: "v3.6.4"
+          artifacts: "desktop/build/compose/jars/*.jar,desktop/build/compose/binaries/main/*/*"
+          token: ${{ secrets.GH_TOKEN }}

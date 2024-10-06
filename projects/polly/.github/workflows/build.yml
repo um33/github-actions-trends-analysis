@@ -1,0 +1,319 @@
+name: build
+
+on:
+  push:
+    branches: [ main, release/* ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main, release/* ]
+  workflow_dispatch:
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION: 1
+  NUGET_XMLDOC_MODE: skip
+  TERM: xterm
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    env:
+      # HACK Running on Windows instead of Linux due to https://github.com/stryker-mutator/stryker-net/issues/2741
+      RUN_MUTATION_TESTS: ${{ matrix.os_name == 'windows' && !startsWith(github.ref, 'refs/tags/') && 'true' || 'false' }}
+
+    outputs:
+      dotnet-sdk-version: ${{ steps.setup-dotnet.outputs.dotnet-version }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest ]
+        include:
+          - os: macos-latest
+            os_name: macos
+          - os: ubuntu-latest
+            os_name: linux
+          - os: windows-latest
+            os_name: windows
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      id: setup-dotnet
+
+    - name: Setup NuGet cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Build, Test and Package
+      shell: pwsh
+      run: ./build.ps1
+
+    - name: Upload Coverage Reports
+      if: always()
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      with:
+        name: coverage-${{ matrix.os_name }}
+        path: ./artifacts/coverage-reports
+        if-no-files-found: ignore
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+      with:
+        files: ./artifacts/coverage-reports/Polly.Core.Tests/Cobertura.xml,./artifacts/coverage-reports/Polly.Specs/Cobertura.xml,./artifacts/coverage-reports/Polly.RateLimiting.Tests/Cobertura.xml,./artifacts/coverage-reports/Polly.Extensions.Tests/Cobertura.xml,./artifacts/coverage-reports/Polly.Testing.Tests/Cobertura.xml,
+        flags: ${{ matrix.os_name }}
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload Mutation Report
+      if: always() && env.RUN_MUTATION_TESTS == 'true'
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      with:
+        name: mutation-report
+        path: ./artifacts/mutation-report
+
+    - name: Publish NuGet packages
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      with:
+        name: packages-${{ matrix.os_name }}
+        path: ./artifacts/package/release
+        if-no-files-found: error
+
+    - name: Upload signing file list
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      if: matrix.os_name == 'windows'
+      with:
+        name: signing-config
+        path: eng/signing
+        if-no-files-found: error
+
+  validate-packages:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Download packages
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+      with:
+        name: packages-windows
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      with:
+        dotnet-version: ${{ needs.build.outputs.dotnet-sdk-version }}
+
+    - name: Validate NuGet packages
+      shell: pwsh
+      run: |
+        dotnet tool install --global dotnet-validate --version 0.0.1-preview.304
+        $packages = Get-ChildItem -Filter "*.nupkg" | ForEach-Object { $_.FullName }
+        $invalidPackages = 0
+        foreach ($package in $packages) {
+          dotnet validate package local $package
+          if ($LASTEXITCODE -ne 0) {
+            $invalidPackages++
+          }
+        }
+        if ($invalidPackages -gt 0) {
+          Write-Output "::error::$invalidPackages NuGet package(s) failed validation."
+        }
+
+  sign:
+    needs: [ build, validate-packages ]
+    runs-on: windows-latest
+    if: |
+      github.event.repository.fork == false &&
+      startsWith(github.ref, 'refs/tags/')
+
+    steps:
+
+    - name: Download unsigned packages
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+      with:
+        name: packages-windows
+        path: packages
+
+    - name: Download signing configuration
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+      with:
+        name: signing-config
+        path: signing-config
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      with:
+        dotnet-version: ${{ needs.build.outputs.dotnet-sdk-version }}
+
+    - name: Install Sign CLI tool
+      run: dotnet tool install --tool-path . sign --version 0.9.1-beta.23530.1
+
+    - name: Sign artifacts
+      shell: pwsh
+      run: >
+        ./sign code azure-key-vault
+        **/*.nupkg
+        --base-directory "${{ github.workspace }}/packages"
+        --file-list "${{ github.workspace }}/signing-config/filelist.txt"
+        --application-name "Polly"
+        --publisher-name "App vNext"
+        --description "Polly"
+        --description-url "https://github.com/${{ github.repository }}"
+        --azure-key-vault-certificate "${{ secrets.SIGN_CLI_CERT_NAME }}"
+        --azure-key-vault-client-id "${{ secrets.SIGN_CLI_APPLICATION_ID }}"
+        --azure-key-vault-client-secret "${{ secrets.SIGN_CLI_SECRET }}"
+        --azure-key-vault-tenant-id "${{ secrets.SIGN_CLI_TENANT_ID }}"
+        --azure-key-vault-url "${{ secrets.SIGN_CLI_VAULT_URI }}"
+        --verbosity "${{ runner.debug == '1' && 'Debug' || 'Warning' }}"
+
+    - name: Upload signed packages
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      with:
+        name: signed-packages
+        path: packages
+        if-no-files-found: error
+
+  validate-signed-packages:
+    needs: [ build, sign ]
+    runs-on: windows-latest
+    steps:
+
+    - name: Download packages
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+      with:
+        name: signed-packages
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      with:
+        dotnet-version: ${{ needs.build.outputs.dotnet-sdk-version }}
+
+    - name: Validate NuGet packages
+      shell: pwsh
+      run: |
+        dotnet tool install --global dotnet-validate --version 0.0.1-preview.304
+        $packages = Get-ChildItem -Filter "*.nupkg" | ForEach-Object { $_.FullName }
+        $invalidPackages = 0
+        foreach ($package in $packages) {
+          dotnet validate package local $package
+          if ($LASTEXITCODE -ne 0) {
+            $invalidPackages++
+          }
+        }
+        if ($invalidPackages -gt 0) {
+          Write-Output "::error::$invalidPackages NuGet package(s) failed validation."
+        }
+
+    - name: Checkout vcsjones/AuthenticodeLint
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      with:
+        path: AuthenticodeLint
+        ref: ae44826fdcebaa671b06591ea0b3b47fc946b79c
+        repository: martincostello/AuthenticodeLint
+        submodules: recursive
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      with:
+        global-json-file: AuthenticodeLint/global.json
+
+    - name: Validate signatures
+      shell: pwsh
+      run: |
+        $authlintSource = Join-Path "." "AuthenticodeLint"
+        $authLintProject = Join-Path $authlintSource "AuthenticodeLint" "AuthenticodeLint.csproj"
+        $artifacts = Join-Path $authlintSource "artifacts"
+        $authlint = Join-Path $artifacts "authlint.exe"
+
+        dotnet publish $authLintProject `
+          --configuration Release `
+          --output $artifacts `
+          --runtime win-x64 `
+          --self-contained false `
+          /p:NoWarn=NU1902
+
+        if ($LASTEXITCODE -ne 0) {
+          throw "Failed to publish AuthenticodeLint."
+        }
+
+        $packages = Get-ChildItem -Filter "*.nupkg" | ForEach-Object { $_.FullName }
+
+        if ($packages.Length -eq 0) {
+          throw "Failed to publish AuthenticodeLint."
+        }
+
+        $invalidPackages = 0
+        foreach ($package in $packages) {
+          $packageName = Split-Path $package -Leaf
+          $extractedNupkg = Join-Path "." "extracted" $packageName
+          Expand-Archive -Path $package -DestinationPath $extractedNupkg -Force
+
+          $dlls = Get-ChildItem -Path $extractedNupkg -Filter "*.dll" -Recurse | ForEach-Object { $_.FullName }
+
+          $invalidDlls = 0
+          foreach ($dll in $dlls) {
+            $authlintProcess = Start-Process -FilePath $authlint -ArgumentList @("-in", $dll, "-verbose") -PassThru
+            $authlintProcess.WaitForExit()
+
+            if ($authlintProcess.ExitCode -ne 0) {
+              Write-Output "::warning::$dll in NuGet package $package failed signature validation."
+              $invalidDlls++
+            } else {
+              Write-Output "$dll in NuGet package $package has a valid signature."
+            }
+          }
+
+          if ($invalidDlls -gt 0) {
+            $invalidPackages++
+          } else {
+            Write-Output "All $($dlls.Length) DLLs in NuGet package $package have valid signatures."
+          }
+
+          dotnet nuget verify $package
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::warning::$package failed signature validation."
+            $invalidPackages++
+          } else {
+            Write-Output "$package has a valid signature."
+          }
+        }
+        if ($invalidPackages -gt 0) {
+          Write-Output "::error::$invalidPackages NuGet package(s) failed signature validation."
+          throw "One or more NuGet packages failed signature validation."
+        } else {
+          Write-Output "All $($packages.Length) NuGet packages have valid signatures."
+        }
+
+  publish-nuget:
+    needs: [ build, validate-signed-packages ]
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Download signed packages
+      uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+      with:
+        name: signed-packages
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.0
+      with:
+        dotnet-version: ${{ needs.build.outputs.dotnet-sdk-version }}
+
+    - name: Push signed NuGet packages to NuGet.org
+      run: dotnet nuget push "*.nupkg" --api-key ${{ secrets.NUGET_TOKEN }} --skip-duplicate --source https://api.nuget.org/v3/index.json

@@ -1,0 +1,108 @@
+# Copyright 2023 The Nuclio Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+name: Long CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number'
+        required: false
+        default: ''
+
+env:
+  START_LABEL: long-ci-started
+  SUCCESS_LABEL: long-ci-succeeded
+  CANCELL_LABEL: long-ci-cancelled
+  FAILURE_LABEL: long-ci-failed
+  ADD_REMOVE_LABELS_SCRIPT_PATH: hack/scripts/ci/add-remove-labels.js
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  long_ci:
+    name: Long CI
+    runs-on: ubuntu-latest
+    steps:
+      # checkout from development
+      - uses: actions/checkout@v3
+        if: github.event.inputs.pr_number == ''
+
+      - if : ${{ github.event.inputs.pr_number != '' }}
+        name: Running on specific PR
+        run: echo "PR number - ${{ github.event.inputs.pr_number }}"
+
+      # checkout from PR
+      - uses: actions/checkout@v3
+        if: github.event.inputs.pr_number != ''
+        with:
+          fetch-depth: 0
+          ref: refs/pull/${{ github.event.inputs.pr_number }}/merge
+
+      - name: Freeing up disk space
+        run: "${GITHUB_WORKSPACE}/hack/scripts/ci/free-space.sh"
+
+      - uses: actions/setup-go@v3
+        with:
+          cache: true
+          go-version-file: go.mod
+
+      - name: Set labels
+        uses: actions/github-script@v3
+        if: github.event.inputs.pr_number != ''
+        env:
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = process.env.PR_NUMBER
+            const labelsToAdd = [ process.env.START_LABEL ]
+            const labelsToRemove = [ process.env.SUCCESS_LABEL, process.env.CANCELL_LABEL, process.env.FAILURE_LABEL ]
+            const script = require(`${ process.env.GITHUB_WORKSPACE }/${ process.env.ADD_REMOVE_LABELS_SCRIPT_PATH }`)
+            await script({ github, context, prNumber, labelsToAdd, labelsToRemove })
+
+      - name: Build
+        run: make build
+        env:
+          NUCLIO_NUCTL_CREATE_SYMLINK: false
+
+      - name: Test
+        run: make test
+
+      - name: System stats on failure
+        if: ${{ failure() }}
+        run: "${GITHUB_WORKSPACE}/hack/scripts/ci/system-stats.sh"
+
+      - if: ${{ success() }}
+        run: echo "LONG_CI_FINISH_LABEL=${{ env.SUCCESS_LABEL }}" >> $GITHUB_ENV
+
+      - if: ${{ failure() }}
+        run: echo "LONG_CI_FINISH_LABEL=${{ env.FAILURE_LABEL }}" >> $GITHUB_ENV
+
+      - if: ${{ cancelled() }}
+        run: echo "LONG_CI_FINISH_LABEL=${{ env.CANCELL_LABEL }}" >> $GITHUB_ENV
+
+      - name: Set labels
+        if: github.event.inputs.pr_number != ''
+        uses: actions/github-script@v3
+        env:
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = process.env.PR_NUMBER
+            const labelsToAdd = [ process.env.LONG_CI_FINISH_LABEL ]
+            const labelsToRemove = [ process.env.START_LABEL ]
+            const script = require(`${ process.env.GITHUB_WORKSPACE }/${ process.env.ADD_REMOVE_LABELS_SCRIPT_PATH }`)
+            await script({ github, context, prNumber, labelsToAdd, labelsToRemove })

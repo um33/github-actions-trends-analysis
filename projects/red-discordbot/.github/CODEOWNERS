@@ -1,0 +1,30 @@
+# Cogs
+/redbot/cogs/audio/** @aikaterna @PredaaA
+/redbot/cogs/downloader/* @Jackenmen
+/redbot/cogs/streams/* @palmtree5
+/redbot/cogs/mutes/* @TrustyJAID
+
+# Docs - Install and update guides
+/docs/install_guides/** @Jackenmen
+/docs/update_red.rst @Jackenmen
+
+# Docs - Version guarantees
+/docs/version_guarantees.rst @Jackenmen
+
+# Trivia Lists
+/redbot/cogs/trivia/data/lists/whosthatpokemon*.yaml @aikaterna
+
+# Tests
+/redbot/pytest/downloader* @Jackenmen
+/tests/cogs/downloader/* @Jackenmen
+
+# Schemas
+/schema/* @Jackenmen
+
+# CI
+/.travis.yml @Kowlin
+/crowdin.yml @Kowlin
+/.github/workflows/* @Kowlin
+
+# Excludes
+**/locales/* @ghost

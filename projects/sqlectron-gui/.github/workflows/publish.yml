@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  release:
+    types: [ 'created' ]
+
+jobs:
+  build:
+    environment: deploy
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      node-version: 14
+
+    strategy:
+      matrix:
+        # TODO: upgrade to latest Ubuntu
+        os: [ubuntu-18.04, macos-latest, windows-latest]
+
+    steps:
+    - name: Install Linux Dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install libgnome-keyring-dev icnsutils graphicsmagick rpm bsdtar gcc-multilib g++-multilib
+
+    - uses: actions/checkout@v3
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - run: npm ci
+
+    - run: npm test
+
+    - run: npm run dist
+      if: runner.os != 'Windows'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CSC_LINK: ${{ secrets.APPLE_CERT_BASE64 }}
+        CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+
+    - run: npm run dist:all-arch
+      if: runner.os == 'Windows'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

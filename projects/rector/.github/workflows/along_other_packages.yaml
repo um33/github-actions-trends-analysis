@@ -1,0 +1,59 @@
+name: Along Other Packages
+
+on:
+    pull_request: null
+    push:
+        branches:
+            - main
+
+jobs:
+    along_other_packages:
+        runs-on: ubuntu-latest
+
+        strategy:
+            fail-fast: false
+            matrix:
+                php_version: ['7.2', '7.3', '7.4', '8.0', '8.1']
+                commands:
+                    -
+                        name: 'Composer Dependency'
+                        install: composer require symfony/console:2.8 --ansi
+                        run: vendor/bin/rector list --debug --ansi
+
+                    -
+                        name: 'PHP Parser 3.1'
+                        install: composer require nikic/php-parser:^3.1 --ansi
+
+                    -
+                        name: 'Along PHPStan'
+                        install: composer require phpstan/phpstan:^1.1.1 --dev --ansi
+
+        name: "PHP ${{ matrix.php_version }}"
+
+        steps:
+            -   uses: actions/checkout@v4
+
+            -   uses: shivammathur/setup-php@v2
+                with:
+                    php-version: ${{ matrix.php_version }}
+                    coverage: none
+
+            # wait for deploy to packagist
+            -   run: sleep 40
+
+            -   run: |
+                    mkdir standalone
+                    cd standalone
+
+            -   run: |
+                    # run
+                    yes | composer init --name some/prj
+                    composer config minimum-stability dev
+                    composer config prefer-stable true
+                    composer require rector/rector:dev-main --dev --ansi
+                    ${{ matrix.commands.install }}
+                working-directory: standalone
+
+            -
+                run: vendor/bin/rector list --ansi
+                working-directory: standalone

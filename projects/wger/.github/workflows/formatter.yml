@@ -1,0 +1,40 @@
+name: Automatic formatting
+
+on:
+  push:
+    branches:
+      - "master"
+    paths:
+      - '**.py'
+
+
+jobs:
+  linting:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get dependencies
+        run: pip install ruff isort
+
+      - name: Format the code
+        run: ruff format
+
+      # While ruff can also do some sorting, isort can still be configured to do more,
+      # like grouping imports, etc.
+      - name: Sort the imports
+        run: isort .
+
+      - name: Push a commit with the changed files
+
+        # Needed if no files were changed
+        continue-on-error: true
+
+        run: |
+          git config user.name Github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git commit -m "Automatic linting"
+          git push

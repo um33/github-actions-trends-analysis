@@ -1,0 +1,58 @@
+name: devcontainer-docker-image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "48 19 * * 5"  # Fridays at 19:48 UTC
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-devcontainer  # pymc-devs/pymc-devcontainer
+
+jobs:
+  build-container:
+    runs-on: ubuntu-latest
+
+    # Set permissions for GitHub token
+    # <https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions#authenticating-to-package-registries-on-github>
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+
+    - name: Setup Docker buildx
+      uses: docker/setup-buildx-action@v3.3.0
+
+    - name: Prepare metadata
+      id: meta
+      uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,enable=true,prefix=git-
+          type=raw,value=latest
+
+    - name: Log into registry ${{ env.REGISTRY }}
+      uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      id: docker_build
+      uses: docker/build-push-action@2cdde995de11925a030ce8070c3d77a52ffcf1c0
+      with:
+        context: .
+        file: scripts/dev.Dockerfile
+        platforms: linux/amd64  # ,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        cache-to: type=inline

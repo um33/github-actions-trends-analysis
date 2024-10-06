@@ -1,0 +1,47 @@
+name: Linters
+on: [push, pull_request]
+permissions:
+  contents: read # to fetch code (actions/checkout)
+jobs:
+  rubocop:
+    name: runner / rubocop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v1
+
+      - uses: ruby/setup-ruby@v1
+
+      - run: git show --no-patch # the commit being tested (which is often a merge due to actions/checkout@v3)
+
+      - name: rubocop
+        uses: reviewdog/action-rubocop@v2
+        with:
+          rubocop_version: gemfile
+          rubocop_extensions: rubocop-rails:gemfile rubocop-rspec:gemfile
+          reporter: github-pr-check
+          level: error
+          fail_on_error: true
+  prettier:
+    name: runner / prettier
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version-file: .node-version
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile
+
+      - run: git show --no-patch # the commit being tested (which is often a merge due to actions/checkout@v3)
+
+      - name: prettier
+        uses: EPMatt/reviewdog-action-prettier@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          level: error
+          fail_on_error: true

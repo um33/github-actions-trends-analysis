@@ -1,0 +1,40 @@
+name: Coverage
+
+on:
+  push:
+    branches-ignore:
+      - "dependabot/**"
+    paths:
+      - ".nycrc.json"
+      - "**/*.js"
+      - "test/**"
+      - "package.json"
+      - "bin/node-sass"
+      - ".github/workflows/coverage.yml"
+  pull_request:
+    paths:
+      - ".nycrc.json"
+      - "**/*.js"
+      - "test/**"
+      - "package.json"
+      - "bin/node-sass"
+      - ".github/workflows/coverage.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'sass'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: npm install --unsafe-perm
+
+      - name: Run Coverage
+        run: npm run coverage
+
+      - name: Coveralls GitHub Action
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

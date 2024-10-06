@@ -1,0 +1,40 @@
+name: Publish on Tag
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  cocoapods:
+    name: Push To CocoaPods
+    runs-on: macos-12
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - 
+        # Need SPM cache because we're building & uploading a binary
+        name: Cache SPM
+        uses: actions/cache@v3
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      -
+        name: Create release on GitHub
+        run: bundle exec rake release:github
+        env:
+          DANGER_GITHUB_API_TOKEN: ${{ secrets.danger_github_api_token }}
+      -
+        name: Push to CocoaPods
+        run: bundle exec rake release:cocoapods
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{secrets.COCOAPODS_TRUNK_TOKEN}}

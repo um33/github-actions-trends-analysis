@@ -1,0 +1,51 @@
+name: Release Charts
+concurrency:
+  group: ${{ github.workflow }}
+
+on:
+  push:
+    branches:
+      - trunk
+    paths:
+      - 'charts/selenium-grid/Chart.yaml'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Get chart release notes (chart_release_notes.md)
+        run: ./generate_chart_changelog.sh
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@main
+        with:
+          mark_as_latest: false
+          skip_existing: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_RELEASE_NOTES_FILE: RELEASE_NOTES.md
+
+      - name: Commit files
+        run: |
+          git config --local user.email "selenium-ci@users.noreply.github.com"
+          git config --local user.name "Selenium CI Bot"
+          git commit -m "Update tag in docs and files" -a || true
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.SELENIUM_CI_TOKEN }}
+          branch: trunk

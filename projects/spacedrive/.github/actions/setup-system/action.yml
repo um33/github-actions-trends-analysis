@@ -1,0 +1,97 @@
+name: Setup System and Rust
+description: Setup System and Rust
+inputs:
+  token:
+    description: Github token
+    required: false
+    default: ''
+  target:
+    description: toolchain target triple
+    required: false
+  setup-arg:
+    description: Argument for the system setup script
+    required: false
+    default: ''
+  save-cache:
+    description: Whether to save the System cache
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Restore cached LLVM and Clang
+      if: ${{ runner.os == 'Windows' }}
+      id: cache-llvm-restore
+      uses: actions/cache/restore@v4
+      with:
+        key: llvm-15
+        path: C:/Program Files/LLVM
+
+    - name: Install LLVM and Clang
+      if: ${{ runner.os == 'Windows' }}
+      uses: KyleMayes/install-llvm-action@v1
+      with:
+        cached: ${{ steps.cache-llvm-restore.outputs.cache-hit }}
+        version: '15'
+
+    - name: Save LLVM and Clang
+      if: ${{ runner.os == 'Windows' && inputs.save-cache == 'true' }}
+      id: cache-llvm-save
+      uses: actions/cache/save@v4
+      with:
+        key: ${{ steps.cache-llvm-restore.outputs.cache-primary-key }}
+        path: C:/Program Files/LLVM
+
+    - name: Install current Bash on macOS
+      shell: bash
+      if: runner.os == 'macOS'
+      run: brew install bash
+
+    - name: Install Nasm
+      if: ${{ runner.os != 'Linux' }}
+      uses: ilammy/setup-nasm@v1
+
+    - name: Install Mold (linker)
+      shell: bash
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        curl -L# 'https://github.com/rui314/mold/releases/download/v2.4.0/mold-2.4.0-x86_64-linux.tar.gz' \
+        | sudo tar -xzf- -C /usr/local
+
+    - name: Remove 32-bit libs and incompatible pre-installed pkgs from Runner
+      shell: bash
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        dpkg -l | grep i386
+        sudo apt-get purge --allow-remove-essential libc6-i386 ".*:i386"
+        sudo dpkg --remove-architecture i386
+
+        # https://github.com/actions/runner-images/issues/9546#issuecomment-2014940361
+        sudo apt-get remove libunwind-*
+
+    - name: Setup Rust and Dependencies
+      uses: ./.github/actions/setup-rust
+      with:
+        target: ${{ inputs.target }}
+        save-cache: ${{ inputs.save-cache }}
+
+    - name: Run setup.sh script
+      shell: bash
+      if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
+      run: ./scripts/setup.sh ${{ inputs.setup-arg }}
+
+    - name: Run setup.ps1 script
+      shell: powershell
+      if: ${{ runner.os == 'Windows' }}
+      run: ./scripts/setup.ps1
+
+    - name: Setup shared libraries
+      shell: bash
+      env:
+        TARGET_TRIPLE: ${{ inputs.target }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        pushd scripts
+        npm i --production
+        popd
+        env NODE_ENV=debug node scripts/preprep.mjs

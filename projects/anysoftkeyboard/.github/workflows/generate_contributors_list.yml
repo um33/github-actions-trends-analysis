@@ -1,0 +1,42 @@
+---
+name: contributors-lists
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  TERM: dumb
+  TMPDIR: "/tmp"
+
+jobs:
+  contributors-md-update:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - uses: pnpm/action-setup@v3.0.0
+        with:
+          version: 8.6.9
+          run_install: true
+      - uses: actions/setup-node@v4.0.2
+        with:
+          node-version-file: ".nvmrc"
+          cache: 'pnpm'
+      - run: pnpm build
+      - name: update contributors list
+        run: |
+          git config --global --add safe.directory "${PWD}"
+          node dist/contributors/index.js generate --api_token ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }} --output_file CONTRIBUTORS.md
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated Contributors List Update'
+          title: 'Automated Contributors List Update'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          body: 'Generated from latest git scan.'
+          team-reviewers: maintainers
+          branch: 'bot-pr/contributors-list-update'
+          delete-branch: true

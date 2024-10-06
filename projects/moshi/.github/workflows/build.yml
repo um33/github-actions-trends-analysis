@@ -1,0 +1,38 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: 'Test Mode ${{ matrix.kotlin-test-mode }}'
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        kotlin-test-mode: [ 'REFLECT', 'KSP', 'KAPT' ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v3
+
+      - name: Configure JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '20'
+          cache: 'gradle'
+
+      - name: Test
+        run: ./gradlew build check --stacktrace -PkotlinTestMode=${{ matrix.kotlin-test-mode }}
+
+      - name: Publish (default branch only)
+        if: github.repository == 'square/moshi' && github.ref == 'refs/heads/master' && matrix.kotlin-test-mode == 'reflect'
+        run: ./gradlew publish
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_NEXUS_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_NEXUS_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.ARTIFACT_SIGNING_PRIVATE_KEY }}

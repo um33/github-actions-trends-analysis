@@ -1,0 +1,48 @@
+name: "Test"
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+    types: [assigned, opened, synchronize, reopened, labeled]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-node@v1
+      with:
+        node-version: "12"
+    - name: "Install dependencies"
+      run: npm install
+    - name: "Lint sources"
+      run: npm run lint:sources -- --max-warnings 0
+    - name: "Lint types"
+      run: npm run lint:types
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node_version: ["12", "14", "16", "18"]
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node_version }}
+    - name: "Install dependencies"
+      run: npm install
+    - name: "Test sources"
+      run: npm run test:sources
+    - name: "Test types"
+      run: npm run test:types
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-node@v1
+      with:
+        node-version: "12"
+    - name: "Install dependencies"
+      run: npm install
+    - name: "Run benchmark"
+      run: npm run bench

@@ -1,0 +1,41 @@
+name: Semgrep
+permissions: read-all
+on:
+  pull_request: {}
+  push:
+    branches: [master, v2.dev, v3.dev]
+
+jobs:
+  semgrep:
+    name: Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    container:
+      # Incompatible with Harden Runner
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - run: semgrep scan --sarif --output=results.sarif
+        env:
+          SEMGREP_RULES: >-
+            p/java
+            p/github-actions
+            p/semgrep-rule-lints
+            p/semgrep-misconfigurations
+      - name: Check file existence
+        id: check_files
+        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3.0.0
+        with:
+          files: results.sarif
+      - name: Remove duplicate rules
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: jq -c '.runs[0].tool.driver.rules |= unique_by(.id)' < results.sarif > semgrep.sarif
+      - name: Upload SARIF file for GitHub Advanced Security Dashboard
+        uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        if: steps.check_files.outputs.files_exists == 'true'
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif

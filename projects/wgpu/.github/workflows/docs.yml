@@ -1,0 +1,51 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/docs.yml'
+  push:
+    branches:
+      - trunk
+
+env:
+  # We need to use nightly for various features
+  # when building docs.rs style docs.
+  NIGHTLY_VERSION: nightly-2023-12-17
+
+  CARGO_INCREMENTAL: false
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install documentation toolchain
+        run: rustup toolchain install ${{ env.NIGHTLY_VERSION }} --no-self-update --profile=minimal
+
+      - name: Build the docs (nightly)
+        run: |
+          cargo +${{ env.NIGHTLY_VERSION }} doc --no-deps --lib
+        env:
+          RUSTDOCFLAGS: --cfg docsrs
+
+      - name: Build the docs (stable)
+        run: cargo +stable doc --no-deps --lib
+        if: ${{ failure() }}
+
+      - name: Deploy the docs
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        if: github.ref == 'refs/heads/trunk'
+        with:
+          token: ${{ secrets.WEB_DEPLOY }}
+          folder: target/doc
+          repository-name: gfx-rs/wgpu-rs.github.io
+          branch: master
+          target-folder: doc

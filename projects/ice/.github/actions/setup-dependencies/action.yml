@@ -1,0 +1,169 @@
+name: Setup Dependencies
+
+inputs:
+  use_ccache:
+    description: "Indicates whether to install and configure ccache"
+    type: choice
+    required: true
+    default: "false"
+    options:
+      - true
+      - false
+
+runs:
+  using: "composite"
+  steps:
+    # Python3 is already installed though Homebrew
+    - name: Install brew dependencies
+      run: brew install ruby node php lmdb mcpp || true
+      shell: bash
+      if: runner.os == 'macOS'
+
+    - name: Add Ruby and Python interpreters from brew to PATH
+      run: |
+        echo "$(brew --prefix ruby)/bin" >> $GITHUB_PATH
+        echo "$(brew --prefix python3)/bin" >> $GITHUB_PATH
+      shell: bash
+      if: runner.os == 'macOS'
+
+    - name: Install testing dependencies from pip
+      run: python3 -m pip install --break-system-packages passlib cryptography numpy
+      shell: bash
+      if: runner.os == 'macOS'
+
+    - name: Install xcodeproj gem
+      run: gem install xcodeproj
+      shell: bash
+      if: runner.os == 'macOS'
+
+    - name: Install xcodesdk dependencies
+      run: |
+        # We should consider removing the dependency on ice-xcode-builder
+        brew install zeroc-ice/tap/ice-builder-xcode
+      shell: bash
+      if: (runner.os == 'macOS') && (matrix.name == 'xcodesdk')
+
+    - name: Install apt dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install -y \
+            python3 python3-pip nodejs libbz2-dev libssl-dev libffi-dev \
+            libmcpp-dev libedit-dev liblmdb-dev libexpat1-dev libsystemd-dev \
+            ruby ruby-dev php-cli php-dev \
+            libbluetooth-dev libdbus-1-dev \
+            libsystemd-dev
+
+      shell: bash
+      if: runner.os == 'Linux'
+
+    - name: Setup Oracle Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: "oracle"
+        java-version: "17"
+      if: matrix.language == 'java'
+
+    - name: Install testing dependencies from pip
+      run: python3 -m pip install passlib cryptography numpy
+      shell: bash
+      if: runner.os == 'Linux'
+
+      # ———— Windows ———— #
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x64
+      if: runner.os == 'Windows'
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+      if: runner.os == 'Windows'
+
+    - name: Configure Windows Python Environment
+      run: |
+        echo "PythonHome=$env:Python_ROOT_DIR"  >> $env:GITHUB_ENV
+      shell: powershell
+      if: runner.os == 'Windows'
+
+    - name: Install testing dependencies from pip
+      run: python3 -m pip install passlib cryptography numpy
+      shell: powershell
+      if: runner.os == 'Windows'
+
+      # ———— MATLAB ———— #
+    - name: Setup MATLAB
+      uses: matlab-actions/setup-matlab@v2
+      with:
+        release: 'R2023b'
+      if: matrix.language == 'matlab'
+
+    - name: Set MATLAB_HOME
+      run: |
+        echo "MATLAB_HOME=/opt/hostedtoolcache/MATLAB/2023.2.999/x64" >> $GITHUB_ENV
+      shell: bash
+      if: matrix.language == 'matlab' && runner.os == 'Linux'
+
+    - name: Set MATLAB_HOME
+      run: |
+        echo "MATLAB_HOME=C:\Program Files\MATLAB\R2023b\bin" >> $env:GITHUB_ENV
+      shell: powershell
+      if: matrix.language == 'matlab' && runner.os == 'Windows'
+
+    # https://github.com/matlab-actions/run-command/issues/53
+    - name: Get run-matlab-command
+      run: |
+        wget -O /usr/local/bin/run-matlab-command https://ssd.mathworks.com/supportfiles/ci/run-matlab-command/v2/glnxa64/run-matlab-command
+        chmod +x /usr/local/bin/run-matlab-command
+        echo "MATLAB_COMMAND=/usr/local/bin/run-matlab-command" >> $GITHUB_ENV
+
+        # https://www.mathworks.com/matlabcentral/answers/1907290-how-to-manually-select-the-libstdc-library-to-use-to-resolve-a-version-glibcxx_-not-found
+        echo "LD_PRELOAD=/lib/x86_64-linux-gnu/libstdc++.so.6" >> $GITHUB_ENV
+
+      shell: bash
+      if: matrix.language == 'matlab' && runner.os == 'Linux'
+
+    # Windows is currently not working. We get an error: "'matlab' executable not found on the system path"
+    # Is GITHUB_PATH set correctly?
+    - name: Get run-matlab-command
+      run: |
+        wget -O C:\Windows\System32\run-matlab-command.exe https://ssd.mathworks.com/supportfiles/ci/run-matlab-command/v2/win64/run-matlab-command.exe
+        echo "MATLAB_COMMAND=C:\Windows\System32\run-matlab-command.exe" >> $env:GITHUB_ENV
+        echo "$env:MATLAB_HOME" >> $env:GITHUB_PATH
+      shell: powershell
+      if: matrix.language == 'matlab' && runner.os == 'Windows'
+
+      # ———— Cache ———— #
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        # create-symlink: true
+        append-timestamp: false
+        key: ci-${{ runner.os }}-${{matrix.name || matrix.language }}-${{ github.sha }}
+        restore-keys: |
+          ci-${{ runner.os }}-${{matrix.name || matrix.language }}-
+          ci-${{ runner.os }}-
+      if: inputs.use_ccache == 'true' && (runner.os == 'macOS' || runner.os == 'Linux')
+
+    - name: Configure ccache path
+      run: |
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
+        echo "/usr/local/opt/ccache/libexec" >> $GITHUB_PATH
+        echo "/opt/homebrew/opt/ccache/libexec" >> $GITHUB_PATH
+      shell: bash
+      if: inputs.use_ccache == 'true' && (runner.os == 'macOS' || runner.os == 'Linux')
+
+    # - name: Setup Windows Cache
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: |
+    #       **/bin/x64
+    #       **/lib/x64
+    #       **/msbuild/**/x64
+    #       **/include/generated
+
+    #     key: ci-${{ runner.os }}-${{matrix.name || matrix.language }}-${{ github.sha }}
+    #     restore-keys: |
+    #       ci-${{ runner.os }}-${{matrix.name || matrix.language }}-
+    #       ci-${{ runner.os }}-
+    #   if: inputs.cache && runner.os == 'Windows'

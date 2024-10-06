@@ -1,0 +1,297 @@
+#
+# s3fs - FUSE-based file system backed by Amazon S3
+#
+# Copyright(C) 2007 Takeshi Nakatani <ggtakec.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+name: s3fs-fuse CI
+
+on:
+  push:
+  pull_request:
+  #
+  # CRON event is fire on every sunday(UTC).
+  #
+  schedule:
+    - cron: '0 0 * * 0'
+
+#
+# Jobs
+#
+jobs:
+  Linux:
+    runs-on: ubuntu-latest
+
+    #
+    # build matrix for containers
+    #
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      #
+      # matrix for containers
+      #
+      matrix:
+        container:
+          - ubuntu:23.10
+          - ubuntu:22.04
+          - ubuntu:20.04
+          - debian:bookworm
+          - debian:bullseye
+          - debian:buster
+          - rockylinux:9
+          - rockylinux:8
+          - centos:centos7
+          - fedora:39
+          - fedora:38
+          - opensuse/leap:15
+          - alpine:3.19
+
+    container:
+      image: ${{ matrix.container }}
+
+      options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
+
+    env:
+      # [NOTE]
+      # Installation special environment variables for debian and ubuntu.
+      #
+      DEBIAN_FRONTEND:  noninteractive
+
+    steps:
+      # [NOTE]
+      # On openSUSE, tar and gzip must be installed before action/checkout.
+      #
+      - name: Install packages before checkout
+        run: |
+          if [ "${{ matrix.container }}" = "opensuse/leap:15" ]; then zypper install -y tar gzip; fi
+
+      # [NOTE]
+      # actions/checkout@v3 uses nodejs v16 and will be deprecated.
+      # However, @v4 does not work on centos7 depending on the glibc version,
+      # so we will continue to use @v3.
+      #
+      - name: Checkout source code(other than centos7)
+        if: matrix.container != 'centos:centos7'
+        uses: actions/checkout@v4
+
+      - name: Checkout source code(only centos7)
+        if: matrix.container == 'centos:centos7'
+        uses: actions/checkout@v3
+
+      # [NOTE]
+      # Matters that depend on OS:VERSION are determined and executed in the following script.
+      # Please note that the option to configure (CONFIGURE_OPTIONS) is set in the environment variable.
+      #
+      - name: Install packages
+        run: |
+          .github/workflows/linux-ci-helper.sh ${{ matrix.container }}
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
+          make --jobs=$(nproc)
+
+      - name: clang-tidy
+        run: |
+          # skip if clang-tidy does not exist, e.g., CentOS 7
+          if command -v clang-tidy; then
+            make -C src/ clang-tidy
+            make -C test/ clang-tidy
+          fi
+
+      - name: Cppcheck
+        run: |
+          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
+            make cppcheck
+          fi
+
+      - name: Shellcheck
+        run: |
+          if shellcheck --version | awk -F '[ .]' '/version:/ && ($2 * 1000 + $3 <= 7) { exit(1) }'; then
+            make shellcheck
+          fi
+
+      - name: Test suite
+        run: |
+          make check -C src
+          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+
+  # [NOTE]
+  # Using macos-fuse-t
+  #   This product(package) is a workaround for osxfuse which required an OS reboot(macos 11 and later).
+  #   see. https://github.com/macos-fuse-t/fuse-t
+  # About osxfuse
+  #   This job doesn't work with Github Actions using macOS 11+ because "load_osxfuse" returns
+  #   "exit code = 1".(requires OS reboot)
+  #
+  macos12:
+    runs-on: macos-12
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Brew tap
+        run: |
+          TAPS="$(brew --repository)/Library/Taps";
+          if [ -e "$TAPS/caskroom/homebrew-cask" ]; then rm -rf "$TAPS/caskroom/homebrew-cask"; fi;
+          HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask
+          HOMEBREW_NO_AUTO_UPDATE=1 brew tap macos-fuse-t/homebrew-cask
+
+      - name: Install fuse-t
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install fuse-t
+
+      - name: Install brew other packages
+        run: |
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck jq';
+          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
+
+      - name: Install awscli2
+        run: |
+          cd /tmp
+          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+          sudo installer -pkg AWSCLIV2.pkg -target /
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1'
+          make --jobs=$(sysctl -n hw.ncpu)
+
+      - name: Cppcheck
+        run: |
+          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
+            make cppcheck
+          fi
+
+      - name: Shellcheck
+        run: |
+          if shellcheck --version | awk -F '[ .]' '/version:/ && ($2 * 1000 + $3 <= 7) { exit(1) }'; then
+            make shellcheck
+          fi
+
+      - name: Test suite
+        run: |
+          make check -C src
+          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+
+  MemoryTest:
+    runs-on: ubuntu-latest
+
+    #
+    # build matrix for containers
+    #
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      #
+      # matrix for type of checking
+      #
+      # [NOTE]
+      # Currently following test is not supported:
+      #    - sanitize_memory   : Future support planned
+      #
+      matrix:
+        checktype:
+          - glibc_debug
+          - sanitize_address
+          - sanitize_others
+          - sanitize_thread
+          - valgrind
+
+    container:
+      image: fedora:39
+
+      options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          .github/workflows/linux-ci-helper.sh fedora:39
+
+      - name: Install clang
+        run: |
+          dnf install -y clang
+          if [ "${{ matrix.checktype }}" = "valgrind" ]; then
+              dnf install -y valgrind
+          fi
+
+      #
+      # Set CXX/CXXFLAGS and Variables for test
+      #
+      - name: Set variables
+        run: |
+          COMMON_CXXFLAGS='-g -Wno-cpp -DS3FS_PTHREAD_ERRORCHECK=1'
+          if [ "${{ matrix.checktype }}" = "glibc_debug" ]; then
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -D_GLIBCXX_DEBUG"  >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_address" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=address -fsanitize-address-use-after-scope" >> $GITHUB_ENV
+              echo 'ASAN_OPTIONS=detect_leaks=1,detect_stack_use_after_return=1'                           >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_memory" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=memory" >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_thread" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread" >> $GITHUB_ENV
+              echo 'TSAN_OPTIONS=halt_on_error=1'                      >> $GITHUB_ENV
+              # [NOTE]
+              # Set this to avoid following error when running configure.
+              # "FATAL: ThreadSanitizer: unexpected memory mapping"
+              sysctl vm.mmap_rnd_bits=28
+          elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow" >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"                   >> $GITHUB_ENV
+              echo 'VALGRIND=--leak-check=full'                        >> $GITHUB_ENV
+              echo 'RETRIES=100'                                       >> $GITHUB_ENV
+              echo 'S3_URL=http://127.0.0.1:8081'                      >> $GITHUB_ENV
+          fi
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" ./configure --prefix=/usr --with-openssl"
+          make
+
+      - name: Test suite
+        run: |
+          /bin/sh -c "ALL_TESTS=1 ASAN_OPTIONS=${ASAN_OPTIONS} TSAN_OPTIONS=${TSAN_OPTIONS} VALGRIND=${VALGRIND} RETRIES=${RETRIES} make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)"
+
+#
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: expandtab sw=4 ts=4 fdm=marker
+# vim<600: expandtab sw=4 ts=4
+#

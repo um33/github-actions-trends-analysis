@@ -1,0 +1,266 @@
+on:
+  workflow_dispatch:
+  schedule:
+  - cron: 0 6 * * *
+  push:
+    branches:
+    - main
+    paths:
+    - '.github/workflows/daily.yml'
+  pull_request:
+    branches:
+    - main
+    paths:
+    - '.github/workflows/daily.yml'
+
+name: daily
+jobs:
+  change_log:
+    name: 'Create ChangeLog.md'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: npm install -g auto-changelog
+
+    - name: Create ChangeLog.md
+      run: |
+        export NEXT_VERSION=$(grep -oP "PACKAGE_VERSION='\K[0-9\.-]*" configure)
+        git tag $NEXT_VERSION
+        auto-changelog --sort-commits date
+        mkdir artifacts
+        mv ChangeLog.md artifacts/ChangeLog.md
+
+    - name: Upload ChangeLog.md
+      uses: actions/upload-artifact@v4
+      with:
+        name: ChangeLog
+        path: artifacts
+
+  build_linux:
+    name: 'Linux Q${{matrix.quantum}}-x64 hdri=${{matrix.hdri}} (${{matrix.modules}}) (${{ matrix.compiler }})'
+    container:
+      image: ubuntu:20.04
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ gcc, clang ]
+        quantum: [ 8, 16, 32, 64 ]
+        hdri: [ yes, no ]
+        modules: [ 'with-modules', 'without-modules' ]
+        exclude:
+          - quantum: 8
+            hdri: yes
+          - quantum: 32
+            hdri: no
+          - quantum: 64
+            hdri: no
+        include:
+          - compiler: gcc
+            cxx_compiler: g++
+            compiler_flags: -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch
+            packages: gcc g++
+          - compiler: clang
+            cxx_compiler: clang++
+            compiler_flags: -Wall -Wextra -Werror -Wno-unused-function -Wno-incompatible-library-redeclaration
+            packages: clang
+
+    steps:
+    - name: Install dependencies
+      run: |
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        apt update
+        apt-get install -y autoconf libfontconfig1-dev libfreetype6-dev libltdl-dev make pkg-config ${{ matrix.packages }}
+
+    - name: Clone msttcorefonts
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/msttcorefonts
+        ref: refs/heads/main
+
+    - name: Install msttcorefonts
+      run: |
+        set -e
+        ./install.sh
+
+    - uses: actions/checkout@v4
+
+    - name: Configure ImageMagick
+      env:
+        CC: ${{ matrix.compiler }}
+        CXX: ${{ matrix.cxx_compiler }}
+        CFLAGS: ${{ matrix.compiler_flags }}
+        CXXFLAGS: ${{ matrix.compiler_flags }}
+      run: |
+        ./configure --with-quantum-depth=${{matrix.quantum}} --enable-hdri=${{matrix.hdri}} --${{matrix.modules}}
+
+    - name: Build ImageMagick
+      run: |
+        make
+
+    - name: Test ImageMagick
+      run: |
+        make check || exit_code=$?
+        if [ "$exit_code" != "0" ] ; then cat ./test-suite.log ; fi
+        exit $exit_code
+
+  build_windows:
+    name: 'Windows Q${{matrix.quantum}}-${{matrix.platform}} hdri=${{matrix.hdri}} (${{matrix.buildType}})'
+    needs:
+      - change_log
+    runs-on: windows-2022
+
+    strategy:
+      fail-fast: false
+      matrix:
+        quantum: [ 8, 16, 32, 64 ]
+        hdri: [ yes, no ]
+        buildType: [ dmt, smtd ]
+        platform: [ x64, x86, arm64 ]
+        exclude:
+          - quantum: 8
+            hdri: yes
+          - quantum: 32
+            hdri: no
+          - quantum: 64
+            hdri: no
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Download ChangeLog.md
+      uses: actions/download-artifact@v4
+      with:
+        name: ChangeLog
+        path: ImageMagick-Windows\ImageMagick
+
+    - name: Build configure
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+    - name: Configure ImageMagick
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /includeOptional /incompatibleLicense /deprecated /${{matrix.platform}} /${{matrix.buildType}}
+
+    - name: Build ImageMagick
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
+
+  build_windows_zero_configuration:
+    name: 'Windows Q16-x64 hdri=yes (zero configuration ${{matrix.buildType}})'
+    runs-on: windows-2022
+
+    strategy:
+      fail-fast: false
+      matrix:
+        buildType: [ dmt, smtd ]
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Build configure
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+    - name: Configure ImageMagick
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /x64 /${{matrix.buildType}} /zeroConfigurationSupport
+
+    - name: Build ImageMagick
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+  build_msys2:
+    name: 'Windows Q16-${{matrix.toolchain}} hdri=yes (MSYS2)'
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        include: [
+          { msystem: ucrt64, toolchain: ucrt-x86_64 },
+          { msystem: mingw64, toolchain: x86_64 },
+          { msystem: mingw32, toolchain: i686 }
+        ]
+      fail-fast: false
+
+    steps:
+    - name: Prepare git
+      run: git config --global core.autocrlf false
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        install: mingw-w64-${{ matrix.toolchain }}-toolchain base-devel binutils
+        update: true
+
+    - name: Building ImageMagick
+      run: cd ImageMagick-Windows/Build/MSYS2 && makepkg-mingw --noconfirm --syncdeps
+      env:
+        MINGW_ARCH: ${{ matrix.msystem }}
+        PKGEXT: ".pkg.tar.xz"
+      shell: msys2 {0}

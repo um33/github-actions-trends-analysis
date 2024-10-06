@@ -1,0 +1,47 @@
+name: Java CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        java: ['11', '17', '21']
+        distribution: ['temurin']
+        gradle: ['8.6']
+        include:
+          # Special case to test something close to Debian config with the oldest supported (standard) Gradle on Ubuntu
+          - os: ubuntu-latest
+            java: '11'
+            distribution: 'temurin'
+            gradle: '4.10.3'
+      fail-fast: false
+    name: JAVA ${{ matrix.distribution }} ${{ matrix.java }} OS ${{ matrix.os }} Gradle ${{ matrix.gradle }}
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ matrix.distribution }}
+          java-version: ${{ matrix.java }}
+      - name: Build with Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: ${{ matrix.gradle }}
+          arguments: -PtestJdk8=true build --init-script build-scan-agree.gradle --scan --info --stacktrace
+      - name: Upload Test Results and Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bitcoinj-core-test-results-jdk${{ matrix.java }}-${{ matrix.os }}-${{ matrix.gradle }}
+          path: |
+            core/build/reports/tests/test/
+            core/build/test-results/test/
+            wallettool/build/reports/tests/test/
+            wallettool/build/test-results/test/
+            integration-test/build/reports/tests/test/
+            integration-test/build/test-results/test/

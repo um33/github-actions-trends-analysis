@@ -1,0 +1,34 @@
+name: Changelog
+
+on:
+  push:
+    tags:
+      - v*
+      - "!v.0.9"
+
+permissions:
+  contents: read
+
+jobs:
+  generate_changelog:
+    permissions:
+      contents: write  # for peter-evans/create-pull-request to create branch
+      pull-requests: write  # for peter-evans/create-pull-request to create a PR
+    if: github.repository == 'argoproj/argo-events'
+    runs-on: ubuntu-latest
+    name: Generate changelog
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - run: git fetch --prune --prune-tags
+      - run: git tag -l 'v*'
+      # avoid invoking `make` to reduce the risk of a Makefile bug failing this workflow
+      - run: ./hack/changelog.sh > CHANGELOG.md
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          title: 'docs: updated CHANGELOG.md'
+          commit-message: 'docs: updated CHANGELOG.md'
+          signoff: true
+

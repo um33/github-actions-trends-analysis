@@ -1,0 +1,134 @@
+name: Node CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+
+jobs:
+  prettier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+          HUSKY_SKIP_INSTALL: 1
+      - name: Prettier
+        run: |
+          npm run prettier:check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+      - name: ESLint
+        run: |
+          npm run lint
+
+  unused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+      - name: Find unused files
+        run: |
+          npm run unimported
+
+  browser-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+      - name: Integration
+        run: |
+          export SINON_CHROME_BIN=$(which google-chrome-stable)
+
+          # test-coverage runs test-headless in Chrome
+          npm run test-coverage  -- --chrome "$SINON_CHROME_BIN" --allow-chrome-as-root
+
+          npm run test-headless -- --chrome $SINON_CHROME_BIN --allow-chrome-as-root
+          npm run test-webworker -- --chrome $SINON_CHROME_BIN --allow-chrome-as-root
+          npm run check-esm-bundle-runs-in-browser
+      - name: Upload coverage report
+        run: bash <(curl -s https://codecov.io/bash) -F unit -s coverage/lcov.info
+
+  saucelabs-test:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+      - name: Saucelabs test
+        env:
+          SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
+          SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
+        run: |
+          npm run test-cloud
+
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          npm ci
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 1
+      - name: npm test
+        run: npm run test-node

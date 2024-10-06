@@ -1,0 +1,16 @@
+name: HealthChecks AzureSearch CD
+
+on:
+  push:
+    tags:
+      - release-azuresearch-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.AzureSearch/HealthChecks.AzureSearch.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.AzureSearch

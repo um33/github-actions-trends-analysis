@@ -1,0 +1,56 @@
+name: Node CI
+
+on:
+  push:
+    branches:
+    # long-lived branches
+    - master
+    - develop
+    - next
+
+  pull_request:
+    branches:
+      - "*"
+
+permissions:
+  contents: read
+
+jobs:
+  yarncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version-file: .nvmrc
+      - run: npm install -g yarn
+      - run: yarn install --ignore-scripts --ignore-engines
+      - run: test -z "$(git diff)" || (echo 'Please run yarn and commit all changes to yarn.lock'; false)
+
+  build:
+    needs: yarncheck
+    strategy:
+      matrix:
+        platform: [ubuntu-latest]
+        # TODO: unpin to 20.x once 20.7 has ben released
+        node-version: [16.x, 18.x, 20.5]
+        env: [GETH=true, PACKAGES=true, INTEGRATION=true]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - run: npm install -g yarn
+
+    - run: yarn install
+    - run: test -z "$(git diff)" || (echo 'Did you check in a generated file to source control?  Please remove it if so'; false)
+
+    - run: yarn lint:dependencies
+
+    - run: ${{ matrix.env }} yarn ci
+      env:
+        CI: true

@@ -1,0 +1,27 @@
+# Each line is a file pattern followed by one or more owners.
+# Order is important; the last matching pattern takes the most
+# precedence. 
+#
+# Security sensitive items must be at the end.
+#
+# All user entries should be alpha-sorted and lowercase.
+
+# These owners will be the default owners for everything in
+# the repo, unless a later match takes precedence.
+
+* @brunobowden @crazybob @matthewblain @theswerd @yukuairoy
+
+# Shared
+/docs/ @britannio @brunobowden @crazybob @matthewblain @theswerd @yukuairoy
+
+# Client
+/client/ @britannio @brunobowden @crazybob @matthewblain @theswerd @yukuairoy
+
+# Server
+/api/ @brunobowden @crazybob @matthewblain @yukuairoy
+/server/ @brunobowden @crazybob @matthewblain @yukuairoy
+
+# ***** Security-sensitive - always keep these at the end. *****
+# CI and CD; Note no production secrets shall be stored in this GitHub repo.
+/.github/workflows/ @brunobowden @crazybob @matthewblain
+/.github/CODEOWNERS @brunobowden @crazybob @matthewblain

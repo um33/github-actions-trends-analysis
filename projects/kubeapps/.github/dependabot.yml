@@ -1,0 +1,56 @@
+# Copyright 2021-2024 the Kubeapps contributors.
+# SPDX-License-Identifier: Apache-2.0
+
+# Basic dependabot.yml file
+# https://docs.github.com/en/github/administering-a-repository/configuration-options-for-dependency-updates#package-ecosystem
+
+---
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/dashboard"
+    schedule:
+      interval: "daily"
+      time: "00:00"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "01:00"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "cargo"
+    directory: "/cmd/pinniped-proxy"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    groups:
+      kube:
+        patterns:
+          - kube
+          - k8s-openapi
+          - kube-derive
+          - kube-runtime
+  - package-ecosystem: "cargo"
+    directory: "/cmd/oci-catalog"
+    schedule:
+      interval: "daily"
+      time: "02:30"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "npm"
+    directory: "/integration"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "04:00"
+    open-pull-requests-limit: 10

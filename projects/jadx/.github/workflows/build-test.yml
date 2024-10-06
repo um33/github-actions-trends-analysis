@@ -1,0 +1,28 @@
+name: Build Test
+
+on:
+  push:
+    branches: [ master, build-test ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 11
+
+      - name: Build with Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          arguments: build dist copyExe

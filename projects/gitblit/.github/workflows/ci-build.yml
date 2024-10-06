@@ -1,0 +1,73 @@
+name: Continous integration
+
+on:
+  push:
+    branches-ignore:
+      - 'release*'
+      - gh-pages
+  pull_request:
+    branches-ignore:
+      - 'release*'
+      - gh-pages
+
+jobs:
+  build_linux:
+    name: Linux build and test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [8, 11]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Setup Java ${{ matrix.java-version }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+
+      - name: Setup Moxie
+        run: |
+          wget http://gitblit-org.github.io/moxie/maven/com/gitblit/moxie/moxie+ant/0.10.0/moxie+ant-0.10.0.tar.gz
+          tar -xzf moxie+ant-0.10.0.tar.gz
+          moxie-0.10.0/bin/moxie -version
+
+      - name: Report Java version
+        run: |
+          java -version
+          javac -version
+
+      - name: Build with Moxie
+        run: moxie-0.10.0/bin/moxie test
+
+
+  build_windows:
+    name: Windows build and test
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        java-version: [8, 11]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Setup Java ${{ matrix.java-version }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+
+      - name: Report Java version
+        run: |
+          java -version
+          javac -version
+
+      - name: Build with Ant
+        run: ant test

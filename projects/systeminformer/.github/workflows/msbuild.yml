@@ -1,0 +1,30 @@
+name: continuous-integration
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Solution
+      shell: cmd
+      working-directory: ${{github.workspace}}
+      run: build\build_verbose.cmd
+  build_driver:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Driver
+      shell: cmd
+      working-directory: ${{github.workspace}}
+      run: build\build_zdriver.cmd prefast

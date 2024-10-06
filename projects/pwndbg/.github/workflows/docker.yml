@@ -1,0 +1,34 @@
+name: Docker build
+on: 
+  pull_request:
+    paths:
+      - '**'
+      - '!mkdocs.yml'
+      - '!docs/**'
+      - '!*.md'
+
+jobs:
+  docker:
+    strategy:
+      fail-fast: false
+      matrix:
+        images: [ubuntu20.04, ubuntu22.04, debian11, archlinux]
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Cache for docker images
+      uses: jpribyl/action-docker-layer-caching@v0.1.1
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+      with:
+        path: ~/.cache/images
+        key: ${{ matrix.images }}-cache-images-{hash}
+
+    - name: Docker Build ${{ matrix.images }}
+      run: docker-compose build ${{ matrix.images }}
+
+    - name: Test on ${{ matrix.images }}
+      run: docker-compose run ${{ matrix.images }} ./tests.sh

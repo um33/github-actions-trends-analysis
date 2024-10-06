@@ -1,0 +1,35 @@
+version: 2
+mergeable:
+  - when: pull_request.*
+    validate:
+    - do: description
+      no_empty:
+        enabled: true
+        message: Description should not be empty. Provide details with **what** was changed, **why** it was changed, and **how** it was changed.
+    - do: label
+      and:
+      - no_empty:
+          enabled: true
+      - must_exclude:
+          regex: duplicate|feedback|invalid|wont|progress
+    - do: milestone
+      no_empty:
+        enabled: true
+    - do: dependent
+      changed:
+        file: '*'
+        required: ['CHANGELOG.md']
+    - do: dependent
+      changed:
+        file: 'binscripts/rvm-installer'
+        required: ['binscripts/rvm-installer.asc']
+    - do: dependent
+      changed:
+        file: 'config/known'
+        required: ['config/known_strings', 'config/md5', 'config/sha512']
+    - do: dependent
+      changed:
+        file: 'config/known_strings'
+        required: ['config/md5', 'config/sha512']
+    - do: dependent
+      files: ['config/md5', 'config/sha512']

@@ -1,0 +1,118 @@
+# Github actions workflow name
+name: CI
+
+# Triggers the workflow on push or pull request events
+on:
+  push:
+    branches: [main, dev, master]
+    tags: ['**']
+  pull_request:
+
+jobs:
+  node_tests:
+    name: 'Test stylus on ${{matrix.os}} with node20'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+     # Pull repo to test machine
+     - uses: actions/checkout@v4
+     # Configures the node version used on GitHub-hosted runners
+     - uses: actions/setup-node@v4
+       with:
+         # The Node.js version to configure
+         node-version: '20'
+     - name: Install npm dependencies
+       run: npm install
+     - name: Print node & npm version
+       # Output useful info for debugging.
+       run: node --version && npm --version 
+     - name: Run Test
+       run: npm run test
+
+  compat_node_tests:
+    name: 'Compat test stylus on ${{matrix.os}} with node${{matrix.node}}'
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [14, 16, 18, 21]
+    runs-on: ${{ matrix.os }}
+    steps:
+     - uses: actions/checkout@v4
+     - uses: actions/setup-node@v4
+       with:
+         node-version: ${{ matrix.node }}
+     - name: Install npm dependencies
+       run: npm install
+     - name: Print put node & npm version
+       run: node --version && npm --version 
+     - name: Run Test
+       run: npm run test
+
+  benchmark:
+    name: 'Run stylus benchmark with node20'
+    runs-on: ubuntu-latest
+    steps:
+     - uses: actions/checkout@v4
+     - uses: actions/setup-node@v4
+       with:
+         node-version: '20'
+     - name: Install npm dependencies
+       run: npm install
+     - name: Print put node & npm version
+       run: node --version && npm --version 
+     - name: Run Benchmark
+       run: node ./bm.js
+  
+  yarn-regression:
+    name: 'yarn exec stylus regression test'
+    runs-on: macos-latest
+    steps:
+     - uses: actions/checkout@v4
+     - uses: actions/setup-node@v4
+       with:
+         node-version: '20'
+     - name: Print put node & npm version
+       run: node --version && npm --version
+     - name: Install yarn global
+       run: npm install -g yarn
+     - name: open a new folder
+       run: cd ./test/yarn
+     - name: Run Yarn
+       run: yarn install && yarn add stylus@latest && yarn run stylus --version
+  
+  coverage:
+    name: 'Run nyc for code coverage'
+    runs-on: ubuntu-latest
+    steps:
+     - uses: actions/checkout@v4
+     - uses: actions/setup-node@v4
+       with:
+         node-version: '20'
+     - name: Print put node & npm version
+       run: node --version && npm --version
+     - name: Install npm dependencies
+       run: npm install
+     - name: Run nyc
+       run: npx nyc@latest npm run test
+    
+  deno_tests:
+    name: 'Test stylus on ${{matrix.os}} with latest stable deno'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+     # Pull repo to test machine
+     - uses: actions/checkout@v4
+     # Configures the deno version used on GitHub-hosted runners
+     - uses: denoland/setup-deno@v1
+       with:
+         # Run with latest stable Deno
+         deno-version: v1.x
+     - name: Print deno version
+       # Output useful info for debugging.
+       run: deno --version
+     - name: Run Test
+       run: deno run -A deno/test.ts

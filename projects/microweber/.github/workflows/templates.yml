@@ -1,0 +1,168 @@
+name: PHP Templates Tests
+on:
+  workflow_run:
+    workflows: ["Dusk"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      templates:
+        description: 'Templates to test'
+        required: true
+        default: 'microweber-templates/big'
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        templates: [
+          'microweber-templates/big',
+          'microweber-templates/big-free',
+#          'microweber-templates/bootstrap5',
+#          'microweber-templates/dream',
+#          'microweber-templates/green',
+#          'microweber-templates/mobile-app',
+         'microweber-templates/new-world',
+      #    'microweber-templates/notary-services',
+#          'microweber-templates/proteinstore',
+         'microweber-templates/shopmag',
+#          'microweber-templates/accessories',
+#          'microweber-templates/apartment',
+   #       'microweber-templates/art',
+#          'microweber-templates/bamboo',
+#          'microweber-templates/banking',
+           'microweber-templates/beauty',
+#          'microweber-templates/blank',
+#          'microweber-templates/bookstore',
+#          'microweber-templates/burger',
+#          'microweber-templates/business',
+#          'microweber-templates/car-services',
+#          'microweber-templates/clothes',
+#          'microweber-templates/coffeeshop',
+#          'microweber-templates/comingsoon',
+#          'microweber-templates/conference',
+#          'microweber-templates/cryptocurrency',
+#          'microweber-templates/crypto2',
+#          'microweber-templates/digital',
+#          'microweber-templates/fitpower',
+#          'microweber-templates/floristry',
+#          'microweber-templates/gadgets',
+#          'microweber-templates/gallery',
+   #      'microweber-templates/guesthouse',
+#          'microweber-templates/home-restoration',
+           'microweber-templates/hospital',
+#           'microweber-templates/hostel',
+#          'microweber-templates/human-recourses',
+#          'microweber-templates/landing-shop',
+#          'microweber-templates/landingshop2',
+#          'microweber-templates/networking-space',
+#          'microweber-templates/office',
+#          'microweber-templates/offline-cash',
+#          'microweber-templates/photography',
+#          'microweber-templates/portfolio',
+ #         'microweber-templates/private-school',
+#          'microweber-templates/services',
+#          'microweber-templates/simple-shop',
+#          'microweber-templates/skydive',
+#          'microweber-templates/tattoo',
+ #         'microweber-templates/theplace',
+#          'microweber-templates/tony',
+     #     'microweber-templates/tourism',
+ #         'microweber-templates/urban',
+          'microweber-templates/big',
+#          'microweber-templates/veterinary',
+#          'microweber-templates/wedding',
+#          'microweber-templates/yoga-studio',
+#          'microweber-templates/ziza',
+#          'microweber-templates/wine',
+#          'microweber-templates/yachting'
+        ]
+        php-versions: ['8.2']
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - uses: ./.github/actions/setup-php
+      with:
+        php_version: ${{ matrix.php-versions }}
+#    - name: Setup Apache
+#      uses: thunder/apache-shiva-php-action@v1
+#      with:
+#        php-version: '7.4'
+#        site-directory: /home/runner/work/microweber/microweber/
+#        # Defaults to 8888
+#        http-port:
+#          8000
+    - name: Npm install
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        cache: 'npm'
+        cache-dependency-path: ./package-lock.json
+    - run: npm install
+    - run: npm run build
+    - name: Cleanup old theme files
+      run: |
+        rm -rf userfiles/templates/big
+        rm -rf userfiles/templates/*
+        rm -rf bootstrap/cache/*
+    - name: Add auth composer
+      id: create-json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "auth.json"
+        json: '{"http-basic":{"packages.microweberapi.com":{"username":"${{ secrets.COMPOSER_USERNAME }}","password":"${{ secrets.COMPOSER_PASSWORD }}"}}}'
+    - name: Install Composer dependencies
+      run: |
+        ls -la
+        composer install
+        chmod -R 0755 vendor/laravel/dusk/bin/
+    - name: Clean opcache
+      run: |
+        php -r "if (function_exists('opcache_reset')) { var_dump(opcache_reset()); } else { echo 'opcache_reset function does not exist.'; }"
+    - name: Install template
+      run: composer require ${{ matrix.templates }} --no-cache
+    - name: Remove screenshot layout test
+      run: |
+        rm -f userfiles/templates/big/src/tests/Browser/BigScreenshotLayoutsTest.php
+    - name: Install Microweber with template ${{ matrix.templates }}
+      run: php artisan microweber:install --email=admin@site.com --username=1 --password=1 --db-host=/home/runner/work/microweber/microweber/storage/database1.sqlite --db-name=microweber --db-password=nopass --db-driver=sqlite --db-prefix=site_ --template=${{ matrix.templates }} --default-content=1
+    - name: Run Laravel Server
+      run:  php -d variables_order=EGPCS -S 127.0.0.1:8000 > /home/runner/work/microweber/microweber/storage/logs/serve.log 2>&1 &
+    - name: Run Dusk Browse test
+      run:  php artisan dusk --filter=BrowsePagesForBrokenTagsTest
+    - name: Upload Screenshots
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: screenshots
+        path: tests/Browser/screenshots
+    - name: Upload Console Logs
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: console
+        path: tests/Browser/console
+    - name: Upload Laravel Storage Logs
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: storage-logs
+        path: storage/logs
+    - name: Upload Laravel config
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: config
+        path:
+          config
+
+
+

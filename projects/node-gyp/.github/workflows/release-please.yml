@@ -1,0 +1,34 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  release-please:
+    outputs:
+      pr: ${{ steps.release.outputs.pr }}
+    permissions:
+      contents: write # to create release commit (google-github-actions/release-please-action)
+      pull-requests: write # to create release PR (google-github-actions/release-please-action)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: google-github-actions/release-please-action@v4
+      id: release
+        # Standard Conventional Commits: `feat` and `fix`
+        # node-gyp subdirectories: `bin`, `gyp`, `lib`, `src`, `test`
+        # node-gyp subcommands: `build`, `clean`, `configure`, `install`, `list`, `rebuild`, `remove`
+        # Core abstract category: `deps`
+        # Languages/platforms: `python`, `lin`, `linux`, `mac`, `macos`, `win`, `window`, `zos`
+        # Documentation: `doc`, `docs`, `readme`
+        # Standard Conventional Commits: `chore` (under "Miscellaneous")
+        # Miscellaneous abstract categories: `refactor`, `ci`, `meta`
+
+  test:
+    name: Release Test
+    needs: [ release-please ]
+    if: needs.release-please.outputs.pr || startsWith(github.head_ref, 'release-please--')
+    uses: ./.github/workflows/tests.yml

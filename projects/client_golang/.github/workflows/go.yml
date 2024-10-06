@@ -1,0 +1,62 @@
+---
+name: Go
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "release-*"
+
+# Minimal permissions to be inherited by any job that don't declare it's own permissions
+permissions:
+  contents: read
+
+jobs:
+  supportedVersions:
+    name: Fetch supported Go versions
+    runs-on: ubuntu-latest
+    outputs:
+        supported_versions: ${{ steps.matrix.outputs.supported_versions }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Read supported_go_versions.txt
+        id: matrix
+        run: |
+            versions=$(cat supported_go_versions.txt)
+            matrix="[$(echo "$versions" | sed 's/\(.*\)/"\1"/' | paste -s -d,)]"
+            echo "supported_versions=$matrix" >> $GITHUB_OUTPUT
+  
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: supportedVersions
+
+    strategy:
+      matrix:
+        go_version: ${{ fromJSON(needs.supportedVersions.outputs.supported_versions) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.1
+
+      - name: Set up Go ${{ matrix.go_version }}
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ matrix.go_version }}
+
+      - name: Cache Go modules
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: v1-go${{ matrix.go_version }}
+
+      - name: Run tests and check license
+        run: make check_license test
+        env:
+          CI: true
+
+      - name: Run style and unused
+        if: ${{ matrix.go_version == '1.20' }}
+        run: make style unused

@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+
+env:
+  SPACEDRIVE_CUSTOM_APT_FLAGS: --no-install-recommends
+  # From: https://github.com/rust-lang/rust-analyzer/blob/master/.github/workflows/ci.yaml
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  RUSTUP_MAX_RETRIES: 10
+  SD_AUTH: disabled
+
+# Cancel previous runs of the same workflow on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js, pnpm and dependencies
+        uses: ./.github/actions/setup-pnpm
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Perform typechecks
+        run: pnpm typecheck
+
+  eslint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js, pnpm and dependencies
+        uses: ./.github/actions/setup-pnpm
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Perform linting
+        run: pnpm lint
+
+  cypress:
+    name: Cypress
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup System and Rust
+        uses: ./.github/actions/setup-system
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: aarch64-apple-darwin
+
+      - name: Setup Node.js, pnpm and dependencies
+        uses: ./.github/actions/setup-pnpm
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cypress
+        run: |
+          set -euxo pipefail
+          pnpm exec cypress install
+          rm -rf /Users/runner/.cache/Cypress
+          ln -sf /Users/runner/Library/Caches/Cypress /Users/runner/.cache/Cypress
+
+      - name: Setup Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          runTests: false
+          working-directory: .
+
+      - name: Download test data
+        run: pnpm test-data small
+
+      - name: E2E test
+        uses: cypress-io/github-action@v6
+        with:
+          build: npx cypress info
+          install: false
+          command: env CI=true pnpm test:e2e
+          working-directory: apps/web
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: apps/web/cypress/screenshots
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-videos
+          path: apps/web/cypress/videos
+          if-no-files-found: ignore
+
+  rustfmt:
+    name: Rust Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize build space
+        if: ${{ runner.os == 'Linux' }}
+        uses: easimon/maximize-build-space@master
+        with:
+          swap-size-mb: 3072
+          root-reserve-mb: 6144
+          remove-dotnet: 'true'
+          remove-codeql: 'true'
+          remove-haskell: 'true'
+          remove-docker-images: 'true'
+
+      - name: Symlink target to C:\
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\spacedrive_target
+          New-Item -Path target -ItemType Junction -Value C:\spacedrive_target
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        continue-on-error: true
+        id: filter
+        with:
+          filters: |
+            changes:
+              - 'apps/cli/*/**'
+              - 'apps/desktop/crates/*/**'
+              - 'apps/desktop/src-tauri/*/**'
+              - 'apps/mobile/crates/*/**'
+              - 'apps/server/*/**'
+              - 'core/**'
+              - 'crates/*/**'
+              - 'extensions/*/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+      - name: Setup Rust and Prisma
+        if: steps.filter.outcome != 'success' || steps.filter.outputs.changes == 'true'
+        uses: ./.github/actions/setup-rust
+        with:
+          restore-cache: 'false'
+
+      - name: Run rustfmt
+        if: steps.filter.outcome != 'success' || steps.filter.outputs.changes == 'true'
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      matrix:
+        platform: [ubuntu-20.04, macos-14, windows-latest]
+    steps:
+      - name: Maximize build space
+        if: ${{ runner.os == 'Linux' }}
+        uses: easimon/maximize-build-space@master
+        with:
+          swap-size-mb: 3072
+          root-reserve-mb: 6144
+          remove-dotnet: 'true'
+          remove-codeql: 'true'
+          remove-haskell: 'true'
+          remove-docker-images: 'true'
+
+      - name: Symlink target to C:\
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\spacedrive_target
+          New-Item -Path target -ItemType Junction -Value C:\spacedrive_target
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        continue-on-error: true
+        id: filter
+        with:
+          filters: |
+            changes:
+              - ${{ runner.os == 'Windows' && 'scripts/setup.ps1' || 'scripts/setup.sh' }}
+              - 'scripts/preprep.mjs'
+              - 'apps/cli/*/**'
+              - 'apps/desktop/crates/*/**'
+              - 'apps/desktop/src-tauri/*/**'
+              - 'apps/mobile/crates/*/**'
+              - 'apps/server/*/**'
+              - 'core/**'
+              - 'crates/*/**'
+              - 'extensions/*/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+      - name: Setup System and Rust
+        if: steps.filter.outcome != 'success' || steps.filter.outputs.changes == 'true'
+        uses: ./.github/actions/setup-system
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Clippy
+        if: steps.filter.outcome != 'success' || steps.filter.outputs.changes == 'true'
+        uses: actions-rs-plus/clippy-check@v2
+        with:
+          args: --workspace --all-features --locked
+
+  # test:
+  #   name: Test (${{ matrix.platform }})
+  #   runs-on: ${{ matrix.platform }}
+  #   strategy:
+  #     matrix:
+  #       platform: [ubuntu-20.04, macos-latest, windows-latest]
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup
+  #       uses: ./.github/actions/setup
+  #
+  #     - name: Test
+  #       run: cargo test --workspace --all-features

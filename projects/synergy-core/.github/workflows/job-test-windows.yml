@@ -1,0 +1,79 @@
+name: "Test Windows"
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: true
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    env:
+      GIT_COMMIT: ${{ github.sha }}
+      BONJOUR_BASE_DIR: ${{ github.workspace }}\deps\bonjour
+      QT_BASE_DIR: ${{ github.workspace }}\deps\Qt
+      QT_VERSION: 5.15.2
+      QT_BASE_URL: http://qt.mirror.constant.com/
+      QT_LIB_DIR: ${{ github.workspace }}\deps\Qt\5.15.2
+
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+
+      - name: Cache Qt
+        id: cache-qt
+        uses: actions/cache@v1
+        with:
+          path: ${{ env.QT_BASE_DIR }}
+          key: ${{ runner.os }}-Qt_${{ env.QT_VERSION }}
+
+      - name: Install Qt
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          pip install aqtinstall
+          python -m aqt install --outputdir $env:QT_BASE_DIR --base $env:QT_BASE_URL $env:QT_VERSION windows desktop win64_msvc2019_64
+          cd $env:QT_LIB_DIR\msvc2019_64
+          dir
+
+      - name: Cache Bonjour
+        id: cache-bonjour
+        uses: actions/cache@v1
+        with:
+          path: ${{ env.BONJOUR_BASE_DIR }}
+          key: ${{ runner.os }}-Bonjour
+
+      - name: Install Bonjour SDK
+        if: steps.cache-bonjour.outputs.cache-hit != 'true'
+        run: |
+          New-Item -Force -ItemType Directory -Path "$env:BONJOUR_BASE_DIR"
+          $client = new-object System.Net.WebClient
+          $client.DownloadFile("https://binaries.symless.com/bonjour/BonjourSDK.zip",".\bonjoursdk.zip")
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(".\bonjoursdk.zip", "$env:BONJOUR_BASE_DIR")
+
+      - name: Install dependencies
+        run: python ./scripts/install_deps.py --skip cmake ninja
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Build
+        env:
+          CMAKE_PREFIX_PATH: "${{ env.QT_LIB_DIR }}\\msvc2019_64\\"
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          . ./version
+          msbuild synergy-core.sln /p:Configuration=Release
+
+      - name: Run unit test
+        run: .\build\bin\Release\unittests.exe

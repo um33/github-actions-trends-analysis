@@ -1,0 +1,64 @@
+# https://github.com/actions/labeler
+CI:
+  - changed-files:
+    - any-glob-to-any-file: [".github/workflows/*", ".github/labeler.yml"]
+
+classifier:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/classify/**/*"
+
+cli:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/cli.py"
+
+cluster:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/cluster/**/*"
+
+corpus:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/corpus/**/*"
+
+GUI:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/app/**/*"
+
+internals:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/internals.py"
+
+language-model:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/lm/**/*"
+
+metrics:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/metrics/**/*"
+
+parsing:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/parse/**/*"
+
+sentiment:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/sentiment/**/*"
+
+stem/lemma:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/stem/**/*"
+
+tagger:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/tag/**/*"
+
+tokenizer:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/tokenize/**/*"
+
+twitter:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/twitter/**/*"
+
+wordnet:
+  - changed-files:
+    - any-glob-to-any-file: "nltk/wordnet/**/*"

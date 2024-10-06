@@ -1,0 +1,34 @@
+name: Rust checks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+    - name: cargo fmt
+      run: cargo fmt --check --all
+
+  clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Install deps
+      run: |
+        sudo apt install gettext libpcre2-dev python3-pip tmux
+        sudo pip3 install pexpect
+    - name: cmake
+      run: |
+        cmake -B build
+    - name: cargo clippy
+      # This used to have --deny=warnings, but that turns rust release day
+      # into automatic CI failure day, so we don't do that.
+      run: cargo clippy --workspace --all-targets

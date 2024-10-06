@@ -1,0 +1,156 @@
+name: Deploy To Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'The commit ref or SHA'
+        required: true
+        default: 'master'
+      merged_sha:
+        description: 'The merge commit SHA'
+      base_sha:
+        description: 'The base commit SHA'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{steps.prep.outputs.sha}}
+    steps:
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        with:
+          status: 'pending'
+
+      - name: Build Info
+        run: |
+          echo "SHA: ${{ github.event.inputs.sha }}"
+          echo "Merged SHA: ${{ github.event.inputs.merged_sha }}"
+          echo "Deployment run ID: ${{ github.run_id }}"
+      - id: prep
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.ACTIVE_TOKEN }}
+          script: |
+            core.setOutput('sha', context.payload.inputs.merged_sha || context.payload.inputs.sha);
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{steps.prep.outputs.sha}}
+      - run: |
+          npm i
+          npx gulp build
+          npm pack
+      - id: package-name
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { name, version } = require(require('path').join(process.env.GITHUB_WORKSPACE, 'package.json'));
+
+            core.setOutput('packageName', `${name}-${version}`);
+            core.setOutput('imageName', `${name}/${name}:${version}`);
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: npm
+          path: |
+            ${{steps.package-name.outputs.packageName}}.tgz
+      - run: |
+          npx gulp docker-build
+          docker save -o ${{steps.package-name.outputs.packageName}}.tar ${{steps.package-name.outputs.imageName}}
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docker
+          path: ${{steps.package-name.outputs.packageName}}.tar
+
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        if: failure() || cancelled()
+        with:
+          status: 'failure'
+
+  changes:
+    # TODO: currently cannot generate a list of changes after rebase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        with:
+          status: 'pending'
+
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.sha }}
+          fetch-depth: 0
+      - run: |
+          git reset --soft `git merge-base "${{github.event.inputs.base_sha}}" HEAD`
+          git diff --name-only --cached > changes.txt
+      - uses: actions/upload-artifact@v3
+        with:
+          name: changes
+          path: changes.txt
+
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        if: failure() || cancelled()
+        with:
+          status: 'failure'
+
+  test:
+    needs: [build, changes]
+    runs-on: ubuntu-latest
+    environment: CI
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: changes
+      - uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.ACTIVE_TOKEN}}
+          script: |
+            function getInputs () {
+              const { sha, merged_sha } = context.payload.inputs;
+
+              return {
+                ...merged_sha ? { merged_sha } : {},
+                sha,
+                deploy_run_id: '${{github.run_id}}'
+              }
+            }
+
+            async function dispatchWorkflow (workflowName) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'master',
+                workflow_id: workflowName,
+                inputs: getInputs()
+              });
+            }
+
+            // TODO: Optimize by running only necessary tests for corresponding changes
+            const fileList = require('fs').readFileSync('changes.txt').toString().split('\n').filter(line => line);
+
+            const tasks = [];
+
+            tasks.push('test-client-desktop.yml');
+            tasks.push('test-client-mobile.yml');
+            tasks.push('test-functional-docker.yml');
+            tasks.push('test-functional-local-safari.yml');
+            tasks.push('test-functional-local-esm.yml');
+            tasks.push('test-functional-local-chrome.yml');
+            tasks.push('test-functional-local-edge.yml');
+            tasks.push('test-functional-local-firefox.yml');
+            tasks.push('test-functional-local-multiple-windows.yml');
+            tasks.push('test-functional-local-multiple-windows-na.yml');
+            tasks.push('test-functional-local-native-automation.yml');
+            tasks.push('test-functional-local-headed-browsers.yml');
+            tasks.push('test-functional-local-legacy.yml');
+            tasks.push('test-functional-remote-mobile.yml');
+            tasks.push('test-server-docker.yml');
+            tasks.push('test-server-minimal.yml');
+            tasks.push('test-server-latest.yml');
+
+            await Promise.all(tasks.map(task => dispatchWorkflow(task)));
+
+      - uses: DevExpress/testcafe-build-system/actions/set-status@main
+        if: always()
+        with:
+          status: ${{ fromJSON('["failure", "success"]')[job.status == 'success'] }}
+          artifacts-path: ${{ fromJSON('["", "#artifacts"]')[job.status == 'success'] }}

@@ -1,0 +1,296 @@
+name: Publish Images
+
+on:
+  push:
+    branches:
+      - main
+
+# Don't grant any access by default
+permissions: {}
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-main-${{ matrix.images.target }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      deployments: write
+      issues: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        images:
+          - prefix: slim-
+            target: slim
+          - prefix: ""
+            target: standard
+    timeout-minutes: 60
+    env:
+      CONTAINER_IMAGE_ID: "ghcr.io/super-linter/super-linter:${{ matrix.images.prefix }}latest"
+      CONTAINER_IMAGE_TARGET: "${{ matrix.images.target }}"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set build metadata
+        run: |
+          if [[ ${{ github.event_name }} == 'push' ]] || [[ ${{ github.event_name }} == 'merge_group' ]]; then
+            BUILD_REVISION=${{ github.sha }}
+            BUILD_VERSION=${{ github.sha }}
+          elif [[ ${{ github.event_name }} == 'pull_request' ]]; then
+            BUILD_REVISION=${{ github.event.pull_request.head.sha }}
+            BUILD_VERSION=${{ github.event.pull_request.head.sha }}
+          else
+            echo "[ERROR] Event not supported when setting build revision and build version"
+            exit 1
+          fi
+
+          if [ -z "${BUILD_REVISION}" ]; then
+            echo "[ERROR] BUILD_REVISION is empty"
+            exit 1
+          fi
+
+          if [ -z "${BUILD_VERSION}" ]; then
+            echo "[ERROR] BUILD_VERSION is empty"
+            exit 1
+          fi
+
+          {
+            echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "BUILD_REVISION=${BUILD_REVISION}"
+            echo "BUILD_VERSION=${BUILD_VERSION}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Free Disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_REVISION=${{ env.BUILD_REVISION }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+          cache-from: type=registry,ref=${{ env.CONTAINER_IMAGE_ID }}-buildcache
+          load: true
+          push: false
+          secrets: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          tags: |
+            ${{ env.CONTAINER_IMAGE_ID }}
+          target: "${{ matrix.images.target }}"
+
+      - name: Run Test Suite
+        run: make test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start deployment
+        uses: bobheadxi/deployments@v1.5.0
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: Production
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_REVISION=${{ env.BUILD_REVISION }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+          cache-from: type=registry,ref=${{ env.CONTAINER_IMAGE_ID }}-buildcache
+          cache-to: type=registry,ref=${{ env.CONTAINER_IMAGE_ID }}-buildcache,mode=max
+          load: false
+          push: true
+          secrets: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          tags: |
+            ${{ env.CONTAINER_IMAGE_ID }}
+          target: "${{ matrix.images.target }}"
+
+      - name: Update deployment
+        uses: bobheadxi/deployments@v1.5.0
+        # We depend on the 'deployment' step outputs, so we can't run this step
+        # if the 'deployment' step didn't run. This can happen if any step
+        # before the 'deployment' step fails. That's why 'always()' is not
+        # suitable here.
+        if: steps.deployment.conclusion != 'cancelled' && steps.deployment.conclusion != 'skipped'
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: https://github.com/super-linter/super-linter
+
+      - name: Create Issue on Failure
+        uses: actions/github-script@v7
+        if: failure()
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const create = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "Failed to deploy to production",
+              body: "Automation has failed us!\nMore information can be found at:\n - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              assignees: [
+                "zkoppert", "Hanse00", "ferrarimarco"
+              ]
+            })
+
+  release:
+    name: Release
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-main-release
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      deployments: write
+      issues: write
+      packages: write
+      pull-requests: write
+    timeout-minutes: 60
+    steps:
+      - uses: google-github-actions/release-please-action@v4
+        id: release
+        with:
+          config-file: .github/release-please/release-please-config.json
+          manifest-file: .github/release-please/.release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start deployment
+        if: steps.release.outputs.release_created
+        uses: bobheadxi/deployments@v1.5.0
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: Release
+
+      - name: Configure release metedata
+        if: steps.release.outputs.release_created
+        # shellcheck disable=SC2062
+        run: |
+          RELEASE_VERSION="${{ steps.release.outputs.tag_name }}"
+
+          if [ -z "${RELEASE_VERSION}" ]; then
+            echo "Error RELEASE_VERSION is empty. Exiting..."
+            exit 1
+          fi
+
+          if ! echo "${RELEASE_VERSION}" | grep -E -o "v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+"; then
+            echo "Error: RELEASE_VERSION doesn't look like a semantic version: ${RELEASE_VERSION}"
+            exit 2
+          fi
+
+          SEMVER_MAJOR_VERSION=v${{ steps.release.outputs.major }}
+
+          {
+            echo "RELEASE_VERSION=${RELEASE_VERSION}"
+            echo "SEMVER_MAJOR_VERSION=${SEMVER_MAJOR_VERSION}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Login to GHCR
+        if: steps.release.outputs.release_created
+        uses: docker/login-action@v3.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # We don't rebuild the image to avoid that the latest tag and the release tags don't point to the very same container image.
+      # Instead, we pull the latest image and tag it.
+      - name: Retag and Push Images
+        if: steps.release.outputs.release_created
+        uses: akhilerm/tag-push-action@v2.2.0
+        with:
+          src: ghcr.io/super-linter/super-linter:latest
+          dst: |
+            ghcr.io/super-linter/super-linter:${{ env.SEMVER_MAJOR_VERSION }}
+            ghcr.io/super-linter/super-linter:${{ env.RELEASE_VERSION }}
+
+      - name: Retag and Push Images slim
+        if: steps.release.outputs.release_created
+        uses: akhilerm/tag-push-action@v2.2.0
+        with:
+          src: ghcr.io/super-linter/super-linter:slim-latest
+          dst: |
+            ghcr.io/super-linter/super-linter:slim-${{ env.SEMVER_MAJOR_VERSION }}
+            ghcr.io/super-linter/super-linter:slim-${{ env.RELEASE_VERSION }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # No need to tag major.minor.patch because that tag is automatically created when creating the release
+      - name: Tag major, minor, and latest versions
+        if: steps.release.outputs.release_created
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git tag --annotate --force ${{ env.SEMVER_MAJOR_VERSION }} -m "Release ${{ env.SEMVER_MAJOR_VERSION }}"
+          git tag --annotate --force latest -m "Release latest (${{ env.RELEASE_VERSION }})"
+
+          git push --force origin ${{ env.SEMVER_MAJOR_VERSION }}
+          git push --force origin latest
+
+      - name: Update deployment
+        uses: bobheadxi/deployments@v1.5.0
+        # We depend on the 'deployment' step outputs, so we can't run this step
+        # if the 'deployment' step didn't run. This can happen if any step
+        # before the 'deployment' step fails. That's why 'always()' is not
+        # suitable here.
+        if: steps.deployment.conclusion != 'cancelled' && steps.deployment.conclusion != 'skipped'
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: https://github.com/super-linter/super-linter
+
+      - name: Create Issue on Failure
+        uses: actions/github-script@v7
+        if: failure()
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const create = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "Failed to deploy to production",
+              body: "Automation has failed us!\nMore information can be found at:\n - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              assignees: [
+                "zkoppert", "Hanse00", "ferrarimarco"
+              ]
+            })

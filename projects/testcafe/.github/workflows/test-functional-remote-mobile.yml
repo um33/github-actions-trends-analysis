@@ -1,0 +1,23 @@
+name: Test Functional (Remote Mobile)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'The test commit SHA or ref'
+        required: true
+        default: 'master'
+      merged_sha:
+        description: 'The merge commit SHA'
+      deploy_run_id:
+        description: 'The ID of a deployment workspace run with artifacts'
+jobs:
+  test:
+    uses: ./.github/workflows/test-functional.yml
+    with:
+      test-script: 'npx gulp test-functional-travis-mobile-run --steps-as-tasks'
+      os: 'ubuntu-latest'
+      use-public-hostname: true
+      timeout: 35
+      is-browserstack: true
+    secrets: inherit

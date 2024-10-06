@@ -1,0 +1,53 @@
+name: Feature Request
+description: Submit a Request For Consideration
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ❤️ ngrx? Please consider sponsoring us: 👉  [sponsor](https://github.com/sponsors/ngrx)
+        Please search GitHub for a similar issue or PR before submitting a new issue.
+        If you need real-time help, join us on [Discord](https://discord.com/invite/ngrx).
+
+  - type: dropdown
+    id: affected-packages
+    attributes:
+      label: Which @ngrx/* package(s) are relevant/related to the feature request?
+      options:
+        - component-store
+        - component
+        - data
+        - effects
+        - entity
+        - eslint-plugin
+        - operators
+        - router-store
+        - schematics
+        - signals
+        - store-devtools
+        - store
+      multiple: true
+    validations:
+      required: true
+
+  - type: textarea
+    id: information
+    attributes:
+      label: Information
+      description: Tell us what you want to be added to NgRx
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe any alternatives/workarounds you're currently using
+
+  - type: checkboxes
+    id: assistance
+    attributes:
+      label: I would be willing to submit a PR to fix this issue
+      description: Assistance is provided if you need help submitting a pull request
+      options:
+        - label: 'Yes'
+        - label: 'No'

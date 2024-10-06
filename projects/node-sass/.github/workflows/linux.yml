@@ -1,0 +1,62 @@
+name: Build bindings for Linux releases
+
+on:
+  push:
+    branches-ignore:
+      - "dependabot/**"
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: 16
+            gcc: "gcc-8"
+            gpp: "g++-8"
+            os: ubuntu-20.04
+          - node: 18
+            gcc: "gcc-8"
+            gpp: "g++-8"
+            os: ubuntu-20.04
+          - node: 19
+            gcc: "gcc-8"
+            gpp: "g++-8"
+            os: ubuntu-20.04
+          - node: 20
+            gcc: "gcc-10"
+            gpp: "g++-10"
+            os: ubuntu-22.04
+
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup GCC/G++
+        run: sudo apt-get install ${{ matrix.gcc }} ${{ matrix.gpp }}
+
+      - name: Install packages
+        run: npm install --unsafe-perm
+        env:
+          SKIP_SASS_BINARY_DOWNLOAD_FOR_CI: true
+          CC: ${{ matrix.gcc }}
+          CXX: ${{ matrix.gpp }}
+          LINK: ${{ matrix.gcc }}
+          LINKXX: ${{ matrix.gpp }}
+
+      - name: Run tests
+        run: npm test
+
+      - uses: actions/upload-artifact@v3
+        if: github.repository_owner == 'sass' && github.event_name != 'pull_request'
+        with:
+          name: ${{ matrix.node }}
+          path: vendor/

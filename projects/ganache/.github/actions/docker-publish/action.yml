@@ -1,0 +1,73 @@
+name: "Docker Publish"
+description: "Builds and publishes a Docker image for the Ganache repo."
+inputs:
+  VERSION:
+    description: "The release version to be tagged to the Docker image, e.g., 4.0.1"
+    required: true
+  TAG:
+    description: "The tag to be tagged to the Docker image, e.g., latest."
+    required: true
+  DOCKER_USERNAME:
+    description: "Username to log in to Docker hub."
+    required: true
+  DOCKER_ACCESS_TOKEN:
+    description: "Access token to log in to Docker hub."
+    required: true
+  GITHUB_TOKEN:
+    description: "Github token used to log in to the container registry."
+    required: true
+  INFURA_KEY:
+    description: "Infura key used to build Ganache within the Docker image."
+    required: true
+runs:
+  # "composite" means we are using yml (rather than js or docker) for our action
+  # https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+  using: "composite"
+  steps:
+    - name: Use node 16
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+
+    - name: Run installation
+      run: npm ci
+      shell: bash
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@f75d088332b07a08afadf6ac53c74509b9453f12
+      with:
+        username: ${{ inputs.DOCKER_USERNAME }}
+        password: ${{ inputs.DOCKER_ACCESS_TOKEN }}
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@f75d088332b07a08afadf6ac53c74509b9453f12
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@314ddf6d4a82333bf1bc7630399df41bf68eba09
+      with:
+        images: |
+          trufflesuite/ganache
+          ghcr.io/${{ github.repository}}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@38836d31bd1e0f8f29b8c7ad0412da32020f15b3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@39a1a82492fd1ad19af19d61b5f748e4cb6cd1af
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@175d02bffea74695e96b351069ac938b338802f9
+      with:
+        context: .
+        file: ./packages/ganache/Dockerfile
+        push: true
+        tags: ${{ format('trufflesuite/ganache:{0}, trufflesuite/ganache:v{1}', inputs.TAG, inputs.VERSION) }}
+        labels: ${{ steps.meta.outputs.labels }}
+        platforms: linux/arm64/v8,linux/amd64
+        build-args: |
+          INFURA_KEY=${{ inputs.INFURA_KEY }}

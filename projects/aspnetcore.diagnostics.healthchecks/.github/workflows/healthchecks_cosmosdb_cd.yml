@@ -1,0 +1,16 @@
+name: HealthChecks CosmosDb CD
+
+on:
+  push:
+    tags:
+      - release-cosmosdb-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.CosmosDb/HealthChecks.CosmosDb.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.CosmosDb

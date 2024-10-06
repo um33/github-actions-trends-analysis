@@ -1,0 +1,144 @@
+name: Code style
+"on":
+  push:
+    branches:
+      - main
+      - prerelease_test
+  pull_request:
+
+jobs:
+  cmake_checks:
+    name: Check CMake files
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install prerequisites
+        run: pip install cmakelang
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run format on CMake files
+        run: |
+          find  -name CMakeLists.txt  -exec cmake-format -i {} +
+          find src test tsl -name '*.cmake' -exec cmake-format -i {} +
+      - name: Check for diff
+        run: git diff --exit-code
+
+  perl_checks:
+    name: Check Perl code in tree
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install prerequisites
+        run: sudo apt install perltidy
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Check trailing whitespace
+        if: always()
+        run: |
+          find . -name '*.p[lm]' -exec perl -pi -e 's/[ \t]+$//' {} +
+          git diff --exit-code
+      - name: Format Perl files, if needed
+        if: always()
+        run: |
+          find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
+          git diff --exit-code
+
+  yaml_checks:
+    name: Check YAML code in tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install yamllint
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run yamllint
+        run: |
+          find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
+
+  spelling_checks:
+    name: Check spelling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install codespell
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run codespell
+        run: |
+          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
+            -exec codespell -I .github/codespell-ignore-words {} \+
+
+  cc_checks:
+    name: Check code formatting
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+    - name: Check trailing whitespace
+      if: always()
+      run: |
+        find . -type f -regex '.*\.\(c\|h\|sql\|sql\.in\)$' -exec perl -pi -e 's/[ \t]+$//' {} +
+        git diff --exit-code
+
+    - name: Check code formatting
+      if: always()
+      run: |
+        sudo apt install clang-format-14
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-14 100
+        sudo update-alternatives --set clang-format /usr/bin/clang-format-14
+        ./scripts/clang_format_all.sh
+        git diff --exit-code
+
+  python_checks:
+    name: Check Python code in tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install --upgrade pip
+          # Inexplicably, at some point pip started to insist on installing
+          # prospector==1.7.7, which is incompatible with the new pylint.
+          # Also pin the version of the other tools so that they don't fail
+          # sporadically when a new version becomes available.
+          pip install black prospector==1.8.4 pylint==2.16.0 dodgy==0.2.1 \
+            mccabe==0.7.0 pycodestyle==2.9.1 pyflakes==2.5.0 \
+            psutil pygithub pglast
+          pip list
+          pip list --user
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run prospector
+        run: |
+          find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
+          git diff --exit-code
+
+  misc_checks:
+    name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+    steps:
+    - name: Checkout source
+      if: always()
+      uses: actions/checkout@v4
+    - name: Check license
+      if: always()
+      run: ./scripts/check_license_all.sh
+    - name: Check git commit hooks
+      if: always()
+      run: |
+        ./scripts/githooks/commit_msg_tests.py
+    - name: Check for unreferenced test files
+      if: always()
+      run: ./scripts/check_unreferenced_files.sh
+    - name: Check for missing gitignore entries for template test files
+      if: always()
+      run: |
+        ./bootstrap
+        ./scripts/check_missing_gitignore_for_template_tests.sh
+    - name: Check for unnecessary template test files
+      if: always()
+      run: ./scripts/check_unecessary_template_tests.sh
+

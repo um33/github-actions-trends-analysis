@@ -1,0 +1,127 @@
+---
+name: ci
+
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-unit:
+    uses: sous-chefs/.github/.github/workflows/lint-unit.yml@8afd68a6093e2c9f40efdaf20d7bd08eef008d20
+    permissions:
+      actions: write
+      checks: write
+      pull-requests: write
+      statuses: write
+      issues: write
+
+  integration:
+    needs: lint-unit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - "almalinux-8"
+          - "centos-7"
+          - "centos-stream-8"
+          - "debian-10"
+          - "debian-11"
+          - "rockylinux-8"
+          - "ubuntu-1804"
+          - "ubuntu-2004"
+        suite:
+          - "installation-script-main"
+          - "installation-script-test"
+          - "installation-package"
+          - "installation-tarball"
+          - "install-and-stop"
+        exclude:
+          - os: debian-9
+            suite: installation-script-main
+          - os: debian-11
+            suite: installation-script-test
+          - os: almalinux-8
+            suite: installation-script-main
+          - os: almalinux-8
+            suite: installation-script-test
+          - os: rockylinux-8
+            suite: installation-script-main
+          - os: rockylinux-8
+            suite: installation-script-test
+      fail-fast: false
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Chef
+        uses: actionshub/chef-install@3.0.0
+      - name: Dokken
+        uses: actionshub/test-kitchen@2.1.0
+        env:
+          CHEF_VERSION: latest
+          CHEF_LICENSE: accept-no-persist
+          KITCHEN_LOCAL_YAML: kitchen.dokken.yml
+        with:
+          suite: ${{ matrix.suite }}
+          os: ${{ matrix.os }}
+
+  integration-amazonlinux:
+    needs: lint-unit
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        os:
+          - amazonlinux-2
+        suite:
+          - "installation-tarball"
+          - "install-and-stop"
+      fail-fast: false
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Chef
+        uses: actionshub/chef-install@3.0.0
+      - name: Dokken
+        uses: actionshub/test-kitchen@2.1.0
+        env:
+          CHEF_VERSION: latest
+          CHEF_LICENSE: accept-no-persist
+          KITCHEN_LOCAL_YAML: kitchen.dokken.yml
+        with:
+          suite: ${{ matrix.suite }}
+          os: ${{ matrix.os }}
+
+  integration-smoke:
+    needs: lint-unit
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        os:
+          - "almalinux-8"
+          - "centos-7"
+          - "centos-stream-8"
+          - "debian-10"
+          - "debian-11"
+          - "rockylinux-8"
+          - "ubuntu-1804"
+          - "ubuntu-2004"
+        suite:
+          - "smoke"
+      fail-fast: false
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Chef
+        uses: actionshub/chef-install@3.0.0
+      - name: Dokken
+        uses: actionshub/test-kitchen@2.1.0
+        env:
+          CHEF_VERSION: latest
+          CHEF_LICENSE: accept-no-persist
+        with:
+          suite: ${{ matrix.suite }}
+          os: ${{ matrix.os }}

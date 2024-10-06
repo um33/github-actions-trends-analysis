@@ -1,0 +1,39 @@
+name: Basic ALSA classic configuration for systemd, using a build folder.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "development" ]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    
+jobs:
+  build:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3.5.2
+    - name: Install Dependencies
+      run: sudo apt-get -y --no-install-recommends install build-essential git xmltoman autoconf automake libtool libpopt-dev libconfig-dev libasound2-dev avahi-daemon libavahi-client-dev libssl-dev libsoxr-dev   
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        autoreconf -i ..
+        ../configure --sysconfdir=/etc --with-alsa  --with-soxr --with-avahi --with-ssl=openssl --with-systemd
+    - name: Make
+      run: |
+        cd build
+        make -j
+    - name: Install
+      run: |
+        cd build
+        sudo make install
+    - name: Invoke
+      run: |
+        sudo systemctl start shairport-sync
+    - name: Terminate
+      run: |
+        sudo systemctl stop shairport-sync
+

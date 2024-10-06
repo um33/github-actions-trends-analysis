@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "github-actions:"
+    ignore:
+      - dependency-name: "actions/cache"
+        versions: ["3.x"]
+      - dependency-name: "actions/checkout"
+        versions: ["3.x"]

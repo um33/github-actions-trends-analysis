@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/ci.yml'
+      - '**/pom.xml'
+      - '**/src/main/**'
+      - '**/src/test/**'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/ci.yml'
+      - '**/pom.xml'
+      - '**/src/main/**'
+      - '**/src/test/**'
+
+concurrency:
+  group: ${{ github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttps.protocols=TLSv1.2 -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true
+
+jobs:
+  #  We only execute nativeTest on `dynamic-datasource-spring-boot3-starter`, since only Spring Boot OSS 3 provides support for GraalVM Native Image
+  test-graalvm-ce-ci:
+    name: NativeTest CI - GraalVM CE ${{ matrix.java-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        java-version: [ '21.0.1' ]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+      - name: Build Spring Boot Starter 3 test with Maven
+        run: |
+          ./mvnw -PnativeTestInSpringBoot -T1C -B -e clean test
+  test-hotspot-jdk-ci:
+    name: Test CI - JDK ${{ matrix.java-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        java-version: [ '17', '21' ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+          cache: 'maven'
+      - name: Build test with Maven
+        run: |
+          ./mvnw -T1C -B -e clean test
+  test-minimum-jdk-ci:
+    name: Test CI - JDK ${{ matrix.java-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        java-version: [ '8' ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+          cache: 'maven'
+      - name: Build test with Maven
+        run: |
+          ./mvnw -am -pl dynamic-datasource-creator -T1C -B -e clean test
+          ./mvnw -am -pl dynamic-datasource-spring -T1C -B -e clean test
+          ./mvnw -am -pl dynamic-datasource-spring-boot-common -T1C -B -e clean test
+          ./mvnw -am -pl dynamic-datasource-spring-boot-starter -T1C -B -e clean test

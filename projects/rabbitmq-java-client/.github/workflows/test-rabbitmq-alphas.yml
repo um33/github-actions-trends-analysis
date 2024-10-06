@@ -1,0 +1,61 @@
+name: Test against RabbitMQ alphas
+
+on:
+  schedule:
+    - cron: '0 4 ? * SUN,THU'
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        rabbitmq-image: [ 'pivotalrabbitmq/rabbitmq:v3.13.x', 'pivotalrabbitmq/rabbitmq:main' ]
+    name:  Test against ${{ matrix.rabbitmq-image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout tls-gen
+        uses: actions/checkout@v4
+        with:
+          repository: rabbitmq/tls-gen
+          path: './tls-gen'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'maven'
+      - name: Start cluster
+        run: ci/start-cluster.sh
+        env:
+          RABBITMQ_IMAGE: ${{ matrix.rabbitmq-image }}
+      - name: Get dependencies
+        run: make deps
+      - name: Test with NIO
+        run: |
+          ./mvnw verify -P '!setup-test-cluster,use-nio' -Drabbitmqctl.bin=DOCKER:rabbitmq \
+            -Dtest-broker.A.nodename=rabbit@$(hostname) -Dtest-broker.B.nodename=hare@$(hostname) \
+            -Dmaven.javadoc.skip=true \
+            -Dtest-client-cert.password= -Dtest-tls-certs.dir=rabbitmq-configuration/tls \
+            --no-transfer-progress
+      - name: Test with blocking IO
+        run: |
+          ./mvnw verify -P '!setup-test-cluster' -Drabbitmqctl.bin=DOCKER:rabbitmq \
+          -Dtest-broker.A.nodename=rabbit@$(hostname) -Dtest-broker.B.nodename=hare@$(hostname) \
+          -Dmaven.javadoc.skip=true \
+          -Dtest-client-cert.password= -Dtest-tls-certs.dir=rabbitmq-configuration/tls \
+          --no-transfer-progress
+      - name: Stop broker A
+        run: docker stop rabbitmq && docker rm rabbitmq
+      - name: Stop broker B
+        run: docker stop hare && docker rm hare

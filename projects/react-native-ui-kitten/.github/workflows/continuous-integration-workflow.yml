@@ -1,0 +1,36 @@
+name: Build
+on:
+  push:
+    branches:
+      - master
+      - next
+
+  pull_request:
+    branches:
+      - master
+      - next
+
+jobs:
+  build:
+    name: Running TypeScript compiler, TSLint and Jest
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+          cache: 'yarn'
+
+      - name: Install
+        run: yarn install --prefer-offline
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build
+        run: yarn build
+
+      - name: Test
+        run: yarn test

@@ -1,0 +1,21 @@
+# Called by ci.yml to run documentation build
+# See: https://docs.github.com/en/actions/using-workflows/reusing-workflows#creating-a-reusable-workflow
+name: Build docfx
+
+on:
+  workflow_call:
+
+jobs:
+  run-docfx-build:
+    runs-on: windows-latest
+
+    steps:
+    - name: check out code
+      uses: actions/checkout@v4
+
+    - name: install docfx
+      run: choco install docfx -y
+
+    - name: run .\build\docfx.cmd
+      shell: cmd
+      run: .\build\docfx.cmd

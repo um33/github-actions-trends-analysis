@@ -1,0 +1,16 @@
+name: HealthChecks Aws Sqs CD
+
+on:
+  push:
+    tags:
+      - release-aws_sqs-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.Aws.Sqs/HealthChecks.Aws.Sqs.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.Aws.Sqs

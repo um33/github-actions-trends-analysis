@@ -1,0 +1,26 @@
+test:
+  - src/GraphQL.DataLoader.Tests/**/*
+  - src/GraphQL.Dummy/**/*
+  - src/GraphQL.Harness.Tests/**/*
+  - src/GraphQL.MicrosoftDI.Tests/**/*
+  - src/GraphQL.Tests/**/*
+  - src/GraphQL.ApiTests/**/*.cs
+  - src/Tests.props
+  - src/xunit.runner.json
+
+CI:
+  - .github/workflows/**/*
+  - .github/dependabot.yml
+  - .github/labeler.yml
+  - .github/codecov.yml
+
+code style:
+  - .editorconfig
+
+documentation:
+  - README.md
+  - docs2/**/*
+
+performance:
+  - src/GraphQL.Benchmarks/**/*
+  - src/GraphQL.Benchmarks.Merge/**/*

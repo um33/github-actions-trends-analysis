@@ -1,0 +1,36 @@
+name: DevSkim
+permissions: read-all
+
+on:
+  push:
+    branches: [master, v2.dev, v3.dev]
+  pull_request:
+    branches: [master, v2.dev, v3.dev]
+  schedule:
+    - cron: '40 22 * * 0'
+
+jobs:
+  lint:
+    name: DevSkim
+    runs-on: ubuntu-20.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+      - name: Checkout code
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Run DevSkim scanner
+        uses: microsoft/DevSkim-Action@914fa647b406c387000300b2f09bb28691be2b6d # v1.0.14
+      - name: Upload DevSkim scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        with:
+          sarif_file: devskim-results.sarif

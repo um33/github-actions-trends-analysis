@@ -1,0 +1,129 @@
+# EDITS SHOULD BE SUBMITTED TO DevExpress/testcafe-build-system/config/labels.yml
+# Configuration for Label Actions - https://github.com/dessant/label-actions
+
+? 'TYPE: question'
+:
+  # Post a comment
+  comment: |
+    Thank you for your inquiry. It looks like you're asking a question. We use GitHub to track bug reports and enhancement requests (see [Contributing](https://github.com/DevExpress/testcafe#contributing)). Address your question to the TestCafe community on [StackOverflow](https://stackoverflow.com/questions/ask?tags=testcafe) instead.
+    
+    If you encountered a bug, [open a new issue](https://github.com/DevExpress/testcafe/issues/new?template=bug-report.md), and follow the "bug report" template. Thank you in advance.
+  unlabel: 'STATE: Need response'
+  close: true
+
+? 'STATE: Non-latest version'
+:
+  # Post a comment
+  comment: |
+    Thank you for submitting a bug report. It looks like you're using an outdated version of TestCafe. Every TestCafe update contains bug fixes and enhancements. Install [the latest version](https://github.com/DevExpress/testcafe/releases/latest) of TestCafe and see if you can reproduce the bug. We look forward to your response.
+  label: 'STATE: Need clarification'
+  unlabel:
+    - 'STATE: Non-latest version'
+    - 'STATE: Need response'
+
+? 'STATE: Need simple sample'
+:
+  # Post a comment
+  comment: |
+    Thank you for submitting a bug report. We would love to help you investigate the issue. Please share a *simple* code example that reliably reproduces the bug. For more information, read the following article: [How To Create a Minimal Working Example When You Submit an Issue](https://testcafe.io/documentation/402636/faq/general-info#how-to-create-a-minimal-working-example-when-you-submit-an-issue). We look forward to your response.
+  label: 'STATE: Need clarification'
+  unlabel:
+    - 'STATE: Need simple sample'
+    - 'STATE: Need response'
+
+? 'STATE: Need access confirmation'
+:
+  # Post a comment
+  comment: |
+    Thank you for submitting a bug report. We would love to help you investigate the issue. Unfortunately, we cannot reproduce the bug, because your code example accesses a web resource that requires authentication.
+    
+    Please create a [Minimal Example](https://testcafe.io/documentation/402636/faq/general-info#how-to-create-a-minimal-working-example-when-you-submit-an-issue) that works locally or without authentication. Do not share any private data - the DevExpress support team cannot access private resources. We look forward to your response.
+
+  label: 'STATE: Need clarification'
+  unlabel: 
+    - 'STATE: Need access confirmation'
+    - 'STATE: Need response'
+
+? 'STATE: Incomplete template'
+:
+  # Post a comment
+  comment: |
+    Thank you for submitting a bug report. The information you shared is not sufficient to determine the cause of the issue. Please create a new GitHub ticket and fill every section of the "bug report" template. Include the framework's version number, and don't forget to share a [Minimal Working Example](https://testcafe.io/documentation/402636/faq/general-info#how-to-create-a-minimal-working-example-when-you-submit-an-issue) that reliably reproduces the issue.
+  unlabel:
+    - 'STATE: Incomplete template'
+    - 'STATE: Need response'
+  close: true
+
+? 'STATE: No updates'
+:
+  # Post a comment
+  comment: |
+    No updates yet. Once we make more progress, we will leave a comment.
+  unlabel:
+    - 'STATE: No updates'
+    - 'STATE: Need response'
+
+? 'STATE: No estimations'
+:
+  # Post a comment
+  comment: |
+     Personal predictions can be unreliable, so we are not ready to give you an ETA. Once we make more progress, we will leave a comment.
+  unlabel:
+    - 'STATE: No estimations'
+    - 'STATE: Need response'
+
+? 'STATE: Outdated proposal'
+:
+  # Post a comment
+  comment: |
+    The TestCafe team has yet to allocate any resources for the development of this capability. We cannot give you an ETA on its completion. If this capability is important for you, please submit a Pull Request with an implementation. See the [Сontribution guide](https://github.com/DevExpress/testcafe/blob/master/CONTRIBUTING.md) for more information.
+  unlabel:
+    - 'STATE: Outdated proposal'
+    - 'STATE: Need response'
+
+? 'STATE: Outdated issue'
+:
+  # Post a comment
+  comment: |
+    When the TestCafe team decides which issues to address, it evaluates their severity, as well as the number of affected users. It appears that the issue you raised is an edge case.
+    
+    If this issue is important for you, please submit a Pull Request with a fix. See the [Сontribution guide](https://github.com/DevExpress/testcafe/blob/master/CONTRIBUTING.md) for more information.
+  unlabel:
+    - 'STATE: Outdated issue'
+    - 'STATE: Need response'
+
+? 'STATE: No workarounds'
+:
+  # Post a comment
+  comment: |
+    There are no workarounds at the moment.  We'll leave a comment if we discover a workaround, or fix the bug.
+  unlabel:
+    - 'STATE: No workarounds'
+    - 'STATE: Need response'
+
+? 'STATE: PR Review Pending'
+:
+  # Post a comment
+  comment: |
+    Thank you for your contribution to TestCafe. When a member of the TestCafe team becomes available, they will review this PR.
+  unlabel:
+    - 'STATE: PR Review Pending'
+    - 'STATE: Need response'
+
+? 'STATE: Issue accepted'
+:
+  # Post a comment
+  comment: |
+    We appreciate you taking the time to share information about this issue. We reproduced the bug and added this ticket to our internal task queue. We'll update this thread once we have news.
+  unlabel:
+    - 'STATE: Issue accepted'
+    - 'STATE: Need response'
+
+? 'STATE: Enhancement accepted'
+:
+  # Post a comment
+  comment: |
+    Thank you for bringing this enhancement to our attention. We will be happy to look into it. We'll update this thread once we have news. If we do not publish any new comments, it's safe to assume that there are no new updates.
+  unlabel:
+    - 'STATE: Enhancement accepted'
+    - 'STATE: Need response'

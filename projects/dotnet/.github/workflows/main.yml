@@ -1,0 +1,84 @@
+name: Main Build
+
+on:
+  pull_request:
+  push:
+    branches:
+    - main
+    paths:
+    - '*'
+    - '!/docs/*' # Don't run workflow when files are only in the /docs directory
+
+jobs:
+  vm-job:
+    name: Ubuntu
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis
+        ports:
+        - 6379/tcp
+        options: --entrypoint redis-server
+      mongo:
+        image: mongo
+        ports:
+        - 27017/tcp
+        env:
+          MONGO_INITDB_DATABASE: test
+      postgres:
+        image: postgres
+        ports:
+        - 5432/tcp
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      ravendb:
+        image: ravendb/ravendb
+        ports:
+          - 8080/tcp
+        env:
+          RAVEN_ARGS: '--Setup.Mode=None'
+          RAVEN_License_Eula_Accepted: 'true'
+          RAVEN_Security_UnsecuredAccessAllowed: 'PrivateNetwork'
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+        ports:
+        - 1433/tcp
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: g0d4mm!tSQLServer
+      mysql:
+        image: mysql
+        ports:
+        - 3306/tcp
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v1
+    - name: .NET Build
+      run: dotnet build Build.csproj -c Release /p:CI=true
+    - name: .NET Test
+      run: dotnet test Build.csproj -c Release --no-build --logger trx --logger GitHubActions --results-directory ./test-results/ /p:CI=true
+      env:
+        EnableTestLogging: true
+        RedisConnectionString: localhost:${{ job.services.redis.ports[6379] }}
+        MongoDbConnectionString: mongodb://localhost:${{ job.services.mongo.ports[27017] }}/test
+        MySQLConnectionString: server=localhost;Port=${{ job.services.mysql.ports[3306] }};Uid=root;Pwd=root;Database=test;Allow User Variables=true
+        PostgreSqlConnectionString: Server=localhost;Port=${{ job.services.postgres.ports[5432] }};Database=test;User Id=postgres;Password=postgres;
+        RavenDbUrls: http://localhost:${{ job.services.ravendb.ports[8080] }}
+        RavenDatabase: test
+        SQLServerConnectionString: Server=tcp:127.0.0.1,${{ job.services.sqlserver.ports[1433] }};Database=tempdb;User Id=sa;Password=g0d4mm!tSQLServer;
+    - name: .NET Test Results
+      uses: dorny/test-reporter@v1
+      continue-on-error: true
+      if: success() || failure()
+      with:
+        name: .NET Test Results
+        path: 'test-results/*.trx'
+        reporter: dotnet-trx
+    - name: .NET Lib Pack
+      run: dotnet pack Build.csproj --no-build -c Release /p:PackageOutputPath=%CD%\.nupkgs /p:CI=true

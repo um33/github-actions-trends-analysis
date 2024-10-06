@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ask a question
+    url: https://github.com/build-trust/ockam/discussions/new?category=help-wanted
+    about: Ask questions and discuss with other Ockam community members.
+  - name: Learn how to contribute
+    url: https://github.com/build-trust/.github/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute to Ockam.
+  - name: Join us on discord
+    url: https://discord.gg/RAbjRr3kds
+    about: Meet and learn with other Ockam community members.

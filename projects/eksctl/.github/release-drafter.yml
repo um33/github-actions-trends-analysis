@@ -1,0 +1,47 @@
+name-template: 'v$NEXT_MINOR_VERSION'
+tag-template: 'v$NEXT_MINOR_VERSION'
+categories:
+  - title: '💥 Breaking Changes'
+    label: 'kind/breaking'
+  - title: '🚀 Features'
+    labels:
+      - 'kind/feature'
+  - title: '🎯 Improvements'
+    labels:
+      - 'kind/improvement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'kind/bug'
+  - title: '🧰 Maintenance'
+    labels: 
+      - 'area/tech-debt'
+      - 'area/ci'
+  - title: '📝 Documentation'
+    labels: 
+      - 'area/docs'
+      - 'kind/docs'
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&#@`' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+version-template: '$COMPLETE'
+template: |
+  # Release v$NEXT_MINOR_VERSION
+
+  $CHANGES
+
+  ## Acknowledgments
+
+  The eksctl maintainers would like to sincerely thank $CONTRIBUTORS.
+
+exclude-labels:
+  - 'skip-release-notes'
+exclude-contributors:
+  - 'Himangini'
+  - 'TiberiuGC'
+  - 'cPu1'
+  - 'a-hilaly'
+  - 'yuxiang-zhang'
+  - 'eksctl-bot'
+  - 'dependabot'
+replacers:
+  - search: '/\s(?:and )?@dependabot(?:\[bot\])?,?/g'
+    replace: ''

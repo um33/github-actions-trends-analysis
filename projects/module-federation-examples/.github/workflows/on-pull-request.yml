@@ -1,0 +1,180 @@
+name: on pull request
+on: pull_request
+
+env:
+  CACHE_PATH: |
+    **/node_modules
+    ~/.cache/Cypress
+  YARN_CACHE_PATH: |
+    ~/.pnpm-store
+  FILES_TO_DELETE: |
+    sudo rm -rf "/usr/share/dotnet"
+    sudo rm -rf "/usr/share/swift"
+    sudo rm -rf "/usr/local/share/boost"
+    sudo rm -rf /opt/ghc
+    sudo rm -rf "/usr/local/share/boost"
+    sudo rm -rf "/usr/local/lib/android/sdk"
+    sudo rm -rf "/opt/hostedtoolcache/Python"
+    sudo rm -rf "/opt/hostedtoolcache/go"
+    sudo rm -rf "/opt/hostedtoolcache/CodeQL"
+    sudo rm -rf "/var/lib/gems"
+    sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+    sudo apt-get clean -y
+    sudo apt-get autoremove -y
+
+jobs:
+  # Stop previous runs
+  stop-previous-run:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Save necessary env variables to use them in next jobs
+  save-env:
+    runs-on: ubuntu-22.04
+    needs: stop-previous-run
+    if: always()
+    steps:
+      - name: Save env variables
+        id: save-env-variables
+        run: |
+          mkdir -p ./workflow
+          echo "${{ github.event.pull_request.number }}" > ./workflow/prNum
+          echo "${{ github.run_id }}" > ./workflow/runId
+          echo "${{ github.repository }}" > ./workflow/repoFullName
+          echo "${{ github.repository_owner }}" > ./workflow/ownerName
+      - name: Upload artifact
+        id: upload-artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: env_for_comment
+          path: workflow/
+
+  # Check if forked master is up to date with origin master in module federation examples repo
+  forked_master_status:
+    runs-on: ubuntu-22.04
+    needs: stop-previous-run
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Check if forked master is up to date
+        id: check-forked-master
+        if: github.repository_owner == 'module-federation'
+        run: |
+          echo "${{ github.repository_owner }}"
+          git remote add base https://github.com/${{github.repository}}
+          git remote -v
+          git fetch --all
+          export FORKED_MASTER_SHA=$(git log -n 1 --pretty=format:"%H" origin/${{ github.event.pull_request.base.ref}})
+          export BASE_MASTER_SHA=$(git log -n 1 --pretty=format:"%H" base/${{ github.event.pull_request.base.ref }})
+          echo "$FORKED_MASTER_SHA"
+          echo "$BASE_MASTER_SHA"
+
+          if [ "$FORKED_MASTER_SHA" == "$BASE_MASTER_SHA" ];
+          then
+            echo "The forked master is up to date with the base master branch"
+            exit 0
+          else
+            echo "The forked master branch is not up to date with the base master branch, Please update your fork!"
+            exit 1
+          fi
+
+  # Setup matrix from changed samples by lerna ls --since origin/master command
+  setup-matrix:
+    runs-on: ubuntu-22.04
+    needs: forked_master_status
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        id: checkout-matrix
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Create matrix
+        id: set-matrix
+        run: |
+          npm i pnpm -g
+          all="$(pnpm list --filter '*' --only-projects --depth -1 --json)"
+          diff="$(pnpm list --filter '...[origin/master]' --only-projects --depth -1 --json)"
+          matrix="$(node checkChangedWorkspaces.js "$all" "$diff")"
+          echo $matrix
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  # Run Cypress e2e tests for changed samples (additionally install deps for all changed samples if there is no any created cache in master branch) + Create artifacts for Cypress screenshots and videos
+  run-e2e-test:
+    needs: [setup-matrix]
+    if: ${{ needs.setup-matrix.outputs.matrix != '{"container":[]}' }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+    steps:
+      - name: Checkout
+        id: checkout-e2e
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+
+      - name: Install PNPM
+        id: check-disk-space-before-install-e2e
+        run: npm i pnpm -g
+
+      - name: Set up node
+        id: setup-node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install deps
+        id: install-deps-e2e
+        if: steps.restore-yarn-global-cache-e2e.outputs.cache-hit != 'true'
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'
+        run: |
+          echo "PNPM changed - install deps ... "
+          npm i pnpm -g
+          pnpm i --frozen-lockfile
+          npx cypress install
+          npx cypress verify
+
+      - name: Run sample webpack e2e tests
+        timeout-minutes: 30
+        id: run-webpack-e2e-tests
+        run: |
+          node -v
+          pnpm --filter "${{ matrix.container }}" legacy:e2e:ci
+          (lsof -i tcp:3000-3999 -i tcp:4000-4999 -i tcp:8080-8100 | awk 'NR!=1 {print $2}' | xargs -r kill) 2> /dev/null
+
+      - name: Run sample rspack e2e tests
+        timeout-minutes: 30
+        id: run-rspack-e2e-tests
+        run: |
+          node -v
+          pnpm --filter "${{ matrix.container }}" e2e:ci
+          (lsof -i tcp:3000-3999 -i tcp:4000-4999 -i tcp:8080-8100 | awk 'NR!=1 {print $2}' | xargs -r kill) 2> /dev/null
+
+      - name: Create artifacts for Allure report
+        id: create-artifacts-allure-report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: allure-results
+          path: 'cypress/results/allure-results'
+          retention-days: 7

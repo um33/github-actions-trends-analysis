@@ -1,0 +1,48 @@
+name: upload-javadoc
+
+on:
+  push:
+    tags:
+      - 'acra-*'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4.2.1
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Checkout acra
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Generate Javadoc
+        run: ./gradlew assembleRelease dokkaHtmlCollector --no-daemon
+      - name: Extract version
+        id: version
+        run: echo "::set-output name=value::$(git describe --abbrev=0 | sed -e "s/^acra-//")"
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          clean: false
+      - name: Update Javadoc
+        run: |
+          export VERSION=${{ steps.version.outputs.value }}
+          diff -qr ./build/dokka/htmlCollector/ ./web/static/javadoc/latest/ \
+            && ln -sfn "$(readlink ./web/static/javadoc/latest)" ./web/static/javadoc/$VERSION \
+            || (mkdir ./web/static/javadoc/$VERSION && cp -a ./build/dokka/htmlCollector/. ./web/static/javadoc/$VERSION/)
+          ln -sfn "$VERSION/" ./web/static/javadoc/latest
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: 'web/static/javadoc'
+          message: "Add javadoc for version ${{ steps.version.outputs.value }}"
+          github_token: ${{ secrets.PUSH_TOKEN }}
+          branch: 'master'
+          author_name: github-actions
+          author_email: 41898282+github-actions[bot]@users.noreply.github.com

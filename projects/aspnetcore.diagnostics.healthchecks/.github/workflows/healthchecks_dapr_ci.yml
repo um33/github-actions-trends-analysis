@@ -1,0 +1,36 @@
+name: HealthChecks Dapr CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - src/HealthChecks.Dapr/**
+      - test/HealthChecks.Dapr.Tests/**
+      - test/_SHARED/**
+      - .github/workflows/healthchecks_dapr_ci.yml
+      - .github/workflows/reusable_ci_workflow.yml
+      - Directory.Build.props
+      - Directory.Build.targets
+    tags-ignore:
+      - release-*
+      - preview-*
+
+  pull_request:
+    branches: [ master ]
+    paths:
+      - src/HealthChecks.Dapr/**
+      - test/HealthChecks.Dapr.Tests/**
+      - test/_SHARED/**
+      - .github/workflows/healthchecks_dapr_ci.yml
+      - .github/workflows/reusable_ci_workflow.yml
+      - Directory.Build.props
+      - Directory.Build.targets
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_ci_workflow.yml
+    with:
+      PROJECT_PATH: ./src/HealthChecks.Dapr/HealthChecks.Dapr.csproj
+      TEST_PROJECT_PATH: ./test/HealthChecks.Dapr.Tests/HealthChecks.Dapr.Tests.csproj
+      CODECOV_FLAGS: Dapr

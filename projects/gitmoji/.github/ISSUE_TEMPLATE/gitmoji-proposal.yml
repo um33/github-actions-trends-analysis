@@ -1,0 +1,88 @@
+name: 😜 Gitmoji proposal
+description: Suggest a new gitmoji!
+labels: [emoji]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in the project and taking the time to fill out this gitmoji suggestion!
+  - type: input
+    id: emoji-symbol
+    attributes:
+      label: Emoji symbol
+      description: The emoji symbol you want to suggest.
+      placeholder: "🚀"
+    validations:
+      required: true
+  - type: input
+    id: emoji-shortcode
+    attributes:
+      label: Emoji code
+      description: The ":shortcode:" of the emoji on GitHub.
+      placeholder: ":rocket:"
+    validations:
+      required: true
+  - type: input
+    id: emoji-description
+    attributes:
+      label: Emoji description
+      description: A short description of the emoji.
+      placeholder: What this emoji should be used for?
+    validations:
+      required: true
+  - type: textarea
+    id: emoji-use-case
+    attributes:
+      label: Describe the use case of your emoji
+      description: Explain the creation of this emoji, what this is and when it should be used
+      placeholder: Use case
+    validations:
+      required: true
+  - type: dropdown
+    id: emoji-use-case-covered
+    attributes:
+      label: Is this use case covered by an existing emoji?
+      options:
+        - "Yes ✅"
+        - "No ❌"
+    validations:
+      required: true
+  - type: checkboxes
+    id: emoji-what-how
+    attributes:
+      label: Does this emoji fall into the "how" or the "what" category?
+      description: |
+        We are trying to always describe/categorize "what" has been done in a particular commit, not the "how" it was done (the exceptions being :poop: and :beers:).
+
+        Notice here that, by the descriptions on the "how" category, you can't know what has been achieved in the commit.
+
+        | Examples of "what" commits                    | Examples of "how" commits                         |
+        | --------------------------                    | -------------------------                         |
+        | :white_check_mark: Add, update, or pass tests | :hankey: Write bad code that needs to be improved |
+        | :lock: Fix security or privacy issues         | :beers: Write code drunkenly                      |
+        | :zap: Improve performance                     | :robot: Write an automated commit by a script     |
+      options:
+        - label: This proposal do **not** describe "how" a commit was made, but does in fact describe "what" is the contents of the commit about.
+          required: true
+    validations:
+      required: true
+  - type: textarea
+    id: emoji-examples
+    attributes:
+      label: Examples
+      description: Include some examples using this emoji.
+      placeholder: Examples
+    validations:
+      required: true
+  - type: checkboxes
+    id: checkboxes
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure you do the following
+      options:
+        - label: Follow our [Code of Conduct](https://github.com/carloscuesta/gitmoji/blob/master/CODE_OF_CONDUCT.md)
+          required: true
+        - label: Read the [Contributing Guide](https://github.com/carloscuesta/gitmoji/blob/master/.github/CONTRIBUTING.md).
+          required: true
+        - label: Check that there isn't already an issue requesting the emoji.
+          required: true

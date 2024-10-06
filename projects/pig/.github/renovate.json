@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "baseBranches": [
+    "jdk17-dev"
+  ],
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "matchPackagePatterns": [
+        "^com.amazonaws:aws-java-sdk-s3$",
+        "^io.springboot:knife4j-openapi3-ui$",
+        "^com.alibaba:fastjson$"
+      ],
+      "enabled": false
+    }
+  ]
+}

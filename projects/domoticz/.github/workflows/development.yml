@@ -1,0 +1,104 @@
+name: Domoticz Development (Beta)
+
+on:
+  push:
+    branches: 
+      - development
+    paths-ignore:
+      - 'msbuild/**'
+      - '.github/**'
+      - 'tools/**'
+      - '**.md'
+      - '**.txt'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      # Prepare environment
+      - name: prepare environment
+        run: |
+          sudo timedatectl set-timezone Europe/Amsterdam
+          buildnr=$(git rev-list HEAD --count)
+          echo "BUILDNR=$(($buildnr + 2107))" >> $GITHUB_ENV
+
+      #- name: Make an error (Enable debug)
+      #  run: ./not-exist-file.sh it bloke build
+
+      # install dependencies
+      - name: dependencies
+        run: |
+          echo 'APT::Get::Always-Include-Phased-Updates "false";' | sudo tee /etc/apt/apt.conf.d/99-phased-updates
+          sudo apt-mark hold grub-efi-amd64-signed
+          sudo apt-get update --fix-missing
+          sudo apt-get upgrade
+          sudo apt-get install make gcc cmake g++ libssl-dev git libcurl4-gnutls-dev libusb-dev python3-dev zlib1g-dev libcereal-dev liblua5.3-dev uthash-dev
+          sudo apt-get install libboost-chrono-dev libboost-system-dev libboost-thread-dev
+          sudo apt-get install python3-pytest python3-pytest-bdd
+
+      # OpenZWave
+      - name: openzwave
+        run: |
+          cd $GITHUB_WORKSPACE
+          cd ..
+          git clone https://github.com/domoticz/open-zwave.git open-zwave-read-only
+          cd open-zwave-read-only
+          make
+          sudo make install >> /dev/null 2>&1
+
+      # Domoticz
+      - name: build domoticz
+        run: |
+          cd $GITHUB_WORKSPACE
+          cmake -DCMAKE_BUILD_TYPE=Release CMakeLists.txt
+          make
+
+      # Run automated tests (disabled March 2022)
+      #- name: unit-tests domoticz-dzVents
+      #  run: |
+      #    cd $GITHUB_WORKSPACE/dzVents/runtime/tests
+      #    busted --coverage -o TAP *
+      #    luacov
+      #    tail -19 luacov.report.out
+      #  continue-on-error: true
+      - name: functional-tests domoticz
+        run: |
+          cd $GITHUB_WORKSPACE
+          ln -s ../test/gherkin/resources/testwebcontent www/test
+          sudo ./domoticz -sslwww 0 -wwwroot www -pidfile /var/run/domoticz.pid -daemon
+          pytest-3 -rA --tb=no test/gherkin/
+          sudo kill -s TERM `sudo cat /var/run/domoticz.pid`
+        continue-on-error: false
+
+      # Packaging
+      - name: package domoticz
+        #if: ${{ false }}
+        run: |
+          cd $GITHUB_WORKSPACE
+          mkdir package
+          tar czf package/domoticz_linux_x86_64-${{ env.BUILDNR }}.tgz domoticz History.txt License.txt domoticz.sh server_cert.pem updatebeta updaterelease www/ scripts/ Config/ dzVents/
+          shasum -a 256 package/domoticz_linux_x86_64-${{ env.BUILDNR }}.tgz > package/domoticz_linux_x86_64-${{ env.BUILDNR }}.tgz.sha256sum
+
+      # Artifact upload
+      - name: Upload artifacts
+        #if: ${{ false }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: domoticz_linux_x86_64-${{ env.BUILDNR }}
+          path: package/
+          retention-days: 7
+          if-no-files-found: error

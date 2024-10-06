@@ -1,0 +1,193 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# Yeah I know it's bad practice to have API keys, this is a read-only API key
+# so that we do not get rate limited by Etherscan (and it's free to generate as
+# many as you want)
+env:
+    ETHERSCAN_API_KEY: "I5BXNZYP5GEDWFINGVEZKYIVU2695NPQZB"
+    GOERLI_PRIVATE_KEY: "fa4a1a79e869a96fcb42727f75e3232d6865a82ea675bb95de967a7fe6a773b2"
+    GETH_BUILD: "1.11.2-73b01f40"
+    SOLC_VERSION: "0.8.20"
+    CARGO_TERM_COLOR: always
+
+jobs:
+    test:
+        name: test ${{ matrix.flags.name }} (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+                flags:
+                    - name: no default features
+                      flags: --no-default-features
+                    - name: default features
+                      flags: ""
+                    - name: all features
+                      flags: --all-features
+                include:
+                    - os: ubuntu-latest
+                      flags:
+                          name: celo feature
+                          flags:
+                              -p ethers-core -p ethers-providers -p ethers-contract --features celo
+                    - os: ubuntu-latest
+                      flags:
+                          name: optimism feature
+                          flags: -p ethers-core --features optimism
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+            - name: Install Anvil
+              uses: foundry-rs/foundry-toolchain@v1
+              with:
+                  version: nightly
+            - name: Install test binaries
+              shell: bash
+              run: ./.github/scripts/install_test_binaries.sh
+            - name: Install nextest
+              uses: taiki-e/install-action@nextest
+            - uses: Swatinem/rust-cache@v2
+            - name: test ${{ matrix.flags.flags }}
+              shell: bash
+              # skip `ethers_etherscan::it`
+              run: |
+                  cargo nextest run \
+                  ${{ matrix.flags.flags }} \
+                  -E "!(deps(ethers-etherscan) & kind(test))" \
+                  --retries 2
+
+    etherscan-tests:
+        name: etherscan tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: test
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+            # Don't use cargo-nextest since all the tests have to be run sequentially
+            - name: live tests
+              run: cargo test -p ethers-etherscan --test it
+
+    # TODO: Create a new `ethers-tests` crate in the workspace for live tests.
+    # live-tests:
+    #     name: live tests
+    #     runs-on: ubuntu-latest
+    #     timeout-minutes: 30
+    #     steps:
+    #         - uses: actions/checkout@v3
+    #         - uses: dtolnay/rust-toolchain@stable
+    #         - uses: Swatinem/rust-cache@v2
+    #         - name: live tests
+    #           run: cargo test -p ethers-tests --all-features
+
+    feature-checks:
+        name: feature checks
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: taiki-e/install-action@cargo-hack
+            - uses: Swatinem/rust-cache@v2
+            - name: cargo hack
+              run: cargo hack check --feature-powerset --depth 1 --all-targets
+
+    clippy:
+        name: clippy
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@clippy
+            - uses: Swatinem/rust-cache@v2
+            - name: clippy
+              run: cargo clippy --workspace --all-features --all-targets
+              env:
+                  RUSTFLAGS: "-D warnings"
+
+    docs:
+        name: docs
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: rust-docs
+            - uses: Swatinem/rust-cache@v2
+            - name: doc
+              run: cargo doc --workspace --all-features --no-deps --document-private-items
+              env:
+                  RUSTDOCFLAGS: "--cfg docsrs -D warnings"
+
+    fmt:
+        name: fmt
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: rustfmt
+            - name: fmt --check
+              run: cargo fmt --all --check
+
+    wasm:
+        name: WASM
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  target: wasm32-unknown-unknown
+            - name: Install Anvil
+              uses: foundry-rs/foundry-toolchain@v1
+              with:
+                  version: nightly
+
+            - uses: Swatinem/rust-cache@v2
+            - name: Check
+              run: cargo check --workspace --target wasm32-unknown-unknown
+
+            - name: Install wasm-pack
+              run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+            - uses: actions/setup-node@v3
+              with:
+                  node-version: 16
+            - name: Run wasm example
+              working-directory: examples/wasm
+              run: |
+                  yarn
+                  yarn anvil &
+                  wasm-pack test --headless --firefox
+                  wasm-pack test --headless --chrome
+
+    examples:
+        name: Examples
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+            - name: Install Anvil
+              uses: foundry-rs/foundry-toolchain@v1
+              with:
+                  version: nightly
+            - name: Install test binaries
+              run: ./.github/scripts/install_test_binaries.sh
+            - uses: Swatinem/rust-cache@v2
+            - name: Build and run all examples
+              run: ./bin/run_all_examples

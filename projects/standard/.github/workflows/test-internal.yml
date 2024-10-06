@@ -1,0 +1,42 @@
+name: Test Internal
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  test-internal:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [12.22, 14.17, 16.0.0, 18.0.0, latest]
+      fail-fast: false
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Cache Node dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run internal tests
+        run: npm run test-internal

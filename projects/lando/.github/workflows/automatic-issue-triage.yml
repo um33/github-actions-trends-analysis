@@ -1,0 +1,66 @@
+name: Automatic Issue Triage
+on:
+  issues:
+    types:
+      - labeled
+
+jobs:
+  issue-triage:
+    runs-on: ${{ matrix.os }}
+    env:
+      TERM: xterm
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+        router:
+          - acquia:acquia
+          - apache:apache
+          - backdrop:backdrop
+          - cli:cli
+          - compose:compose
+          - core:core
+          - core-next:core-next
+          - documentation:docs
+          - dotnet:dotnet
+          - drupal:drupal
+          - elasticsearch:elasticsearch
+          - go:go
+          - install:setup-lando
+          - joomla:joomla
+          - lagoon:lagoon
+          - lamp:lamp
+          - laravel:laravel
+          - lemp:lemp
+          - mailhog:mailhog
+          - mariadb:mariadb
+          - mean:mean
+          - memcached:memcached
+          - mongo:mongo
+          - mssql:mssql
+          - mysql:mysql
+          - nginx:nginx
+          - node:node
+          - pantheon:pantheon
+          - php:php
+          - phpmyadmin:phpmyadmin
+          - platformsh:platformsh
+          - postgres:postgres
+          - python:python
+          - redis:redis
+          - ruby:ruby
+          - setup-lando:setup-lando
+          - solr:solr
+          - symfony:symfony
+          - tomcat:tomcat
+          - varnish:varnish
+          - wordpress:wordpress
+
+    steps:
+      - name: Manual Action Test
+        id: test_action
+        uses: lando/transfer-issue-action@v2
+        with:
+          token: ${{ secrets.REGIONAL_GOVERNOR_DELEGATION }}
+          router: ${{ matrix.router }}
+          apply_label: Needs Triage

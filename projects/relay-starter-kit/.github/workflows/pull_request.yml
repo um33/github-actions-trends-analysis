@@ -1,0 +1,93 @@
+# GitHub Actions workflow
+# https://help.github.com/actions
+
+name: PR
+
+on: [pull_request]
+
+env:
+  VERSION: ${{ github.event.pull_request.number }}
+  HUSKY: 0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: ${{ env.PGUSER }}
+          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+          POSTGRES_DB: ${{ env.PGDATABASE }}
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 19
+          cache: "yarn"
+
+      # Install dependencies
+      - run: yarn install
+
+      # Analyze code for potential problems
+      - run: yarn prettier --check .
+      - run: yarn lint
+      - run: yarn tsc --build
+
+      # Setup test database
+      - run: yarn db migrate --seed
+
+      - run: echo "$GCP_SA_KEY" | base64 --decode > "$GOOGLE_APPLICATION_CREDENTIALS"
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp-key.json
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      # Test
+      # - run: yarn test
+      #   env:
+      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp-key.json
+      #     FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+
+      # Compile
+      - run: yarn workspace api build
+      - run: yarn workspace app relay
+      - run: yarn workspace app build
+
+      # Upload to a cloud storage bucket
+      # - run: yarn workspaces foreach -p run push
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 19
+          cache: "yarn"
+
+      # Install dependencies
+      - name: yarn install
+        run: |
+          yarn config set enableGlobalCache false
+          yarn install
+
+      # TODO: Deploy from the previously built artifacts
+      # - run: yarn workspaces foreach -p run deploy
+      #   env:
+      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp-key.json
+      #     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,112 @@
+name: PHPUnit tests
+
+on: [push, pull_request]
+
+jobs:
+  run:
+    runs-on: 'ubuntu-latest'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - php: '7.2'
+            phpseclib: '^2.0'
+            composer: 'composer:v1'
+            coverage: none
+          - php: '7.3'
+            phpseclib: '^3.0'
+            composer: 'composer:v1'
+            coverage: none
+          - php: '7.4'
+            phpseclib: '^3.0'
+            composer: 'composer:v1'
+            coverage: none
+          - php: '7.4'
+            phpseclib: '^3.0'
+            composer: 'composer:v2'
+            coverage: 'xdebug'
+          - php: '8.0'
+            phpseclib: '^3.0'
+            composer: 'composer:v2'
+            coverage: none
+          - php: '8.1'
+            phpseclib: '^3.0'
+            composer: 'composer:v2'
+            coverage: none
+          - php: '8.2'
+            phpseclib: '^3.0'
+            composer: 'composer:v2'
+            coverage: none
+          - php: '8.3'
+            phpseclib: '^3.0'
+            composer: 'composer:v2'
+            coverage: none
+    services:
+      rabbitmq:
+        image: rabbitmq:3.11-management
+        ports:
+          - 5671:5671
+          - 5672:5672
+          - 15671:15671
+          - 15672:15672
+        volumes:
+          - ${{ github.workspace }}:/src
+        env:
+          RABBITMQ_CONFIG_FILE: /src/tests/rabbitmq.conf
+      proxy:
+        image: ghcr.io/shopify/toxiproxy:2.5.0
+        ports:
+          - 8474:8474
+          - 5673:5673
+
+    name: PHP ${{ matrix.php }} + phpseclib ${{ matrix.phpseclib }}
+    env:
+      TOXIPROXY_HOST: localhost
+      TOXIPROXY_AMQP_TARGET: rabbitmq
+      TOXIPROXY_AMQP_PORT: 5673
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php }}
+        tools: ${{ matrix.composer }}
+        extensions: bcmath, curl, dom, mbstring, pcntl, sockets, xml
+        coverage: ${{ matrix.coverage }}
+
+    - name: Check PHP info
+      run: php tests/phpinfo.php
+
+    - name: Re-start broker service to pick up rabbitmq.conf
+      run: docker restart ${{ job.services.rabbitmq.id }}
+
+    - name: Composer install
+      run: composer require --prefer-dist --no-progress --no-suggest phpseclib/phpseclib ${{ matrix.phpseclib }}
+
+    - name: Wait for broker service
+      run: php ./tests/wait_broker.php
+
+    - name: PHPUnit tests
+      run: ./vendor/bin/phpunit
+      if: matrix.coverage == 'none'
+
+    - name: PHPUnit tests + coverage
+      run: ./vendor/bin/phpunit --coverage-clover=coverage.xml
+      if: matrix.coverage != 'none'
+
+    - name: Upload Codecov coverage
+      if: matrix.coverage != 'none'
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: './coverage.xml'
+        fail_ci_if_error: false
+
+    - name: Upload Scrutinizer coverage
+      if: matrix.coverage != 'none'
+      continue-on-error: true
+      uses: sudo-bot/action-scrutinizer@latest
+      with:
+          cli-args: "--format=php-clover coverage.xml"

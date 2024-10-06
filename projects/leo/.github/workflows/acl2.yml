@@ -1,0 +1,90 @@
+name: Leo-ACL2
+on: workflow_dispatch
+env:
+  RUST_BACKTRACE: 1
+
+# This job can only be run on linux (Ubuntu)
+jobs:
+  acl2:
+    name: leo-acl2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Generate asts
+        run: |
+          # This currently has to be on testnet3 to work:
+          cd compiler/parser
+          cargo -q install --path . --example parser
+          # To ensure full file tests,
+          # just do compiler tests and remove expectation: Fail tests
+          cd ../../tests/compiler
+          find . -type f -exec grep -q 'expectation *: *Fail' {} \; -delete
+          find . -name '*.leo' -execdir parser {} \; > /dev/null
+          # Show how many there are:
+          echo "Counts (.leo / .json):"
+          find . -name '*.leo' -print | wc -l
+          find . -name '*.json' -print | wc -l
+
+      # Pull the latest release from the leo-acl2-bin repo, and put it into the
+      # repo/acl2 directory. After it's done, unpack the tgz file locally.
+      - name: Pull tgc executable
+        run: |
+          mkdir acl2 && cd acl2;
+          wget $( curl -s https://api.github.com/repos/AleoHQ/leo-acl2-bin/releases/latest \
+                  | jq -r '.assets[].browser_download_url|scan("^.*leo-acl2--v.*\\.tgz$")' )
+
+          echo "Unpacking $(ls):"
+          tar -xvzf $(ls)
+
+      # Run theorem generation and checking using the prepared ASTs and the pulled and unzipped leo-acl2 tarball.
+      - name: Run tgc over ASTs
+        run: |
+          parsing_errors=();
+          num_cases=0;
+          # Note that PWD gets reset at the beginning of each the step
+          # to /home/runner/work/leo/leo
+          acl2dir="${PWD}"/acl2
+          cd tests/compiler;
+          for tc in `find ${PWD} -name '*.leo' -print`;
+          do
+            cd "${tc%/*}";  # enter the directory
+            leofile="${tc##*/}";
+            jsonfile="${leofile%.leo}.json";
+            num_cases=$((num_cases + 1));
+            "$acl2dir"/tgc parsing "$leofile" "$jsonfile" parsing-theorem.lisp > parsing_result.out || parsing_errors+=("$tc");
+          done;
+
+          echo "----------------"
+          echo "Ran tgc on ${num_cases} programs."
+          echo "----------------"
+          if [ ${#parsing_errors[@]} -eq 0 ]; then
+            echo "Parsing - Total Success!"
+          else
+            echo "Parsing Failures (total: ${#parsing_errors[@]}):"
+            for tc in ${parsing_errors[@]};
+            do
+              echo $tc
+            done;
+
+            #echo "Attaching logs:"
+            #for dir in ${canonicalization_errors[@]};
+            #do
+            # cat tmp/tgc/$dir/canonicalization_result.out
+            # cat tmp/tgc/$dir/canonicalization-theorem.lisp
+            #done;
+          fi
+
+          if [[ ${#parsing_errors[@]} -ne 0 ]]; then
+            echo "----------------"
+            echo "Exiting with status 1 due to at least one tgc error."
+            exit 1
+          fi

@@ -1,0 +1,26 @@
+name: Feature Request
+description: Something you'd like to see added to ImHex in the future
+title: "[Feature] "
+labels: feature request
+body:
+- type: textarea
+  attributes:
+    label: What feature would you like to see?
+    description: |
+      Describe in detail what the feature should do and how it should work.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: How will this feature be useful to you and others?
+    description: Describe how everybody will benefit from this feature if it gets added.
+  validations:
+    required: true
+- type: checkboxes
+  attributes:
+    label: Request Type
+    options:
+      - label: I can provide a PoC for this feature or am willing to work on it myself and submit a PR
+- type: textarea
+  attributes:
+    label: Additional context?

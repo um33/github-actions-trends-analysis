@@ -1,0 +1,54 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+name: Node.js CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CYPRESS_CACHE_FOLDER: cypress/cache
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Cache Node Modules and Cypress binary
+      uses: actions/cache@v4
+      id: cache-primes
+      with:
+        path: |
+          node_modules
+          ${{ env.CYPRESS_CACHE_FOLDER }}
+        key: ${{ runner.os }}-node-and-cypress-${{ hashFiles('package-lock.json') }}
+
+    - name: Install dependencies
+      if: steps.cache-primes.outputs.cache-hit != 'true'
+      run: npm ci --legacy-peer-deps
+
+    - name: Lint code
+      run: npm run lint
+
+    - name: Build SwaggerEditor
+      run: npm run build
+
+    - name: Run all tests
+      run: npm test
+      env:
+        CI: true
+
+    - name:  Test build artifacts
+      run: npm run test:artifact

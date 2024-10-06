@@ -1,0 +1,164 @@
+name: all_plugins
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - '**.md'
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - '**.md'
+
+jobs:
+  analyze:
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - name: 'Run Analyze'
+        run: melos analyze-ci
+
+  # Separated from "analyse" action as pubspec_override file is not being taken into account when running `flutter pub publish --dry-run`
+  # This will fail on CI until this is fixed: https://github.com/invertase/melos/issues/467
+  # You need to switch to Flutter 3.3.0, and run this test manually to check it works and update PR to confirm its success
+  pub_dry_run:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - name: 'Pub Check'
+        run: |
+          melos exec -c 1 --no-private --ignore="*example*" -- \
+            dart pub publish --dry-run
+
+  pub_get_check:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - name: 'Flutter Pub Get'
+        run: |
+          melos exec -c 1 --scope="*example*" -- \
+            "flutter pub get"
+
+  format:
+    # switch back to ubuntu-latest when swiftformat is working again
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - uses: Homebrew/actions/setup-homebrew@master
+      - name: 'Install Tools'
+        run: |
+          alias python=python3
+          flutter pub global activate flutter_plugin_tools
+          brew install swiftformat
+          brew install clang-format
+          brew link --overwrite --force clang-format
+      - name: 'Formatter version'
+        run: |
+          clang-format --version
+          swiftformat --version
+      - name: 'Dart, Java and Objective-C '
+        run: |
+          flutter pub global run flutter_plugin_tools format
+          ./.github/workflows/scripts/validate-formatting.sh
+      - name: 'Swift'
+        if: ${{ success() || failure() }}
+        run: |
+          swiftformat .
+          ./.github/workflows/scripts/validate-formatting.sh
+
+  build_examples_dart:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - name: 'Build Examples'
+        run: |
+          melos exec -c 1 --scope="*example*" --dir-exists="web" -- \
+            "flutter build web"
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: 'stable'
+          cache: true
+      - uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          melos-version: '3.0.1'
+      - name: 'Flutter Test'
+        run: melos run test --no-select
+      - name: 'Flutter Test - Web'
+        run: melos run test:web --no-select
+
+  check-files-license-headers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491
+        with:
+          go-version: '^1.13.1'
+      # Go is used by addlicense command (addlicense is used in melos run
+      # check-license-header)
+      - run: go install github.com/google/addlicense@latest
+      - name: Install Dart
+        uses: dart-lang/setup-dart@fedb1266e91cf51be2fdb382869461a434b920a3
+      - name: Install Melos
+        uses: bluefireteam/melos-action@5a8367ec4b9942d712528c398ff3f996e03bc230
+        with:
+          # Running `melos bootstrap` is not needed because we use Melos just
+          # for the `check-license-header` script.
+          run-bootstrap: false
+          melos-version: '3.0.1'
+      - name: Check license header
+        run: melos run check-license-header

@@ -1,0 +1,29 @@
+name: Create New Library
+
+on:
+  workflow_dispatch:
+    inputs:
+      protoPath:
+        description: "The path to the protos and build file"
+        required: true
+
+jobs:
+  NewLibrary:
+    if: ${{ github.repository == 'googleapis/google-cloud-ruby' }}
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.YOSHI_CODE_BOT_TOKEN }}
+      GOOGLEAPIS_GEN_GITHUB_TOKEN: ${{ secrets.YOSHI_APPROVER_PRIVATE_TOKEN }}
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+    - name: Install Ruby 3.2
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.2"
+    - name: Install tools
+      run: |
+        gem install --no-document toys
+    - name: Create library
+      run: |
+        toys new-library -v --pull --test --fork --bootstrap-releases ${{ github.event.inputs.protoPath }}

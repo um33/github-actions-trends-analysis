@@ -1,0 +1,37 @@
+name: Native JNI S3 TensorRT
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-tensorrt-jni-linux:
+    runs-on: ubuntu-latest
+    container: deepjavalibrary/ubuntu18.04:tensorrt-cuda116
+    steps:
+      - name: Install Environment
+        run: pip3 install awscli --upgrade
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: 17
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Release JNI prep
+        run: ./gradlew :engines:tensorrt:compileJNI
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Copy files to S3 with the AWS CLI
+        run: |
+          TRT_VERSION="$(cat gradle.properties | awk -F '=' '/trt_version/ {print $2}')"
+          aws s3 sync engines/tensorrt/jnilib s3://djl-ai/publish/tensorrt/${TRT_VERSION}/jnilib
+          aws cloudfront create-invalidation --distribution-id E371VB8JQ6NRVY --paths "/tensorrt/${TRT_VERSION}/jnilib*"

@@ -1,0 +1,44 @@
+name: defer-router-tests
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+env:
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+
+jobs:
+  defer-with-router-tests:
+    runs-on: ubuntu-latest
+    if: github.repository == 'apollographql/apollo-kotlin'
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 #v4.1.1
+
+      - name: Install and run subgraph
+        working-directory: tests/defer/router/subgraphs/computers
+        run: |
+          npm install
+          APOLLO_PORT=4001 npm start &
+
+      - name: Install router
+        run: |
+          curl -sSL https://router.apollo.dev/download/nix/latest | sh
+
+      - name: Run router
+        run: |
+          ./router --supergraph tests/defer/router/simple-supergraph.graphqls &
+
+      - name: Setup Java
+        uses: actions/setup-java@387ac29b308b003ca37ba93a6cab5eb57c8f5f93 #v4.0.0
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@42452daeb5b454a76f686a8e4de8234afd7b1f44 #v2.12.0
+
+      - name: Run Apollo Kotlin @defer tests
+        env:
+          DEFER_WITH_ROUTER_TESTS: true
+        run: |
+          ./gradlew --no-daemon --console plain -p tests :defer:allTests

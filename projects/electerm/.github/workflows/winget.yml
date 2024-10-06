@@ -1,0 +1,16 @@
+name: Publish to WinGet
+on:
+  release:
+    types: [released]
+  push:
+    branches: [ test-winget ]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: build
+    steps:
+      - uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: electerm.electerm
+          installers-regex: '.*.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

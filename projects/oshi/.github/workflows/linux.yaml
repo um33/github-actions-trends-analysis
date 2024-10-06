@@ -1,0 +1,45 @@
+# Full CI matrix on all pushes to master branch
+name: Linux CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
+      - '**.yaml'
+
+jobs:
+  # Runs full project on multiple JDKs
+  testmatrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        java: [11, 17, 21]
+        os: [ubuntu-latest]
+      fail-fast: false
+    name: JDK ${{ matrix.java }}, ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          cache: 'maven'
+      - name: Checkstyle
+        if: contains(matrix.java, '11')
+        run: ./mvnw checkstyle:check
+      - name: Forbidden APIs
+        if: contains(matrix.java, '11')
+        run: ./mvnw compile forbiddenapis:check forbiddenapis:testCheck
+      - name: Test with Maven
+        run: ./mvnw test -B
+      - name: Upload Coverage
+        if: contains(matrix.java, '11')
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

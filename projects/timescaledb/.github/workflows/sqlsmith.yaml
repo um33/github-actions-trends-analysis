@@ -1,0 +1,170 @@
+name: SQLsmith
+"on":
+  schedule:
+    # run daily 2:00 on main branch
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - sqlsmith
+      - main
+  pull_request:
+    paths: .github/workflows/sqlsmith.yaml
+
+jobs:
+  sqlsmith:
+    # Change the JOB_NAME variable below when changing the name.
+    # Don't use the env variable here because the env context is not accessible.
+    name: SQLsmith PG${{ matrix.pg }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["ubuntu-22.04"]
+        pg: [ "15", "16" ]
+        build_type: ["Debug"]
+      fail-fast: false
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+      JOB_NAME: SQLsmith PG${{ matrix.pg }}
+
+    steps:
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
+            libkrb5-dev build-essential autoconf autoconf-archive \
+            libboost-regex-dev libsqlite3-dev jq
+
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get purge postgresql*
+        sudo apt-get install libpqxx-dev postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+        # Make sure the system postgres service is not running.
+        sudo systemctl mask postgresql
+        sudo systemctl stop postgresql
+        { psql -c "select 1" && exit 1 ; } || :
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        make -j$(nproc) -C build
+        sudo make -C build install
+
+    - name: Checkout sqlsmith
+      uses: actions/checkout@v4
+      with:
+        repository: 'timescale/sqlsmith'
+        path: 'sqlsmith'
+        ref: 'timescaledb'
+
+    - name: Build SQLsmith
+      run: |
+        cd sqlsmith
+        autoreconf -i
+        ./configure
+        make -j$(nproc)
+
+    - name: Setup test environment
+      run: |
+        mkdir ~/pgdata
+        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl initdb -D ~/pgdata
+        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start \
+            -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" \
+            -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp" \
+            -o "-clog_statement=all" -o "-clogging_collector=true" \
+            -o "-clog_destination=jsonlog,stderr" -o "-clog_directory=$(readlink -f .)" \
+            -o "-clog_error_verbosity=verbose" -o "-clog_filename=postmaster.log"
+        psql -h /tmp postgres -c 'CREATE DATABASE smith;'
+        psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
+        psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
+
+    # we run these in a loop to reinitialize the random number generator
+    # 10000 queries seems to take roughly 4 minutes in CI
+    # so total runtime should be around 200 minutes in nightly run and 40 minutes otherwise
+    - name: Run SQLsmith
+      run: |
+        set -xeu
+        set -o pipefail
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          LOOPS=20
+        else
+          LOOPS=10
+        fi
+        cd sqlsmith
+        for _ in $(seq 1 $LOOPS)
+        do
+            ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog \
+                --target="host=/tmp dbname=smith" --max-queries=10000 \
+            2>&1 | tee -a sqlsmith.log
+
+            psql "host=/tmp dbname=smith" -c "select 1"
+        done
+
+    - name: Check for coredumps
+      if: always()
+      id: collectlogs
+      run: |
+        # wait for in progress coredumps
+        sleep 10
+        if coredumpctl list; then
+          echo "coredumps=true" >>$GITHUB_OUTPUT
+          false
+        fi
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", (char *) debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", (char *) conditionName
+          up 1
+          l
+          info args
+          info locals
+          bt full
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
+        false
+
+    - name: Upload Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
+        path: coredumps
+
+    - name: Save PostgreSQL log
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log for PG${{ matrix.pg }}
+        path: postgres.*
+
+    - name: Upload test results to the database
+      if: always()
+      env:
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh

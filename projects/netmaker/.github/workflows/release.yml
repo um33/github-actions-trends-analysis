@@ -1,0 +1,19 @@
+# creates a release from develop
+# creates release branch, generates release assets, publishes docker image and copies release.md to release
+# linux packages are generated and a PR from release branch to master is created 
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "new version number"
+        required: true
+
+jobs:
+
+  release:
+    uses: gravitl/devops/.github/workflows/netmakerRelease.yml@master
+    with:
+      version: ${{ inputs.version }}
+    secrets: inherit

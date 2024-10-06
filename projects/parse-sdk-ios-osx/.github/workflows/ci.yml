@@ -1,0 +1,123 @@
+---
+name: ci
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - "**"
+env:
+  CI_XCODE_14: /Applications/Xcode_14.2.app/Contents/Developer
+  CI_XCODE_15: /Applications/Xcode_15.0.app/Contents/Developer
+jobs:
+  tests:
+    env:
+      GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        script:
+          - test:ios
+          - test:macos
+          - test:parseui:all
+          - test:parse_live_query:all
+          - build:starters
+          - xcode15 # runs build:starters on XCode 15
+      fail-fast: false
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache SPM
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/Parse*/SourcePackages/
+          key: ${{ runner.os }}-spm-${{ hashFiles('Parse.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+                  ${{ runner.os }}-spm-
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@359bebbc29cbe6c87da6bc9ea3bc930432750108
+      - name: Cache Gems
+        id: cache-gems
+        uses: actions/cache@v3
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gem-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gem-
+      - name: Create and set the default keychain
+        run: |
+          security create-keychain -p "" temporary
+          security default-keychain -s temporary
+          security unlock-keychain -p "" temporary
+          security set-keychain-settings -lut 7200 temporary
+      - name: Submodules
+        run: |
+          git submodule update --init --recursive
+          sudo gem install bundler -v 2.4.22
+          bundle config set path 'vendor/bundle'
+      - name: Bundle Install
+        if: steps.cache-gems.outputs.cache-hit != 'true'
+        run: bundle install
+      - name: Build-Test
+        run: set -o pipefail && env NSUnbufferedIO=YES bundle exec rake ${{ matrix.script == 'xcode15' && 'build:starters' || matrix.script }}
+        env:
+          DEVELOPER_DIR: ${{ (matrix.script == 'xcode15' && env.CI_XCODE_15) || env.CI_XCODE_14 }}
+      - name: Generate Environment Variables
+        if: ${{ always() }}
+        env:
+          ARTIFACT_NAME: ${{ matrix.script }}-logs
+          TEST_RESULTS: ${{ matrix.script }}.xcresult
+        run: |
+          ARTIFACT_NAME=${{ env.ARTIFACT_NAME }}
+          TEST_RESULTS=$(find ~/Library/Developer/Xcode/DerivedData -name "*.xcresult")
+          BUILD_RESULTS=$(find ~/Library/Developer/Xcode/DerivedData -name "*.xcactivitylog")
+          echo ARTIFACT_NAME=${ARTIFACT_NAME//:/-} >> $GITHUB_ENV # replace colon with dashes
+          echo TEST_RESULTS=${TEST_RESULTS} >> $GITHUB_ENV
+          echo "Artifact Name: $ARTIFACT_NAME"
+          echo "Test Result Location: $TEST_RESULTS"
+          echo "Build Result Location: $BUILD_RESULTS"
+      - name: Upload Artifact Logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/Parse-*/Logs/Test
+            ~/Library/Developer/Xcode/DerivedData/**/Logs/Build
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v3.1.1
+        with:
+          xcode: true
+          xcode_archive_path: ${{ env.TEST_RESULTS }}
+  docs:
+    runs-on: macos-13
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@359bebbc29cbe6c87da6bc9ea3bc930432750108
+      - name: Cache Gems
+        id: cache-gems
+        uses: actions/cache@v3
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gem-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gem-
+      - name: Submodules
+        run: |
+          git submodule update --init --recursive
+          sudo gem install bundler -v 2.4.22
+          bundle config path vendor/bundle
+      - name: Bundle Install
+        if: steps.cache-gems.outputs.cache-hit != 'true'
+        run: bundle install
+      - name: Create Jazzy Docs
+        run: |
+          ./Scripts/jazzy.sh
+        env:
+          DEVELOPER_DIR: ${{ env.CI_XCODE_14 }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

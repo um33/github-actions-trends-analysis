@@ -1,0 +1,66 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+
+jobs:
+  test-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3.3.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install NPM packages
+        run: npm ci
+
+      - name: Run Format Check
+        run: npm run format-check
+
+      - name: Run Lint Checker
+        run: npm run lint
+
+      - name: Run Unit Tests
+        run: npm run test-ci
+
+      - name: Upload Code Coverage
+        uses: codecov/codecov-action@v3
+
+  build-ci:
+    needs: test-ci
+    name: Node on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3.3.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install NPM packages
+        run: npm ci
+
+      - uses: jongwooo/gatsby-cache@v1.4.1
+        with:
+          key: pull-request-gatsby-ubuntu-latest
+
+      - name: Build Gatsby
+        run: npm run build-ci

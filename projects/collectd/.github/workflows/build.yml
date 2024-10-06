@@ -1,0 +1,141 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: collectd/ci:${{ matrix.container_tag }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        container_tag:
+          # debian family
+          - debian12
+          - debian11
+          - debian10
+          # Ubuntu
+          - ubuntu23.10
+          - ubuntu22.04
+          - ubuntu20.04
+          # RedHat family
+          - centos9
+          - fedora39
+          - fedora38
+        configure_flags: ['']
+        include:
+          - container_tag: debian12
+            configure_flags: '--enable-debug'
+          - container_tag: debian12
+            # By default clang emits DWARF v5, which Valgrind cannot read yet.
+            # https://github.com/llvm/llvm-project/issues/56550
+            configure_flags: 'CC=clang CXX=clang++ CFLAGS=-gdwarf-4'
+    env:
+      CONFIGURE_FLAGS: ${{ matrix.configure_flags }}
+      # this env var picked up by valgrind during make check phase
+      VALGRIND_OPTS: "--errors-for-leak-kinds=definite"
+    steps:
+    - uses: actions/checkout@v2
+    - run: type pkg-config
+    - run: pkg-config --list-all | sort -u
+    - name: Generate configure script
+      run:
+        ./build.sh
+    - name: Run configure script
+      run: ./configure $CONFIGURE_FLAGS
+    - name: Upload config.log
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.container_tag }}
+        path: config.log
+    - name: Build collectd
+      run: make -j$(nproc) -sk
+    - name: Run make check
+      run: |
+        set +e
+        make $MAKEFLAGS check
+        echo "$?" >make-check.status
+      continue-on-error: true
+    - name: Upload log files
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.container_tag }}
+        path: "*.log"
+    - name: Report check status
+      run: exit $(< make-check.status)
+    - name: Check expected plugins
+      run: |
+        if [[ -e ".expected-plugins/${{ matrix.container_tag }}" ]]; then
+          /checks/check-built-plugins.sh ".expected-plugins/${{ matrix.container_tag }}"
+        fi
+
+  experimental:
+    runs-on: ubuntu-latest
+    container: collectd/ci:${{ matrix.container_tag }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # for tasks that are optional, use the continue-on-error option, to prevent a workflow from failing when the task fails
+        container_tag:
+          - debian_unstable
+          - fedora_main
+        # Add additional per-distro vars here.
+        include:
+          - container_tag: debian_unstable
+            configure_flags: "--disable-dpdkstat --disable-dpdkevents --disable-virt"
+          - container_tag: fedora_main
+            cflags: "-fPIE -Wno-deprecated-declarations"
+            cppflags: "-fPIE -Wno-deprecated-declarations"
+            configure_flags: "--disable-dpdkstat --disable-dpdkevents --disable-virt --disable-xmms"
+    env:
+      CFLAGS: ${{ matrix.cflags }}
+      CPPFLAGS: ${{ matrix.cppflags }}
+      CONFIGURE_FLAGS: ${{ matrix.configure_flags }}
+      VALGRIND_OPTS: "--errors-for-leak-kinds=definite"
+    steps:
+    - uses: actions/checkout@v2
+    - run: type pkg-config
+    - run: pkg-config --list-all | sort -u
+    - name: Generate configure script
+      run:
+        ./build.sh
+    - name: Run configure script
+      run: ./configure $CONFIGURE_FLAGS
+    - name: Upload config.log
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.container_tag }}
+        path: config.log
+    - name: Build collectd
+      run: make -j$(nproc) -sk
+    - name: Run make check
+      run: |
+        set +e
+        make $MAKEFLAGS check
+        echo "$?" >make-check.status
+      continue-on-error: true
+    - name: Upload log files
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.container_tag }}
+        path: "*.log"
+    - name: Report check status
+      run: exit $(< make-check.status)
+    - name: Check expected plugins
+      run: |
+        if [[ -e ".expected-plugins/${{ matrix.container_tag }}" ]]; then
+          /checks/check-built-plugins.sh ".expected-plugins/${{ matrix.container_tag }}"
+        fi

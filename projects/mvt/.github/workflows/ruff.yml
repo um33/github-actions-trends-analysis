@@ -1,0 +1,19 @@
+name: Ruff
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  ruff_py3:
+    name: Ruff syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install Dependencies
+        run: |
+          pip install --user ruff
+      - name: ruff
+        run: |
+          ruff check --output-format github .

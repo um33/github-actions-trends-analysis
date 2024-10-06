@@ -1,0 +1,19 @@
+name: 'Review Dependencies'
+
+on:
+  pull_request:
+    paths:
+      - 'go.mod'
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    if: ${{ github.repository == 'kubernetes/kops' }}
+    runs-on: ubuntu-20.04
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+      - name: 'Review Dependencies'
+        uses: actions/dependency-review-action@5bbc3ba658137598168acb2ab73b21c432dd411b

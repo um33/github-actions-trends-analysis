@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    name: Build and Test on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20.x']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install
+
+      # Read existing version, reuse that, add a Git short hash
+      - name: Set build version to Git commit
+        run: node scripts/writeGitVersion.mjs $(git rev-parse --short HEAD)
+
+      - name: Check updated version
+        run: jq .version package.json
+
+      - name: Run linter
+        run: yarn lint
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Pack
+        run: yarn pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ./package.tgz
+
+  test-types:
+    name: Test Types with TypeScript ${{ matrix.ts }}
+
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.x']
+        ts: ['4.7', '4.8', '4.9', '5.0', '5.1', '5.2', '5.3', '5.4']
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'yarn'
+
+      - name: Install deps
+        run: yarn install
+
+      # Build with the actual TS version in the repo
+      - name: Pack
+        run: yarn build && yarn pack
+
+      - name: Install build artifact
+        run: yarn add ./package.tgz
+
+      # Then install the specific version to test against
+      - name: Install TypeScript ${{ matrix.ts }}
+        run: yarn add --dev typescript@${{ matrix.ts }}
+
+      - name: 'Remove source to ensure packaged types are used'
+        run: rm -rf src
+
+        # Remove config line that points "reselect" to the `src` folder,
+        # so that the typetest will use the installed version instead
+      - run: sed -i -e /@remap-prod-remove-line/d ./typescript_test/tsconfig.json vitest.config.mts
+
+      - name: Test types
+        run: |
+          ./node_modules/.bin/tsc --version
+          yarn test:typescript
+
+  are-the-types-wrong:
+    name: Check package config with are-the-types-wrong
+
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.x']
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: .
+
+      # Note: We currently expect "FalseCJS" failures for Node16 + `moduleResolution: "node16",
+      - name: Run are-the-types-wrong
+        run: npx @arethetypeswrong/cli ./package.tgz --format table --ignore-rules false-cjs
+
+  test-published-artifact:
+    name: Test Published Artifact ${{ matrix.example }}
+
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.x']
+        example:
+          [
+            'cra4',
+            'cra5',
+            'next',
+            'vite',
+            'node-standard',
+            'node-esm',
+            'react-native',
+            'expo'
+          ]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'yarn'
+
+      - name: Clone RTK repo
+        run: git clone https://github.com/reduxjs/redux-toolkit.git ./redux-toolkit
+
+      - name: Check folder contents
+        run: ls -l .
+
+        # Some weird install diffs with cloning this repo and installing.
+        # Just kill the lockfiles for this repo and RTK and reinstall
+
+      - name: Remove top lockfile
+        run: rm yarn.lock && rm package.json
+
+      - name: Remove RTK lockfile
+        working-directory: ./redux-toolkit
+        run: rm yarn.lock && rm package.json
+
+      - name: Install deps
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        env:
+          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+        run: rm yarn.lock && yarn install
+
+      - name: Install Playwright browser if necessary
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        continue-on-error: true
+        run: yarn playwright install
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+
+      - name: Check folder contents
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        run: ls -l .
+
+      - name: Install build artifact
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        run: yarn add ./package.tgz
+
+      - name: Show installed package versions
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        run: yarn info reselect && yarn why reselect
+
+      - name: Set up JDK 17 for React Native build
+        if: matrix.example == 'react-native'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17.x'
+          distribution: 'temurin'
+
+      - name: Check MSW version
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        run: yarn why msw
+
+      - name: Build example
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
+        run: yarn build
+
+      - name: Run test step
+        working-directory: ./redux-toolkit/examples/publish-ci/${{ matrix.example }}
+        run: yarn test

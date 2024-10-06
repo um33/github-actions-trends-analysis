@@ -1,0 +1,49 @@
+name: Library request
+description: Request a new library
+title: '[LIB REQUEST]: '
+labels: ['request', 'new-libs']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Note: You are welcome to open a request for a library - but you're even more welcome to open a PR for it! Today we rely almost entirely on contributions for compiler/library requests, and (we hope) the contribution process isn't very painful.
+        [Docs](https://github.com/compiler-explorer/compiler-explorer/blob/main/docs/AddingALibrary.md), example PR: [1](https://github.com/compiler-explorer/compiler-explorer/pull/6253),[2](https://github.com/compiler-explorer/infra/pull/1253). We'll also be happy to try and help in our [discord](https://discord.gg/r9XASD3q).
+  - type: input
+    id: library-name
+    attributes:
+      label: Library name
+      description: What is the name of the library?
+      placeholder: GoogleTest
+    validations:
+      required: true
+  - type: textarea
+    id: library-description
+    attributes:
+      label: Library description
+      description: |
+        A sentence that describes what this library does. It helps us when filling some of the UI elements when adding
+        the library
+      placeholder: GoogleTest is a testing library for C++
+    validations:
+      required: true
+  - type: input
+    id: library-repository
+    attributes:
+      label: Library repository
+      description: A URL of where we can find the library.
+      placeholder: https://github.com/google/googletest
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: |
+        Is there any specific reason as to why you want this library to be added?
+
+        EXTRA:
+        It would be very helpful for the implementator to have some small snippet of code to tell when the library has been properly installed.
+        BUT do not feel forced to provide one, this is just a nice-to-have extra!
+      placeholder: It's an excellent testing library for testing C++ code
+    validations:
+      required: true

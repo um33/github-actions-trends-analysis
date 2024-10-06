@@ -1,0 +1,54 @@
+name: Crates IO Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      ockam_publish_exclude_crates:
+        description: Exclude Specific Crates From Being Published
+        required: false
+      release_git_tag:
+        description: Latest Release Git Tag
+        required: true
+      ockam_publish_recent_failure:
+        description: Indicate A Recent Failure
+        type: choice
+        default: 'false'
+        options:
+        - false
+        - true
+
+permissions:
+  # Contents permission allows us read this repository.
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish_crates:
+    runs-on: ubuntu-20.04
+    container:
+      # Note: Do not update this image has it has installed all binaries
+      # to bump crates and generate changelogs which we don't want installed
+      # in our CI packages.
+      image: ghcr.io/build-trust/ockam-builder@sha256:a04b6a0aa01a93ba9a5c67392872893b261772dedfcd58f72a1addacf7535c09
+    environment: release
+    name: "Publish Crates To Crates IO"
+    steps:
+      - name: Checkout Ockam
+        uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.release_git_tag }}
+
+      - name: Create A Temporary Branch To Perform Release
+        run: git checkout -B "$(date +%s)"
+
+      - name: Publish Ockam Crates
+        env:
+          OCKAM_PUBLISH_TOKEN: '${{ secrets.CRATES_IO_PUBLISH_TOKEN }}'
+          OCKAM_PUBLISH_RECENT_FAILURE: '${{ github.event.inputs.ockam_publish_recent_failure }}'
+          OCKAM_PUBLISH_EXCLUDE_CRATES: '${{ github.event.inputs.ockam_publish_exclude_crates }}'
+        run: |
+          bash -ex ./tools/scripts/release/crate-publish.sh

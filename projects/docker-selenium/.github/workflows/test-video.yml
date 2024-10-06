@@ -1,0 +1,104 @@
+name: Test Docker Selenium
+concurrency:
+  group: ${{ github.workflow }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request-timeout:
+        description: 'Test parameter for different request timeout'
+        required: false
+        default: '400'
+      parallel-hardening:
+        description: 'Test parameter to enable hardening parallel tests'
+        required: false
+        default: 'true'
+      log-level:
+        description: 'Test parameter for different log level'
+        required: false
+        default: 'INFO'
+  push:
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Test Docker Selenium
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+          test-strategy: [test_video, test_parallel, test_node_docker]
+    steps:
+      - uses: actions/checkout@main
+      - name: Output Docker info
+        run: docker info
+      - name: Set up Python
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.11'
+          check-latest: true
+      - name: Get branch name (only for push to branch)
+        if: github.event_name == 'push'
+        run: echo "BRANCH=$(echo ${PUSH_BRANCH##*/})" >> $GITHUB_ENV
+        env:
+          PUSH_BRANCH: ${{ github.ref }}
+      - name: Get target branch name (only for PRs)
+        if: github.event_name == 'pull_request'
+        run: echo "BRANCH=$(echo ${TARGET_BRANCH##*/})" >> $GITHUB_ENV
+        env:
+          TARGET_BRANCH: ${{ github.head_ref }}
+      - name: Output branch name
+        run: echo ${BRANCH}
+      - name: Sets build date
+        run: |
+          echo "BUILD_DATE=$(date '+%Y%m%d')" >> $GITHUB_ENV
+          make set_nightly_env
+          cat .env | xargs -I {} echo {} >> $GITHUB_ENV
+          echo "AUTHORS=${AUTHORS}" >> $GITHUB_ENV
+        env:
+          AUTHORS: ${{ vars.AUTHORS || 'SeleniumHQ' }}
+      - name: Pre-build to reduce logs in test phase
+        run: |
+          VERSION=${BRANCH} BUILD_DATE=${BUILD_DATE} make hub
+          VERSION=${BRANCH} BUILD_DATE=${BUILD_DATE} make chrome
+          VERSION=${BRANCH} BUILD_DATE=${BUILD_DATE} make firefox
+          VERSION=${BRANCH} BUILD_DATE=${BUILD_DATE} make edge
+      - name: Set test parameters
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        run: |
+          echo "LOG_LEVEL=${LOG_LEVEL}" >> $GITHUB_ENV
+          echo "TEST_PARALLEL_HARDENING=${TEST_PARALLEL_HARDENING}" >> $GITHUB_ENV
+          echo "REQUEST_TIMEOUT=${REQUEST_TIMEOUT}" >> $GITHUB_ENV
+        env:
+          LOG_LEVEL: ${{ github.event.inputs.log-level || 'INFO' }}
+          TEST_PARALLEL_HARDENING: ${{ github.event.inputs.parallel-hardening || 'true' }}
+          REQUEST_TIMEOUT: ${{ github.event.inputs.request-timeout || '400' }}
+      - name: Run Docker Compose to ${{ matrix.test-strategy }}
+        run: USE_RANDOM_USER_ID=${USE_RANDOM_USER} VERSION=${BRANCH} BUILD_DATE=${BUILD_DATE} make ${{ matrix.test-strategy }}
+      - name: Upload recorded Chrome video
+        if: matrix.test-strategy == 'test_video'
+        uses: actions/upload-artifact@main
+        with:
+          name: chrome_video
+          path: ./tests/videos/chrome_video.mp4
+      - name: Upload recorded Edge video
+        if: matrix.test-strategy == 'test_video'
+        uses: actions/upload-artifact@main
+        with:
+          name: edge_video
+          path: ./tests/videos/edge_video.mp4
+      - name: Upload recorded Firefox video
+        if: matrix.test-strategy == 'test_video'
+        uses: actions/upload-artifact@main
+        with:
+          name: firefox_video
+          path: ./tests/videos/firefox_video.mp4

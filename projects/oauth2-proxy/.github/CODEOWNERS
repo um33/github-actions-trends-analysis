@@ -1,0 +1,23 @@
+# Default owner should be a core org reviewers unless overridden by later rules in this file
+* @oauth2-proxy/reviewers
+
+# login.gov provider
+# Note:  If @timothy-spencer terms out of his appointment, your best bet
+# for finding somebody who can test the oauth2-proxy would be to ask somebody
+# in the login.gov team (https://login.gov/developers/), the cloud.gov team
+# (https://cloud.gov/docs/help/), or the 18F org (https://18f.gsa.gov/contact/
+# or the public devops channel at https://chat.18f.gov/).
+providers/logingov.go @timothy-spencer
+providers/logingov_test.go @timothy-spencer
+
+# Bitbucket provider
+providers/bitbucket.go @aledeganopix4d
+providers/bitbucket_test.go @aledeganopix4d
+
+# Nextcloud provider
+providers/nextcloud.go @Ramblurr
+providers/nextcloud_test.go @Ramblurr
+
+# DigitalOcean provider
+providers/digitalocean.go @kamaln7
+providers/digitalocean_test.go @kamaln7

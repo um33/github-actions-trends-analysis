@@ -1,0 +1,422 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CROSS_CONTAINER_UID: 0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable]
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          # https://github.com/gleam-lang/gleam/issues/2221
+          # - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - x86_64-pc-windows-msvc
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            use-cross: false
+            run-integration-tests: true
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use-cross: true
+            run-integration-tests: true
+          # - os: ubuntu-latest
+          #   target: aarch64-unknown-linux-gnu
+          #   use-cross: true
+          #   run-integration-tests: false # Cannot run aarch64 binaries on x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use-cross: true
+            run-integration-tests: false # Cannot run aarch64 binaries on x86_64
+          - os: macos-12  # intel
+            target: x86_64-apple-darwin
+            use-cross: false
+            run-integration-tests: true
+          - os: macos-14  # aarch64
+            toolchain: stable
+            target: aarch64-apple-darwin
+            use-cross: false
+            run-integration-tests: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            use-cross: false
+            run-integration-tests: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install musl-tools incl. musl-gcc
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          # musl-tools provide `musl-gcc` which is required for `ring` which is required for `rustls` et al.
+          packages: musl-tools
+          version: 1.1
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+          override: true
+          default: true
+          profile: minimal
+
+      - name: Install Erlang (non-macos)
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26.1"
+          elixir-version: "1.16.1"
+          rebar3-version: "3"
+        if: ${{ runner.os != 'macOS' }} # setup-beam does not support macOS
+
+      - name: Install Erlang (macos)
+        run: |
+          brew install erlang rebar3 elixir
+          mix local.hex --force
+        if: ${{ runner.os == 'macOS' }} # setup-beam does not support macOS
+
+      - name: Handle Rust dependencies caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v1-${{ matrix.target }}
+
+      - name: Install Gleam
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: "--path compiler-cli --target ${{ matrix.target }} --debug --locked"
+          use-cross: ${{ matrix.use-cross }}
+        if: ${{ matrix.run-integration-tests }}
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: "--workspace --target ${{ matrix.target }}"
+          use-cross: ${{ matrix.use-cross }}
+
+      - name: test/project_erlang (non-windows)
+        run: |
+          gleam run && cd src && gleam run && cd ..
+          gleam check
+          gleam test && cd src && gleam test && cd ..
+          gleam docs build
+        working-directory: ./test/project_erlang
+        if: ${{ runner.os != 'Windows' && matrix.run-integration-tests }}
+
+      - name: test/project_erlang (windows)
+        run: |
+          gleam run && cd src && gleam run && cd ..
+          gleam check
+          gleam test && cd src && gleam test && cd ..
+          gleam docs build
+        working-directory: ./test/project_erlang_windows
+        if: ${{ runner.os == 'Windows' && matrix.run-integration-tests }}
+
+      - name: test/project_erlang export erlang-shipment (non-windows)
+        run: |
+          gleam export erlang-shipment
+          ./build/erlang-shipment/entrypoint.sh run
+        working-directory: ./test/project_erlang
+        if: ${{ runner.os != 'Windows' && matrix.run-integration-tests }}
+
+      - name: test/project_erlang export erlang-shipment (windows)
+        run: |
+          gleam export erlang-shipment
+          .\build\erlang-shipment\entrypoint.ps1 run
+        working-directory: ./test/project_erlang_windows
+        if: ${{ runner.os == 'Windows' && matrix.run-integration-tests }}
+
+      - name: test/project_erlang export package-interface
+        run: |
+          gleam export package-interface --out="interface.json"
+          cat interface.json
+        working-directory: ./test/project_erlang
+        if: ${{ matrix.run-integration-tests }}
+
+      - name: test/external_only_javascript
+        run: ./test.sh
+        working-directory: ./test/external_only_javascript
+        if: ${{ matrix.run-integration-tests }}
+        env:
+          GLEAM_COMMAND: gleam
+
+
+      - name: test/external_only_erlang
+        run: ./test.sh
+        working-directory: ./test/external_only_erlang
+        if: ${{ matrix.run-integration-tests }}
+        env:
+          GLEAM_COMMAND: gleam
+
+      - name: test/project_javascript
+        run: |
+          gleam run
+          gleam check
+          gleam test
+          gleam docs build
+        working-directory: ./test/project_javascript
+        if: ${{ matrix.run-integration-tests }}
+
+      - name: test/project_path_deps
+        run: |
+          gleam update
+          gleam check
+        working-directory: ./test/project_path_deps/project_a
+        if: ${{ matrix.run-integration-tests }}
+
+      - name: Test project generation
+        run: |
+          gleam new lib_project
+          cd lib_project
+          gleam run
+          gleam test
+          gleam docs build
+
+          # Assert that module metadata has been written
+          ls build/dev/erlang/lib_project/_gleam_artefacts/lib_project.cache
+
+          # Assert that HTML docs and their assets have been written
+          ls build/dev/docs/lib_project/index.html
+          ls build/dev/docs/lib_project/lib_project.html
+          ls build/dev/docs/lib_project/css/atom-one-light.min.css
+          ls build/dev/docs/lib_project/css/atom-one-dark.min.css
+          ls build/dev/docs/lib_project/css/index.css
+          ls build/dev/docs/lib_project/js/highlight.min.js
+          ls build/dev/docs/lib_project/js/highlightjs-gleam.js
+          ls build/dev/docs/lib_project/js/highlightjs-erlang.min.js
+          ls build/dev/docs/lib_project/js/highlightjs-elixir.min.js
+          ls build/dev/docs/lib_project/js/highlightjs-javascript.min.js
+          ls build/dev/docs/lib_project/js/highlightjs-typescript.min.js
+          ls build/dev/docs/lib_project/js/lunr.min.js
+          ls build/dev/docs/lib_project/js/index.js
+          ls build/dev/docs/lib_project/fonts/karla-v23-bold-latin-ext.woff2
+          ls build/dev/docs/lib_project/fonts/karla-v23-bold-latin.woff2
+          ls build/dev/docs/lib_project/fonts/karla-v23-regular-latin-ext.woff2
+          ls build/dev/docs/lib_project/fonts/karla-v23-regular-latin.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-cyrillic-ext.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-cyrillic.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-greek-ext.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-greek.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-latin-ext.woff2
+          ls build/dev/docs/lib_project/fonts/ubuntu-mono-v15-regular-latin.woff2
+        if: ${{ matrix.run-integration-tests }}
+
+  test-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          profile: minimal
+          override: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install wasm-pack
+        run: |
+          curl -sSL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+      - name: Run wasm tests
+        run: wasm-pack test --node compiler-wasm
+
+  rustfmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          default: true
+          profile: minimal
+          components: rustfmt
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  validate-deps:
+    name: validate-deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          default: true
+          profile: minimal
+
+      - name: Install cargo-deny
+        run: |
+          set -e
+          curl -L https://github.com/EmbarkStudios/cargo-deny/releases/download/0.14.18/cargo-deny-0.14.18-x86_64-unknown-linux-musl.tar.gz | tar xzf -
+          mv cargo-deny-*-x86_64-unknown-linux-musl/cargo-deny cargo-deny
+          echo `pwd` >> $GITHUB_PATH
+
+      - name: Validate deps
+        uses: actions-rs/cargo@v1
+        with:
+          command: deny
+          args: check
+
+  lint-build:
+    name: lint-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          default: true
+          profile: minimal
+          components: clippy
+
+      - name: Handle Rust dependencies caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v1-linux-gnu
+
+      - name: Run linter
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --workspace
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Upload artifact (Ubuntu)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gleam
+          path: target/debug/gleam
+
+  test-projects:
+    name: test-projects
+    needs: lint-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install Erlang
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26.1"
+          elixir-version: "1.16.1"
+          rebar3-version: "3"
+
+      - name: Download Gleam binary from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: gleam
+          path: ./test
+
+      - name: Configure test projects to use Gleam binary
+        run: |
+          echo $PWD/ >> $GITHUB_PATH
+          chmod +x ./gleam
+          sed -i 's/cargo run --quiet --/gleam/' */Makefile
+          sed -i 's/cargo run --/gleam/' */Makefile
+        working-directory: ./test
+
+      - name: test/language Erlang
+        run: make clean erlang
+        working-directory: ./test/language
+
+      - name: test/language JavaScript with NodeJS
+        run: make clean nodejs
+        working-directory: ./test/language
+
+      - name: test/language JavaScript with Deno
+        run: make clean deno
+        working-directory: ./test/language
+
+      - name: test/language JavaScript with Bun
+        run: make clean bun
+        working-directory: ./test/language
+
+      - name: test/compile_package0
+        run: make
+        working-directory: ./test/compile_package0
+
+      - name: test/compile_package1
+        run: make
+        working-directory: ./test/compile_package1
+
+      - name: Test JavaScript prelude
+        run: make
+        working-directory: ./test/javascript_prelude
+
+      - name: Test export of hex tarball
+        run: make test
+        working-directory: ./test/hextarball
+
+      - name: Test running modules
+        run: make test
+        working-directory: ./test/running_modules

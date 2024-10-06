@@ -1,0 +1,64 @@
+# Lints and checks for potential issues in the profiles.
+
+name: Check-Profiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+    paths:
+      - 'ci/check/profiles/**'
+      - 'etc/**'
+      - .github/workflows/check-profiles.yml
+      - ci/printenv.sh
+      - contrib/sort.py
+      - src/firecfg/firecfg.config
+  pull_request:
+    paths:
+      - 'ci/check/profiles/**'
+      - 'etc/**'
+      - .github/workflows/check-profiles.yml
+      - ci/printenv.sh
+      - contrib/sort.py
+      - src/firecfg/firecfg.config
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  profile-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+      with:
+        disable-sudo: true
+        egress-policy: block
+        allowed-endpoints: >
+          github.com:443
+
+    - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+    - name: print env
+      run: ./ci/printenv.sh
+    - run: python3 --version
+
+    - name: sort.py
+      run: >
+        ./ci/check/profiles/sort.py
+        etc/inc/*.inc etc/{profile-a-l,profile-m-z}/*.profile
+# Currently broken (see #5610)
+#   - name: private-etc-always-required.sh
+#     run: >
+#       ./ci/check/profiles/private-etc-always-required.sh
+#       etc/inc/*.inc etc/{profile-a-l,profile-m-z}/*.profile
+    - name: sort-disable-programs.sh
+      run: >
+        ./ci/check/profiles/sort-disable-programs.sh
+        etc/inc/disable-programs.inc
+    - name: sort-firecfg.config.sh
+      run: >
+        ./ci/check/profiles/sort-firecfg.config.sh
+        src/firecfg/firecfg.config

@@ -1,0 +1,181 @@
+# Used as inspiration: https://github.com/mvdan/github-actions-golang
+
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+      - 2.*
+  pull_request:
+    branches:
+      - master
+      - 2.*
+
+jobs:
+  test:
+    strategy:
+      # Default is true, cancels jobs for other platforms in the matrix if one fails
+      fail-fast: false
+      matrix:
+        os: 
+          - linux
+          - mac
+          - windows
+        go: 
+          - '1.21'
+          - '1.22'
+
+        include:
+        # Set the minimum Go patch version for the given Go minor
+        # Usable via ${{ matrix.GO_SEMVER }}
+        - go: '1.21'
+          GO_SEMVER: '~1.21.0'
+
+        - go: '1.22'
+          GO_SEMVER: '~1.22.1'
+
+        # Set some variables per OS, usable via ${{ matrix.VAR }}
+        # OS_LABEL: the VM label from GitHub Actions (see https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories)
+        # CADDY_BIN_PATH: the path to the compiled Caddy binary, for artifact publishing
+        # SUCCESS: the typical value for $? per OS (Windows/pwsh returns 'True')
+        - os: linux
+          OS_LABEL: ubuntu-latest
+          CADDY_BIN_PATH: ./cmd/caddy/caddy
+          SUCCESS: 0
+
+        - os: mac
+          OS_LABEL: macos-14
+          CADDY_BIN_PATH: ./cmd/caddy/caddy
+          SUCCESS: 0
+
+        - os: windows
+          OS_LABEL: windows-latest
+          CADDY_BIN_PATH: ./cmd/caddy/caddy.exe
+          SUCCESS: 'True'
+
+    runs-on: ${{ matrix.OS_LABEL }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.GO_SEMVER }}
+        check-latest: true
+
+    # These tools would be useful if we later decide to reinvestigate
+    # publishing test/coverage reports to some tool for easier consumption
+    # - name: Install test and coverage analysis tools
+    #   run: |
+    #     go get github.com/axw/gocov/gocov
+    #     go get github.com/AlekSi/gocov-xml
+    #     go get -u github.com/jstemmer/go-junit-report
+    #     echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Print Go version and environment
+      id: vars
+      shell: bash
+      run: |
+        printf "Using go at: $(which go)\n"
+        printf "Go version: $(go version)\n"
+        printf "\n\nGo environment:\n\n"
+        go env
+        printf "\n\nSystem environment:\n\n"
+        env
+        printf "Git version: $(git version)\n\n"
+        # Calculate the short SHA1 hash of the git commit
+        echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        # mkdir test-results
+
+    - name: Build Caddy
+      working-directory: ./cmd/caddy
+      env:
+        CGO_ENABLED: 0
+      run: |
+        go build -tags nobdger -trimpath -ldflags="-w -s" -v
+
+    - name: Smoke test Caddy
+      working-directory: ./cmd/caddy
+      run: |
+        ./caddy start
+        ./caddy stop
+
+    - name: Publish Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: caddy_${{ runner.os }}_go${{ matrix.go }}_${{ steps.vars.outputs.short_sha }}
+        path: ${{ matrix.CADDY_BIN_PATH }}
+        compression-level: 0
+
+    # Commented bits below were useful to allow the job to continue
+    # even if the tests fail, so we can publish the report separately
+    # For info about set-output, see https://stackoverflow.com/questions/57850553/github-actions-check-steps-status
+    - name: Run tests
+      # id: step_test
+      # continue-on-error: true
+      run: |
+        # (go test -v -coverprofile=cover-profile.out -race ./... 2>&1) > test-results/test-result.out
+        go test -tags nobadger -v -coverprofile="cover-profile.out" -short -race ./...
+        # echo "status=$?" >> $GITHUB_OUTPUT
+
+    # Relevant step if we reinvestigate publishing test/coverage reports
+    # - name: Prepare coverage reports
+    #   run: |
+    #     mkdir coverage
+    #     gocov convert cover-profile.out > coverage/coverage.json
+    #     # Because Windows doesn't work with input redirection like *nix, but output redirection works.
+    #     (cat ./coverage/coverage.json | gocov-xml) > coverage/coverage.xml
+
+    # To return the correct result even though we set 'continue-on-error: true'
+    # - name: Coerce correct build result
+    #   if: matrix.os != 'windows' && steps.step_test.outputs.status != ${{ matrix.SUCCESS }}
+    #   run: |
+    #     echo "step_test ${{ steps.step_test.outputs.status }}\n"
+    #     exit 1
+
+  s390x-test:
+    name: test (s390x on IBM Z)
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    continue-on-error: true  # August 2020: s390x VM is down due to weather and power issues
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run Tests
+        run: |
+          mkdir -p ~/.ssh && echo -e "${SSH_KEY//_/\\n}" > ~/.ssh/id_ecdsa && chmod og-rwx ~/.ssh/id_ecdsa
+
+          # short sha is enough?
+          short_sha=$(git rev-parse --short HEAD)
+
+          # The environment is fresh, so there's no point in keeping accepting and adding the key.
+          rsync -arz -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" --progress --delete --exclude '.git' . "$CI_USER"@ci-s390x.caddyserver.com:/var/tmp/"$short_sha"
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "$CI_USER"@ci-s390x.caddyserver.com "cd /var/tmp/$short_sha; go version; go env; printf "\n\n";CGO_ENABLED=0 go test -tags nobadger -v ./..."
+          test_result=$?
+
+          # There's no need leaving the files around
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$CI_USER"@ci-s390x.caddyserver.com "rm -rf /var/tmp/'$short_sha'"
+
+          echo "Test exit code: $test_result"
+          exit $test_result
+        env:
+          SSH_KEY: ${{ secrets.S390X_SSH_KEY }}
+          CI_USER: ${{ secrets.CI_USER }}
+
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - uses: goreleaser/goreleaser-action@v5
+        with:
+          version: latest
+          args: check

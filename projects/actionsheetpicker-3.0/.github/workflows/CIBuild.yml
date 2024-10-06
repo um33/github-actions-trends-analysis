@@ -1,0 +1,62 @@
+name: CI Build
+
+on:  
+  push:
+    branches: 
+      - develop
+    paths:
+      - 'ActionSheetPicker-3.0.podspec'
+      - 'Package.swift'
+      - 'CoreActionSheetPicker/**'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        # Starting with Xcode 11, xcodebuild supports SwiftPM packages out of the box.
+        # ref: https://stackoverflow.com/a/62246008/9801139
+        - xcode: "13.2.1"
+          os: macos-11
+        # - xcode: "15.2"
+        #   os: macOS-14
+    runs-on: ${{ matrix.os }}  
+    env:
+      DEVELOPER_DIR: "/Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer"
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: "Build scheme CoreActionSheetPicker"
+        env:
+          WORKSPACE: ActionSheetPicker-3.0.xcworkspace
+          SCHEME: CoreActionSheetPicker
+        run: |
+          xcodebuild clean build -workspace ${WORKSPACE} -scheme ${SCHEME} \
+            -sdk iphonesimulator -destination "name=iPhone 11 Pro"
+            
+      - name: "Build scheme Swift-Example"
+        env:
+          WORKSPACE: ActionSheetPicker-3.0.xcworkspace
+          SCHEME: Swift-Example
+        run: |
+          xcodebuild clean build -workspace ${WORKSPACE} -scheme ${SCHEME} \
+            -sdk iphonesimulator -destination "name=iPhone 11 Pro"
+
+      - name: "Build Swift Pacakge"
+        env:
+          WORKSPACE: .swiftpm/xcode/package.xcworkspace
+          SCHEME: ActionSheetPicker-3.0
+        run: |
+          xcodebuild clean build -workspace ${WORKSPACE} -scheme ${SCHEME} \
+            -sdk iphonesimulator -destination "name=iPhone 11 Pro"
+            
+      - name: "Build CocoaPods"
+        run: |
+          gem install cocoapods
+          pod lib lint --allow-warnings
+
+      - name: "Build Carthage"
+        run: |
+          brew install carthage
+          carthage build --no-skip-current --use-xcframeworks

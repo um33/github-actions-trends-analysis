@@ -1,0 +1,100 @@
+name: master
+
+on:
+   push:
+      paths-ignore:
+         - 'doc/**'
+         - 'documentation/**'
+         - '*.md'
+         - '*.yml'
+         - '.github/workflows/**'
+      branches:
+         - master
+
+permissions:
+   contents: read
+
+jobs:
+   api_check:
+      runs-on: ubuntu-latest
+      if: github.repository == 'kotest/kotest'
+      steps:
+         -  name: Checkout the repo
+            uses: actions/checkout@v4
+            with:
+               fetch-depth: 0
+               ref: ${{ github.event.inputs.branch }}
+
+         -  name: Setup JDK
+            uses: actions/setup-java@v4
+            with:
+               distribution: 'temurin'
+               java-version: '17'
+
+         -  uses: gradle/actions/setup-gradle@v3
+
+         -  name: Run api check
+            run: ./gradlew apiCheck
+
+   linux:
+      needs: api_check
+      runs-on: ubuntu-latest
+      if: github.repository == 'kotest/kotest'
+      strategy:
+         fail-fast: false
+         matrix:
+            target:
+               - jvmTest publishJvmPublicationToDeployRepository publishKotlinMultiplatformPublicationToDeployRepository publishKotestBomPublicationToDeployRepository
+               - jsTest publishJsPublicationToDeployRepository
+               - wasmJsTest publishWasmJsPublicationToDeployRepository
+               - linuxX64Test publishLinuxX64PublicationToDeployRepository
+               - linuxArm64TestKlibrary publishLinuxArm64PublicationToDeployRepository
+               - androidNativeX86TestKlibrary androidNativeX64TestKlibrary publishAndroidNativeX64PublicationToDeployRepository publishAndroidNativeX86PublicationToDeployRepository
+               - androidNativeArm32TestKlibrary androidNativeArm64TestKlibrary publishAndroidNativeArm32PublicationToDeployRepository publishAndroidNativeArm64PublicationToDeployRepository
+      steps:
+         -  uses: kotest/kotest-action@master
+            with:
+               gradle-command: ${{ matrix.target }}
+               java-version: "17"
+
+   mac:
+      needs: api_check
+      runs-on: macos-latest
+      if: github.repository == 'kotest/kotest'
+      strategy:
+         fail-fast: false
+         matrix:
+            target:
+               - macosX64Test publishMacosX64PublicationToDeployRepository
+               - macosArm64Test publishMacosArm64PublicationToDeployRepository
+               - iosX64Test publishIosX64PublicationToDeployRepository
+               - iosSimulatorArm64Test publishIosSimulatorArm64PublicationToDeployRepository
+               - iosArm64TestKlibrary publishIosArm64PublicationToDeployRepository
+               - tvosX64Test publishTvosX64PublicationToDeployRepository
+               - tvosArm64TestKlibrary publishTvosArm64PublicationToDeployRepository
+               - watchosArm32TestKlibrary publishWatchosArm32PublicationToDeployRepository
+               - watchosArm64TestKlibrary publishWatchosArm64PublicationToDeployRepository
+               - watchosX64Test publishWatchosX64PublicationToDeployRepository
+               - watchosSimulatorArm64Test publishWatchosSimulatorArm64PublicationToDeployRepository
+               - tvosSimulatorArm64Test publishTvosSimulatorArm64PublicationToDeployRepository
+      steps:
+         -  uses: kotest/kotest-action@master
+            with:
+               gradle-command: ${{ matrix.target }}
+               java-version: "17"
+
+   windows:
+      needs: api_check
+      runs-on: windows-latest
+      if: github.repository == 'kotest/kotest'
+      steps:
+         -  uses: kotest/kotest-action@master
+            with:
+               gradle-command: "mingwX64Test publishMingwX64PublicationToDeployRepository"
+               java-version: "17"
+
+env:
+   OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+   OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+   ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
+   ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}

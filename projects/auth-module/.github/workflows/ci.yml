@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+      - dev
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [14]
+      fail-fast: true
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: setup playwright
+        uses: microsoft/playwright-github-action@v1
+
+      - name: checkout
+        uses: actions/checkout@master
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - uses: actions/cache@v3
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: yarn
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build Module
+        run: yarn build
+
+      - name: Build Fixture
+        run: yarn nuxt build test/fixture
+
+      - name: Tests
+        run: yarn jest
+
+      # - name: Coverage
+      #   uses: codecov/codecov-action@v1
+
+      - name: Publish Next
+        run: |
+          if [ "$GIT_REF" = "refs/heads/dev" ] ; then
+            yarn bump-next
+            yarn build
+            echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" >> ~/.npmrc
+            npm publish
+          fi
+        env:
+          GIT_REF: ${{ github.ref }}
+          NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}

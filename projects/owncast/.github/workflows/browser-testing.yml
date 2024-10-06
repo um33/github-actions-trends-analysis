@@ -1,0 +1,54 @@
+name: Browser Tests
+
+on:
+  push:
+    paths:
+      - 'web/**'
+      - 'test/automated/browser/**'
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'test/automated/browser/**'
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          concurrent_skipping: 'same_content_newer'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules-browser-tests
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('test/automated/browser/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install Google Chrome
+        run: sudo apt-get update && sudo apt-get install google-chrome-stable
+
+      - name: Run Browser tests
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          command: cd test/automated/browser && ./run.sh

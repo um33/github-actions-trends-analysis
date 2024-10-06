@@ -1,0 +1,51 @@
+name: Registry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/actions/**'
+      - '.github/workflows/registry.yml'
+      - 'apps/www/src/registry/**'
+
+jobs:
+  update-registry:
+    name: Update Registry
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.18.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: 📥 Monorepo install
+        uses: ./.github/actions/yarn-nm-install
+
+      - name: ♻️ Restore packages cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/**/tsconfig.tsbuildinfo
+          key: packages-cache-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+
+      - name: 🏗 Build Registry
+        run: yarn build:registry
+
+      - name: ◻️ Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          title: 'Update Registry'
+          body: |
+            Update Registry.
+          commit-message: docs
+          committer: GitHub <noreply@github.com>
+          branch: registry
+          delete-branch: true

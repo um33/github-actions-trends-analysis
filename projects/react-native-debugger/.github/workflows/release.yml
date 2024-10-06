@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3.7.0
+        with:
+          node-version: 18.x
+          cache: 'yarn'
+      - name: Package
+        run: |
+          yarn
+          yarn build
+          yarn pack-linux
+      - name: Upload assets to release
+        uses: jhen0409/release-asset-action@master
+        with:
+          file: release/rn-debugger-linux-x64.zip
+          pattern: release/react-native-debugger*
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+  release-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3.7.0
+        with:
+          node-version: 18.x
+          cache: 'yarn'
+      - name: Package
+        shell: bash
+        run: |
+          yarn config set network-timeout 500000 -g
+          yarn
+          yarn build
+          yarn pack-windows
+      - name: Upload assets to release
+        uses: jhen0409/release-asset-action@master
+        with:
+          file: release/rn-debugger-windows-x64.zip
+          pattern: release/react_native_debugger*.exe
+          github-token: ${{ secrets.GITHUB_TOKEN }}

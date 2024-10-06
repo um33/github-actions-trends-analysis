@@ -1,0 +1,49 @@
+name: Update Sponsors
+
+on:
+  schedule:
+    # Run once a day, at 4pm
+    - cron: '0 16 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: 2
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    permissions:
+      contents: write # for peter-evans/create-pull-request to create branch
+      pull-requests: write # for peter-evans/create-pull-request to create a PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4.0.2
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Update the README
+        run: npm run update-sponsors
+        env:
+          CHEERIO_SPONSORS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMGIX_TOKEN: ${{ secrets.IMGIX_TOKEN }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        continue-on-error: true
+        with:
+          commit-message: 'docs(readme): Update Sponsors'
+          title: Update Sponsors
+          branch: docs/sponsors
+          delete-branch: true

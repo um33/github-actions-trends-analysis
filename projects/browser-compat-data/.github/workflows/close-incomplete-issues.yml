@@ -1,0 +1,23 @@
+name: Close incomplete issue templates
+on:
+  issues:
+    types:
+      - opened
+
+permissions:
+  issues: write
+
+jobs:
+  close-issues-if-invalid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: queengooborg/invalid-issue-closer@v1.3.3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          labels: "invalid :no_entry_sign:"
+          comment: |
+            This issue was automatically closed because the title was left as the default, and a summary was not added.
+
+            If this is not a spam issue, please replace the `<SUMMARIZE THE PROBLEM>` part of the title with a short summary of the reported issue, and then post a follow-up comment.  A maintainer will review your issue and reopen it if needed.
+          normalize-newlines: true
+          title-contains: "<SUMMARIZE THE PROBLEM>"

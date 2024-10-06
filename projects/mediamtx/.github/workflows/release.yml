@@ -1,0 +1,147 @@
+name: release
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+jobs:
+  binaries:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: make binaries
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: binaries
+        path: binaries
+
+  github_release:
+    needs: binaries
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/download-artifact@v3
+      with:
+        name: binaries
+        path: binaries
+
+    - uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs').promises;
+          const { repo: { owner, repo } } = context;
+
+          const currentRelease = context.ref.split('/')[2];
+
+          const res = await github.rest.repos.createRelease({
+            owner,
+            repo,
+            tag_name: currentRelease,
+            name: currentRelease,
+          });
+          const release_id = res.data.id;
+
+          for (const name of await fs.readdir('./binaries/')) {
+            await github.rest.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id,
+              name,
+              data: await fs.readFile(`./binaries/${name}`),
+            });
+          }
+
+  github_notify_issues:
+    needs: github_release
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { repo: { owner, repo } } = context;
+
+          const tags = await github.rest.repos.listTags({
+            owner,
+            repo,
+          });
+
+          const curTag = tags.data[0];
+          const prevTag = tags.data[1];
+
+          const diff = await github.rest.repos.compareCommitsWithBasehead({
+            owner,
+            repo,
+            basehead: `${prevTag.commit.sha}...${curTag.commit.sha}`,
+          });
+
+          const issues = {};
+
+          for (const commit of diff.data.commits) {
+            for (const match of commit.commit.message.matchAll(/(^| |\()#([0-9]+)( |\)|$)/g)) {
+              issues[match[2]] = 1;
+            }
+          }
+
+          for (const issue in issues) {
+            try {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: parseInt(issue),
+                body: `This issue is mentioned in release ${curTag.name} 🚀\n`
+                  + `Check out the entire changelog by [clicking here](https://github.com/${owner}/${repo}/releases/tag/${curTag.name})`,
+              });
+            } catch (exc) {}
+          }
+
+  dockerhub:
+    needs: binaries
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: binaries
+        path: binaries
+
+    - run: make dockerhub
+      env:
+        DOCKER_USER: ${{ secrets.DOCKER_USER }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+  dockerhub_legacy:
+    needs: dockerhub
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: make dockerhub-legacy
+      env:
+        DOCKER_USER_LEGACY: ${{ secrets.DOCKER_USER_LEGACY }}
+        DOCKER_PASSWORD_LEGACY: ${{ secrets.DOCKER_PASSWORD_LEGACY }}
+
+  api_docs:
+    needs: binaries
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: make apidocs-gen
+
+    - run: mv apidocs/*.html apidocs/index.html
+
+    - uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./apidocs

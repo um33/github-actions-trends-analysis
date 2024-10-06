@@ -1,0 +1,16 @@
+name: HealthChecks OpenIdConnectServer CD
+
+on:
+  push:
+    tags:
+      - release-openidconnectserver-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.OpenIdConnectServer/HealthChecks.OpenIdConnectServer.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.OpenIdConnectServer

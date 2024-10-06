@@ -1,0 +1,65 @@
+name: Midway memory leak check
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - '*.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - '*.md'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ['lts/*']
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Cache
+        uses: actions/cache@v3
+        id: cache-lerna
+        env:
+          cache-name: cache-lerna
+        with:
+          path: |
+            node_modules
+            package-lock.json
+            packages/*/.eslintcache
+            packages/*/dist
+            packages/*/tsconfig.tsbuildinfo
+            packages/*/node_modules
+            packages/*/package-lock.json
+          key: ${{ runner.OS }}-build-${{ env.cache-name }}-${{ github.ref }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-build-${{ env.cache-name }}-${{ github.ref }}-
+      - name: Install Dependencies
+        run: |
+          npm i --no-audit -g autocannon zx
+          # npm run purge # if you want to clean up the cache
+          npm i --no-audit
+      - name: Build
+        run: |
+          sed -i 's/\(moduleResolution.\+,\)/\1 "incremental": true,/' tsconfig.json
+          lerna run build --concurrency=2
+      - run: npm run link
+      - name: Benchmark application-koa-v3
+        timeout-minutes: 10
+        run: |
+          ./scripts/benchmark/start-benchmark.mjs --p=midway_benchmark_app --repo=@midwayjs-examples/application-koa-v3
+#      - name: Benchmark application-web-v3
+#        timeout-minutes: 10
+#        run: |
+#          ./scripts/benchmark/start-benchmark.mjs --p=midway_benchmark_app --repo=@midwayjs-examples/application-web-v3
+

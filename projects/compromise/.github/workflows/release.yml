@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    # Note that these steps are *identical* to build-and-test (with the caveat
+    # that build-and-test uses several versions of Node, and Release only uses
+    # 10.x) at least until the actual publishing happens.  Ideally, we could
+    # delegate to the build- and-test workflow, but I haven't found a way to do
+    # that yet.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16.x
+          cache: npm
+
+      - name: install
+        run: |
+          npm ci
+          # npm i --no-save ts-node typescript
+          npm run plugins:ci
+
+      - name: static checks
+        run: |
+          npm run lint
+
+      - name: build
+        run: |
+          npm run build
+          npm run plugins:build
+
+      - name: test
+        run: |
+          npm run test:smoke
+          npm run test
+          # npm run perf
+          # npm run test:types
+          # npm run test:stress
+
+      # And finally... publish it!  Note that we create the .npmrc file
+      # "just in time" so that `npm publish` can get the auth token from the
+      # environment
+      - name: publish
+        run: |
+          echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+          npm publish --access public --provenance
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

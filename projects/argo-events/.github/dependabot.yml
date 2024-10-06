@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+    ignore:
+      - dependency-name: k8s.io/*
+      - dependency-name: sigs.k8s.io/controller-runtime
+      - dependency-name: github.com/aws/aws-sdk-go # too often, and usually not related.
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"

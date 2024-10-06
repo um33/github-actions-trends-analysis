@@ -1,0 +1,40 @@
+name: Ockam Command Docker Artifact Build
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'implementations/rust/ockam'
+      - 'tools/docker/ockam'
+permissions:
+  contents: read
+env:
+  ARTIFACT_NAME: ockam-artifact
+  ORGANIZATION: ${{ github.repository_owner }}
+jobs:
+  build_artifact:
+    runs-on: ubuntu-20.04
+    permissions:
+      packages: write
+    defaults:
+      run:
+        working-directory: ./tools/docker/ockam
+    steps:
+    - uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
+    - uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
+      with:
+        registry: ghcr.io
+        username: $ORGANIZATION
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - id: buildx
+      uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb
+      with:
+        driver-opts: |
+          image=moby/buildkit:v0.10.6
+    - name: Build and Push Docker image to container registry
+      run: |
+        docker buildx build --push \
+            --tag ghcr.io/${ORGANIZATION}/${ARTIFACT_NAME}:${{ github.event.pull_request.head.sha }}-$(date +'%b-%d-%Y') \
+            --file Dockerfile \
+            --platform linux/amd64 .

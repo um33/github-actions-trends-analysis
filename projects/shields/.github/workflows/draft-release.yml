@@ -1,0 +1,23 @@
+name: Draft Release
+on:
+  schedule:
+    - cron: '0 1 1 * *'
+    # At 01:00 on the first day of every month
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Draft Release
+        uses: ./.github/actions/draft-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ github.repository }}

@@ -1,0 +1,32 @@
+name: Nix
+on:
+  push:
+    branches: [ master ]
+  pull_request: {}
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Nix Build
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v26
+
+      - name: Build
+        run: nix build
+
+        # Run the more comprehensive test suite with nix because we have
+        # access to all the build dependencies.
+      - name: Test
+        run: nix develop --ignore-environment -c make test
+
+        # Test that the release generation works
+      - name: Test Dist
+        run: nix develop --ignore-environment -c make dist
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]

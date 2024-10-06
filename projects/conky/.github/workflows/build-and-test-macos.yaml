@@ -1,0 +1,64 @@
+name: Build and test on macOS
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - web/**
+      - doc/**
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - web/**
+      - doc/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    env:
+      HOMEBREW_NO_INSTALL_UPGRADE: 1
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+    strategy:
+      matrix:
+        os:
+          - macos-11
+          - macos-12
+          - macos-13
+          - macos-14
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install dependencies
+        run: |
+          brew install --force \
+            cmake \
+            freetype \
+            gettext \
+            imlib2 \
+            lcov \
+            librsvg \
+            libxft \
+            libxinerama \
+            libxfixes \
+            libxi \
+            lua \
+            ninja \
+            pkg-config \
+            || true # Ignore errors
+      - name: Checkout
+        uses: actions/checkout@v4
+      - run: mkdir build
+      - name: Configure with CMake
+        working-directory: build
+        run: |
+          cmake .. -G Ninja                    \
+          -DMAINTAINER_MODE=ON                 \
+          -DBUILD_WAYLAND=OFF                  \
+          -DBUILD_TESTS=ON
+      - name: Compile
+        run: cmake --build build
+      - name: Test
+        working-directory: build
+        run: ctest

@@ -1,0 +1,96 @@
+name: Test pipeline
+
+on: pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run with Node 16
+        uses: actions/setup-node@v4
+        with:
+          node-version: "16"
+          cache: "yarn"
+          cache-dependency-path: pmm-app/yarn.lock
+
+      - name: Install deps
+        run: make prepare_release
+
+      - name: Build Grafana Dashboards
+        run: make build_package
+
+      - name: Upload the build artefacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-dist
+          path: pmm-app/dist/
+          if-no-files-found: error
+
+  code_coverage:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "16"
+          cache: "yarn"
+          cache-dependency-path: pmm-app/yarn.lock
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_GRAFANA_DASHBOARDS_TOKEN }}
+
+      - name: Download built packages
+        uses: actions/download-artifact@v3
+        with:
+          name: build-dist
+          path: pmm-app/dist/
+
+      - name: Install deps
+        run: make prepare_release
+
+      - name: Generate Coverage
+        run: make generate_coverage
+
+  workflow_success:
+    needs: [code_coverage, build]
+    name: Slack Notification success
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK: ${{ secrets.SLACK_TOKEN }}
+      SLACK_CHANNEL: "pmm-ci"
+      SLACK_USERNAME: "PR pipelines bot"
+      SLACK_ICON_EMOJI: ":octocat:"
+      SLACK_COLOR: "#00FF00"
+      SLACK_TITLE: "Finished grafana-dashboards workflow"
+      SLACK_MESSAGE: "${{ github.event.inputs.repo || github.repository }}:${{ github.event.inputs.branch || github.head_ref }}"
+      SLACK_FOOTER: "Please check the Actions URL ^"
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Slack Notification
+        uses: percona/gh-action-action-slack-notify@v2
+
+  workflow_failure:
+    if: ${{ failure() }}
+    needs: [code_coverage, build]
+    name: Slack Notification failure
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK: ${{ secrets.SLACK_TOKEN }}
+      SLACK_CHANNEL: "pmm-ci"
+      SLACK_USERNAME: "PR pipelines bot"
+      SLACK_ICON_EMOJI: ":octocat:"
+      SLACK_COLOR: "#FF0000"
+      SLACK_TITLE: "Finished grafana-dashboards workflow"
+      SLACK_MESSAGE: "Workflow failed: ${{ github.event.inputs.repo || github.repository }}:${{ github.event.inputs.branch || github.head_ref }}"
+      SLACK_FOOTER: "Please check the Actions URL ^"
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Slack Notification
+        uses: percona/gh-action-action-slack-notify@v2

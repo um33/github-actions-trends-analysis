@@ -1,0 +1,41 @@
+name: "Dependency Review"
+on:
+  pull_request:
+    branches:
+      - "master"
+      - "release*"
+permissions:
+  contents: read
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: "Dependency Review"
+        uses: actions/dependency-review-action@v3
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Setup Go Version
+        run: echo "GO_VERSION=$(cat .go-version)" >> $GITHUB_ENV
+      - id: govulncheck
+        uses: ./.github/actions/govulncheck
+        with:
+          go-version-input: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
+          cache: false
+          repo-checkout: false
+      - id: govulncheck-tests-agent
+        uses: ./.github/actions/govulncheck
+        with:
+          go-version-input: ${{ env.GO_VERSION }}
+          go-version-file: test/agent/go.mod
+          cache: false
+          repo-checkout: false

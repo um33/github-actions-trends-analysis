@@ -1,0 +1,75 @@
+name: analysis
+permissions: read-all
+on: [ push, pull_request ]
+
+env:
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+  ALLOWED_ENDPOINTS: >
+    api.adoptium.net:443
+    api.github.com:443
+    caffeine.gradle-enterprise.cloud:443
+    downloads.gradle.org:443
+    downloads.gradle-dn.com:443
+    github.com:443
+    jcenter.bintray.com:443
+    objects.githubusercontent.com:443
+    plugins.gradle.org:443
+    plugins-artifacts.gradle.org:443
+    repo.maven.apache.org:443
+    repo1.maven.org:443
+    services.gradle.org:443
+
+jobs:
+  forbiddenApis:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: 21
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.ALLOWED_ENDPOINTS }}
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Forbidden Apis
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ env.JAVA_VERSION }}
+          arguments: forbiddenApis -DforbiddenApis
+
+  pmd:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: 22
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.ALLOWED_ENDPOINTS }}
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Pmd
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ env.JAVA_VERSION }}
+          arguments: pmdJavaPoet pmdMain pmdCodeGen pmdJmh -Dpmd
+
+  spotbugs:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: 22
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.ALLOWED_ENDPOINTS }}
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Spotbugs
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ env.JAVA_VERSION }}
+          arguments: spotbugsJavaPoet spotbugsMain spotbugsCodeGen spotbugsJmh -Dspotbugs

@@ -1,0 +1,79 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: >-
+      Ruby ${{ matrix.ruby }} (${{ matrix.gemfile }})
+    env:
+      CI: true
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+    runs-on: ${{ matrix.os }}
+    if: |
+      !(   contains(github.event.pull_request.title,  '[ci skip]')
+        || contains(github.event.pull_request.title,  '[skip ci]'))
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ ubuntu-latest ]
+        ruby:
+          - '3.0'
+          - '3.1'
+          - '3.2'
+          - truffleruby-head
+        gemfile:
+          - gemfiles/rails_6_0.gemfile
+          - gemfiles/rails_6_1.gemfile
+          - gemfiles/rails_7_0.gemfile
+          - gemfiles/rails_7_1.gemfile
+    steps:
+      - name: Repo checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          rubygems: latest
+
+      - name: Run tests
+        timeout-minutes: 10
+        run: bundle exec rake spec
+
+  rails_edge:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_GEMFILE: gemfiles/rails_edge.gemfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2
+          bundler-cache: true
+      - run: bundle exec rake spec || echo "Rails edge test is done."
+
+  ruby_edge:
+    strategy:
+      matrix:
+        gemfile:
+          - gemfiles/rails_6_0.gemfile
+          - gemfiles/rails_6_1.gemfile
+          - gemfiles/rails_7_0.gemfile
+          - gemfiles/rails_7_1.gemfile
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 'ruby-head'
+          bundler-cache: true
+      - run: bundle exec rake spec || echo "Ruby edge test is done."

@@ -1,0 +1,67 @@
+name: Validate Pyinstaller Build
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+env:
+  CI_OVERRIDE: "1"
+
+jobs:
+  build-for-linux:
+    name: build-pyinstaller-linux
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux2014_x86_64:latest
+    if: github.repository_owner == 'aws'
+    strategy:
+      fail-fast: false
+    steps:
+      # we need to keep checkout as v3 otherwise it doesn't work with manylinux image above
+      # due to glibc requirement from github actions 
+      # see example failure: https://github.com/aws/aws-sam-cli/actions/runs/6102715182/job/16561754862?pr=5887
+      - uses: actions/checkout@v3
+      - name: Build PyInstaller
+        run: |
+          chmod +x ./installer/pyinstaller/build-linux.sh
+          ./installer/pyinstaller/build-linux.sh aws-sam-cli-linux-x86_64.zip
+      - name: Basic tests for PyInstaller
+        run: |
+          unzip .build/output/aws-sam-cli-linux-x86_64.zip -d sam-installation
+          ./sam-installation/install
+          sam-beta --version
+          ./tests/sanity-check.sh
+      - uses: actions/upload-artifact@v3
+        with:
+          name: pyinstaller-linux-zip
+          path: .build/output/aws-sam-cli-linux-x86_64.zip
+          retention-days: 15
+
+  build-for-mac:
+    name: build-pyinstaller-macos
+    runs-on: macos-latest
+    if: github.repository_owner == 'aws'
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Build PyInstaller
+        run: |
+          chmod +x ./installer/pyinstaller/build-mac.sh
+          ./installer/pyinstaller/build-mac.sh aws-sam-cli-macos-x86_64.zip
+      - name: Basic tests for PyInstaller
+        env:
+          SAM_INIT_RUNTIME: "python3.8"
+        run: |
+          unzip .build/output/aws-sam-cli-macos-x86_64.zip -d sam-installation
+          sudo ./sam-installation/install
+          sam-beta --version
+          ./tests/sanity-check.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyinstaller-macos-zip
+          path: .build/output/aws-sam-cli-macos-x86_64.zip
+          retention-days: 15

@@ -1,0 +1,9 @@
+assign_issues_by:
+  - labels:
+    - 'api: storage'
+    to:
+    - bajajneha27
+
+assign_issues:
+ - dazuma
+ - aandreassa

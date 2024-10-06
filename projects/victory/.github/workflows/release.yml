@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      issues: write
+      repository-projects: write
+      deployments: write
+      packages: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CHANGESETS_GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/setup
+
+      - name: Build packages
+        run: pnpm run build
+
+      - name: PR or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # Note: Our `package.json:scripts.version` currently doesn't have `--fix-lockfile` for
+          # `pnpm install` because of a PNPM bug of some kind.
+          # See spectacle issue: https://github.com/FormidableLabs/spectacle/issues/1156
+          version: pnpm run version
+          publish: pnpm run publish
+        env:
+          # Note: we are using a different GITHUB_TOKEN due to the issues in this thread:
+          # https://github.com/changesets/action/issues/187
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Note: We run a custom release notes script so we can generate a single aggregate
+      # release notes file for all packages. This can be removed when `changesets` supports
+      # this feature natively.
+      - name: Github Release notes
+        if: steps.changesets.outputs.published == 'true'
+        run: npm run release-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_GITHUB_TOKEN }}

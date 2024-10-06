@@ -1,0 +1,27 @@
+name: Setup
+description: Setup Build Step
+inputs:
+  node-version:
+    default: "18.x"
+    description: "The version of nodejs to use."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: pnpm/action-setup@v3
+      with:
+        version: 7
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'pnpm'
+
+    # Wireit cache
+    - uses: google/wireit@setup-github-actions-caching/v1
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install

@@ -1,0 +1,38 @@
+name: Benchmark
+
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+  pull_request:
+
+env:
+  FORCE_COLOR: 2
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    if:
+      "!contains(github.event.commits[0].message, '[bench skip]') &&
+      !contains(github.event.commits[0].message, '[skip bench]')"
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4.0.2
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run benchmarks
+        run: npm run benchmark
+        env:
+          BENCHMARK: true

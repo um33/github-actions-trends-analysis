@@ -1,0 +1,123 @@
+name: CI
+
+on: [push, pull_request]
+
+# Cancel previous run if a new one is started
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - uses: DeterminateSystems/nix-installer-action@v4
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
+    - name: clang-format
+      run: nix develop --command git clang-format --diff origin/master
+
+  build_test:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      GTEST_COLOR: yes
+      RUNTIME_TEST_COLOR: yes
+    strategy:
+      matrix:
+        env:
+        - NAME: LLVM 10 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm10
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 11 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm11
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 12 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm12
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 13 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm13
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 14 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm14
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 15 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm15
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 16 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm16
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 17 Release
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm17
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 17 Debug
+          CMAKE_BUILD_TYPE: Debug
+          NIX_TARGET: .#bpftrace-llvm17
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: LLVM 17 Clang Debug
+          CMAKE_BUILD_TYPE: Debug
+          NIX_TARGET: .#bpftrace-llvm17
+          CC: clang
+          CXX: clang++
+          TOOLS_TEST_OLDVERSION: tcpdrop.bt
+          TOOLS_TEST_DISABLE: biosnoop.bt
+        - NAME: Memleak test (LLVM 11 Debug)
+          CMAKE_BUILD_TYPE: Debug
+          NIX_TARGET: .#bpftrace-llvm11
+          RUN_MEMLEAK_TEST: 1
+          RUN_TESTS: 0
+        - NAME: Memleak test (LLVM 11 Release)
+          CMAKE_BUILD_TYPE: Release
+          NIX_TARGET: .#bpftrace-llvm11
+          RUN_MEMLEAK_TEST: 1
+          RUN_TESTS: 0
+    steps:
+    - uses: actions/checkout@v2
+    - uses: DeterminateSystems/nix-installer-action@v4
+    - uses: DeterminateSystems/magic-nix-cache-action@v2
+    - name: Load kernel modules
+      # nf_tables and xfs are necessary for testing kernel modules BTF support
+      run: |
+        sudo modprobe nf_tables
+        sudo modprobe xfs
+    - name: Build and test
+      env: ${{matrix.env}}
+      run: ./.github/include/ci.py
+
+  irc:
+    # Notify IRC of build failures on pushes only if we are running from
+    # the main repo. We don't want this rule to trigger from forked repos.
+    needs:
+      - build_test
+    if: "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'bpftrace/bpftrace'"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Message channel
+      uses: rectalogic/notify-irc@v1
+      with:
+        nickname: bpftrace-ci-bot
+        server: irc.oftc.net
+        port: 6667
+        tls: false
+        channel: "#bpftrace"
+        message: |
+          master is BROKEN at https://github.com/bpftrace/bpftrace/commit/${{github.sha}}

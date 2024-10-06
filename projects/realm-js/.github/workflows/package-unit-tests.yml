@@ -1,0 +1,67 @@
+name: Unit tests
+
+env:
+  REALM_DISABLE_ANALYTICS: 1
+  MOCHA_REMOTE_TIMEOUT: 10000
+  BAAS_BRANCH: master
+
+on:
+  pull_request:
+    paths:
+      # Source code
+      - "packages/**"
+      # No need to run when updating documentation
+      - "!**.md"
+      # Run this on updates to the workflow
+      - ".github/workflows/package-unit-tests.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - realm
+          - '@realm/babel-plugin'
+          - '@realm/react'
+        include:
+          - workspace: '@realm/react'
+            use-baas: true
+    name: ${{ matrix.workspace }} unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # ninja-build is used by default if available and results in faster build times
+      - name: Install ninja
+        run: sudo apt-get install ninja-build
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1
+
+      # Install the root package to get dev-dependencies
+      # (--ignore-scripts to avoid downloading or building the native module)
+      - run: npm ci --ignore-scripts
+
+      - name: Start BaaS test server
+        id: baas
+        if: ${{matrix.use-baas}}
+        uses: ./.github/actions/baas-test-server
+        with:
+          branch: ${{ env.BAAS_BRANCH }}
+        env:
+          BAASAAS_KEY: ${{ secrets.BAASAAS_KEY }}
+
+      - run: npm test --workspace ${{ matrix.workspace }}
+        env:
+          REALM_BASE_URL: ${{ steps.baas.outputs.baas-url }}

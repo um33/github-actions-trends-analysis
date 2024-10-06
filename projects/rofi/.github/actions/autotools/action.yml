@@ -1,0 +1,53 @@
+name: Autotools Build
+description: Builds Rofi using Autotools
+
+inputs:
+  cc:
+    description: Compiler to use
+    required: true
+  windowmode:
+    description: Enable window mode
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: pip
+      run: pip install meson ninja
+      shell: bash
+    - id: setup
+      run: |
+        autoreconf --install
+
+        mkdir builddir && cd builddir
+
+        ../configure CC=${{ inputs.cc }} --${{ inputs.windowmode }}-windowmode
+      shell: bash
+    - id: build
+      run: cd builddir && make
+      shell: bash
+    - id: test
+      run: cd builddir && make distcheck
+      shell: bash
+    - id: doxy
+      run: cd builddir && make doxy > doxygen.log 2>&1
+      shell: bash
+    - id: doxycheck
+      uses: ./.github/actions/doxycheck
+      with:
+        logfile: builddir/doxygen.log
+    - id: autoconf-dist-check
+      shell: bash
+      run: |
+        tar xf builddir/rofi-*.tar.gz
+        cd rofi-*/
+        ./configure
+        make 
+        make check
+    - id: upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: tarballs
+        path: |
+          builddir/*.tar.gz
+          builddir/*.tar.xz

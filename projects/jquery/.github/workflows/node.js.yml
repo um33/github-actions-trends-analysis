@@ -1,0 +1,105 @@
+name: Node
+
+on:
+  pull_request:
+  push:
+    branches-ignore: "dependabot/**"
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.NPM_SCRIPT }} - ${{ matrix.NAME }} (${{ matrix.NODE_VERSION }})
+    strategy:
+      fail-fast: false
+      matrix:
+        NAME: ["Node"]
+        NODE_VERSION: [18.x, 20.x]
+        NPM_SCRIPT: ["test:browserless"]
+        include:
+          - NAME: "Node"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "lint"
+          - NAME: "Chrome/Firefox"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:browser"
+          - NAME: "Chrome"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:slim"
+          - NAME: "Chrome"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:no-deprecated"
+          - NAME: "Chrome"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:selector-native"
+          - NAME: "Chrome"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:esm"
+          - NAME: "Firefox ESR"
+            NODE_VERSION: "20.x"
+            NPM_SCRIPT: "test:firefox"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Use Node.js ${{ matrix.NODE_VERSION }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ matrix.NODE_VERSION }}
+
+      - name: Cache
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ matrix.NODE_VERSION }}-npm-lock-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.NODE_VERSION }}-npm-lock-
+
+      - name: Install firefox ESR
+        run: |
+          export FIREFOX_SOURCE_URL='https://download.mozilla.org/?product=firefox-esr-latest-ssl&lang=en-US&os=linux64'
+          wget --no-verbose $FIREFOX_SOURCE_URL -O - | tar -jx -C ${HOME}
+        if: contains(matrix.NAME, 'Firefox ESR')
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build All for Linting
+        run: npm run build:all
+        if: contains(matrix.NPM_SCRIPT, 'lint')
+
+      - name: Run tests
+        run: |
+          export PATH=${HOME}/firefox:$PATH
+          export FIREFOX_BIN=${HOME}/firefox/firefox
+          npm run ${{ matrix.NPM_SCRIPT }}
+
+  safari:
+    runs-on: macos-latest
+    env:
+      NODE_VERSION: 20.x
+    name: test:safari - Safari
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:safari

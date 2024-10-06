@@ -1,0 +1,111 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  COMPOSER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+    phpstan:
+        runs-on: ubuntu-22.04
+        name: PHPStan
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: 8.1
+            - run: |
+                  composer require --no-update liip/imagine-bundle:"^2.8" phpstan/extension-installer phpstan/phpstan-phpunit phpstan/phpstan:1.9.* 
+                  composer config --no-plugins allow-plugins.phpstan/extension-installer true
+                  composer install --ignore-platform-reqs
+                  XDEBUG_MODE=off vendor/bin/phpstan
+    cs-fixer:
+        runs-on: ubuntu-22.04
+        name: PHP-CS-Fixer
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+            - name: Fix CS
+              uses: docker://oskarstark/php-cs-fixer-ga
+    validate-markdown:
+        runs-on: ubuntu-22.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+            - name: Validate
+              uses: avto-dev/markdown-lint@v1
+              with:
+                  config: './.github/workflows/config/config.json'
+                  args: './docs ./CONTRIBUTING.md ./README.md ./UPDATE.md'
+    tests:
+        runs-on: ubuntu-22.04
+        strategy:
+            matrix:
+                php:
+                    - '8.1'
+                    - '8.2'
+                dependencies: [highest]
+                symfony: ['*']
+                with_imagine: [false]
+                with_oneupbundle: [true]
+                max_deprecations: [0]
+                include:
+                    - extra:
+                      php: '8.1'
+                      symfony: '5.4.*'
+                      dependencies: lowest
+                      with_imagine: false
+                      with_oneupbundle: false
+                      max_deprecations: 5
+                    - php: '8.1'
+                      symfony: '6.3.*'
+                      dependencies: highest
+                      with_imagine: false
+                      with_oneupbundle: true
+                      max_deprecations: 0
+                    - php: '8.2'
+                      symfony: '6.4.*'
+                      dependencies: highest
+                      with_imagine: false
+                      with_oneupbundle: false
+                      max_deprecations: 0
+                    - php: '8.3'
+                      symfony: '7.0.*'
+                      dependencies: highest
+                      with_imagine: false
+                      with_oneupbundle: false
+                      max_deprecations: 0
+        name: PHP ${{ matrix.php }} with Symfony ${{ matrix.symfony }} tests with ${{ matrix.dependencies }} dependencies
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+            - name: Cache
+              uses: actions/cache@v3
+              with:
+                  path: ~/.composer/cache/files
+                  key: ${{ matrix.php }}-${{ matrix.symfony }}-${{ matrix.dependencies }}
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php }}
+                  extensions: mongodb-stable, pdo_sqlite
+            - run: composer require --no-update doctrine/annotations:^1.14
+            - run: |
+                  composer global config --no-plugins allow-plugins.symfony/flex true
+                  composer global require --no-interaction --no-progress symfony/flex:^2.2
+                  composer config extra.symfony.require ${{ matrix.symfony }}
+              if: matrix.symfony != '*'
+            - run: composer require --no-update liip/imagine-bundle:"^2.0"
+              if: matrix.with_imagine
+            - run: composer require --no-update oneup/flysystem-bundle:"^4.0.1"
+              if: matrix.with_oneupbundle
+            - name: Update project dependencies
+              uses: ramsey/composer-install@v2
+              with:
+                dependency-versions: ${{ matrix.dependencies }}
+            - name: Run tests
+              run: vendor/bin/phpunit
+              env:
+                 SYMFONY_DEPRECATIONS_HELPER: max[self]=${{matrix.max_deprecations}}

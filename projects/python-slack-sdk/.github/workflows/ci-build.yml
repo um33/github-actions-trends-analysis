@@ -1,0 +1,60 @@
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+name: CI Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    # Avoiding -latest due to https://github.com/actions/setup-python/issues/162
+    runs-on: ubuntu-20.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - '3.12'
+          - '3.11'
+          - '3.10'
+          - '3.9'
+          - '3.8'
+          - '3.7'
+          - '3.6'
+          - 'pypy3.10'
+    env:
+      PYTHON_SLACK_SDK_MOCK_SERVER_MODE: 'threading'
+      CI_LARGE_SOCKET_MODE_PAYLOAD_TESTING_DISABLED: '1'
+      FORCE_COLOR: '1'
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+    - name: Install dependencies
+      run: |
+        pip install -U pip setuptools wheel
+        pip install -r requirements/testing.txt
+        pip install -r requirements/optional.txt
+    - name: Run codegen
+      run: |
+        python setup.py codegen
+    - name: Run validation (black/flake8/pytest)
+      run: |
+        python setup.py validate
+    - name: Run tests for SQLAlchemy v1.4 (backward-compatibility)
+      run: |
+        # Install v1.4 for testing
+        pip install "SQLAlchemy>=1.4,<2"
+        python setup.py unit_tests --test-target tests/slack_sdk/oauth/installation_store/test_sqlalchemy.py && \
+        python setup.py unit_tests --test-target tests/slack_sdk/oauth/state_store/test_sqlalchemy.py
+    - name: Run codecov (only 3.9)
+      if: startsWith(matrix.python-version, '3.9')
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        # python setup.py validate generates the coverage file
+        files: ./coverage.xml

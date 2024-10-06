@@ -1,0 +1,56 @@
+name: Run tests
+
+on:
+  push:
+  pull_request:
+    branches-ignore: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: '${{ matrix.os }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+      - name: 'Set up Python ${{ matrix.python-version }}'
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d
+        with:
+          python-version: '${{ matrix.python-version }}'
+      - name: Install dependencies
+        run: |
+          python scripts/ci/install
+      - name: Run tests
+        run: |
+          python scripts/ci/run-tests --with-cov --with-xdist
+      - name: Run codecov
+        uses: codecov/codecov-action@54bcd8715eee62d40e33596ef5e8f0f48dbbccab
+        with:
+          directory: tests
+
+
+  urllib3:
+    name: 'urllib3 1.x'
+    runs-on: 'ubuntu-latest'
+    strategy:
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+      - name: 'Set up Python 3.10'
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python scripts/ci/install
+          python  -m pip install "urllib3<2"
+      - name: Run tests
+        run: |
+          python scripts/ci/run-tests --with-cov --with-xdist

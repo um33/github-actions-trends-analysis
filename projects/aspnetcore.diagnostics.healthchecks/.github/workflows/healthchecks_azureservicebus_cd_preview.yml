@@ -1,0 +1,17 @@
+name: HealthChecks AzureServiceBus DB Preview CD
+
+on:
+  push:
+    tags:
+      - preview-azureservicebus-*
+      - preview-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_preview_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      VERSION_SUFFIX_PREFIX: rc1
+      PROJECT_PATH: ./src/HealthChecks.AzureServiceBus/HealthChecks.AzureServiceBus.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.AzureServiceBus

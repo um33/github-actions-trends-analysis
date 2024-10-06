@@ -1,0 +1,35 @@
+name: Issue Labeler Backfill
+
+permissions:
+  issues: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "The date to backfill tickets since in YYYY-MM-DD format"
+        required: true
+        default: '1973-01-01'
+      dry_run:
+        description: "Dry run (no changes will be made to issues)"
+        type: boolean
+
+jobs:
+  backfill-tickets:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        repository: GoogleCloudPlatform/magic-modules
+        path: repo
+    - name: Set up Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+      with:
+        go-version: '^1.19.1'
+    - name: Run backfill
+      env:
+        GITHUB_TOKEN: ${{github.token}}
+      run: |
+        cd repo/tools/issue-labeler
+        go run . -backfill-date=${{inputs.since}} -backfill-dry-run=${{inputs.dry_run}} -logtostderr=true

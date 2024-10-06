@@ -1,0 +1,76 @@
+name: Build Drivers with Driverkit
+on:
+  push:
+    branches: [dev]
+    paths: ['scripts/driverkit/**']
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: 'Set rebuild to "true" to perform a complete rebuild of all the probes, even if they were already present on S3'
+        required: true
+        default: 'false'
+      version:
+        description: 'Set version to a specific driver version (e.g. "5.0.1+driver") to build a specific version of the driver only'
+        required: false
+        default: ''
+
+jobs:
+  build-drivers:
+    strategy:
+      matrix:
+        name: [amd64, arm64]
+        include:
+          - name: amd64
+            arch: x86_64
+          - name: arm64
+            arch: aarch64
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: download.draios.com
+      S3_PREFIX: scap-drivers
+      DRIVERKIT_VERSION: 0.16.3
+
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout Sysdig
+        uses: actions/checkout@v2
+
+      - name: Download DriverKit
+        run: |
+          wget -O driverkit.tar.gz https://github.com/falcosecurity/driverkit/releases/download/v${{ env.DRIVERKIT_VERSION }}/driverkit_${{ env.DRIVERKIT_VERSION }}_linux_amd64.tar.gz && \
+            tar -xvf driverkit.tar.gz && \
+            rm -rf driverkit.tar.gz && \
+            chmod +x ./driverkit
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Setup poetry
+        uses: abatilo/actions-poetry@v2.0.0
+
+      - name: Install deps
+        working-directory: scripts/driverkit/build
+        run: poetry install
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@fcd8bb1e0a3c9d2a0687615ee31d34d8aea18a96
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+          # This timeout is longer because the complete job may take at least 4 hours to complete
+          role-duration-seconds: 21600
+
+      - name: Build drivers if not present
+        working-directory: scripts/driverkit/build
+        run: |
+          poetry run python build.py ../config \
+          --driverkit ${{ github.workspace }}/driverkit \
+          --arch ${{ matrix.arch }} \
+          --s3-bucket ${{ env.S3_BUCKET }} --s3-prefix ${{ env.S3_PREFIX }} \
+          ${{ (github.event_name == 'workflow_dispatch') && (github.event.inputs.rebuild == 'true') && '--rebuild' || '' }} \
+          ${{ (github.event_name == 'workflow_dispatch') && (github.event.inputs.version != '') && format('--version {0}',github.event.inputs.version) || '' }}

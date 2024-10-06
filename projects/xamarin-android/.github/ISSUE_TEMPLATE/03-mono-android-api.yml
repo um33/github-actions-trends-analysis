@@ -1,0 +1,67 @@
+name: 🤖 Android API
+description: Issues with the Android API exposed in Mono.Android.
+labels: ["Area: Mono.Android", "needs-triage"]
+assignees: ["jpobst"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues with missing Android API or the API not working as documented are tracked here.
+
+        If you are not sure how to use an API or how to accomplish your task, better support is available from our community of application writers, available in several forms:
+
+        [Microsoft Q&A](https://docs.microsoft.com/en-us/answers/topics/dotnet-android.html)
+        [Stack Overflow](https://stackoverflow.com)
+  - type: dropdown
+    id: android-type
+    attributes:
+      label: Android application type
+      description: In what type(s) of Android application(s) do you see this issue?
+      multiple: true
+      options:
+      - Classic Xamarin.Android (MonoAndroid13.0, etc.)
+      - .NET Android (net7.0-android, net8.0-android, etc.)
+    validations:
+      required: true
+  - type: input
+    id: platform-versions
+    attributes:
+      label: Affected platform version
+      description: Please provide the version number of the platform you see this issue on.
+      placeholder: E.g. VS 2022 17.8.0, VSMac 17.6.7, .NET 8.0.100, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Please give us a detailed description of the issue that you're seeing. You can add screenshots and videos as well. If you have a repro project, you can drag and drop the .zip/etc. onto the issue editor to attach it.
+      placeholder: Tell us what you see! (And how it's different from what you expected to see!)
+    validations:
+      required: true
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Describe all the steps we need to take to show the behavior that you have observed.
+      placeholder: | 
+        1. File > New Project > New Android Application
+        2. Add the following code: ...
+        3. Run the app and observe the bug 🐞
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Did you find any workaround?
+      description: Did you find any workaround for this issue? This can unblock other people while waiting for this issue to be resolved or even give us a hint on how to fix this.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any (short!) relevant log output.  Longer logs can be attached as .txt files.
+      render: shell
+  - type: markdown
+    attributes:
+      value: |
+        By opening the issue you agree to follow this project's [Code of Conduct](https://dotnetfoundation.org/about/code-of-conduct).

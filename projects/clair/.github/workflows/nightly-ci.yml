@@ -1,0 +1,40 @@
+---
+name: Nightly CI
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      package_expr:
+        required: false
+        type: string
+        description: 'Package expression(s) passed to `go test`'
+
+jobs:
+  defaults:
+    name: Check Input
+    runs-on: ubuntu-latest
+    outputs:
+      package_expr: ${{ steps.config.outputs.package_expr }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+      - name: Make package expressions
+        id: config
+        if: ${{ !cancelled() && steps.checkout.conclusion == 'success' }}
+        run: |
+          if test -n "${{ inputs.package_expr }}"; then
+            printf 'package_expr=%s\n' '${{ inputs.package_expr }}' >> "$GITHUB_OUTPUT"
+          else
+            printf 'package_expr=%s\n' "$(go list -m github.com/quay/clair{core,}/... | awk '{printf("%s/... ",$1)}')" >> "$GITHUB_OUTPUT"
+          fi
+
+  tests:
+    name: Tests
+    needs: ['defaults']
+    uses: ./.github/workflows/tests.yml
+    with:
+      package_expr: ${{ needs.defaults.outputs.package_expr }}
+      qemu: true

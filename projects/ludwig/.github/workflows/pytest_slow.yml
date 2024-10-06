@@ -1,0 +1,63 @@
+# This workflow will install Python dependencies and run all tests marked as `slow` on a single Python version.
+# The tests will run on a high-memory AWS compute instance to accommodate memory-intensive workloads.
+
+name: pytest (slow)
+
+on:
+  push:
+    branches: ["master", "release-*"]
+
+jobs:
+  slow-pytest:
+    name: py-slow${{ matrix.python-version  }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.LUDWIG_TESTS_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.LUDWIG_TESTS_AWS_SECRET_ACCESS_KEY }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+      IS_NOT_FORK: ${{ !(github.event.pull_request.base.repo.full_name == 'ludwig-ai/ludwig' && github.event.pull_request.head.repo.fork) }}
+
+    services:
+      minio:
+        image: fclairamb/minio-github-actions
+        env:
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
+        ports:
+          - 9000:9000
+
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Setup Linux
+        if: runner.os == 'linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake libsndfile1 libsox-dev
+
+      - name: Setup macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install libuv
+
+      - name: Install dependencies
+        run: |
+          python --version
+          pip --version
+          python -m pip install -U pip
+          pip install torch==2.1.0 torchtext torchvision torchaudio
+          pip install ray==2.3.1
+          pip install '.[test]'
+
+          pip list
+
+        shell: bash
+
+      - name: Tests
+        run: |
+          RUN_PRIVATE=$IS_NOT_FORK LUDWIG_TEST_SUITE_TIMEOUT_S=7200 pytest -v --timeout 600 --durations 100 -m "slow" --junitxml pytest.xml tests/integration_tests/

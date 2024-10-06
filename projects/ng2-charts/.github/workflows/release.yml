@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.trim.outputs.version }}
+    steps:
+      - id: trim
+        run: echo "version=${TAG:1}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: npm
+          node-version: 18
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npm run lint
+      - run: npm run build:lib
+      - run: npm run build:schematics
+      - run: npm run test:ci
+      - run: npm run build:prod
+      - run: npm run e2e
+        env:
+          CI: true
+
+        # build docs
+      - run: npm run build:prod -- --base-href /ng2-charts/next/
+        if: ${{ github.event.release.prerelease }}
+      - run: npm run build:prod -- --base-href /ng2-charts/
+        if: ${{ !github.event.release.prerelease }}
+
+      - name: Upload lib
+        uses: actions/upload-artifact@v4
+        with:
+          name: ng2-charts
+          path: dist/libs/ng2-charts
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ng2-charts-docs
+          path: dist/apps/ng2-charts-demo/browser
+
+  publish-npm:
+    needs:
+      - setup
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: npm
+          node-version: 18
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ng2-charts
+          path: dist
+      - name: Display structure of downloaded files
+        run: ls -R
+        working-directory: dist
+      - uses: JS-DevTools/npm-publish@v3
+        name: prerelease
+        if: ${{ github.event.release.prerelease }}
+        with:
+          tag: next
+          package: dist/package.json
+          token: ${{ secrets.NPM_TOKEN }}
+      - uses: JS-DevTools/npm-publish@v3
+        name: release
+        if: ${{ !github.event.release.prerelease }}
+        with:
+          package: dist/package.json
+          token: ${{ secrets.NPM_TOKEN }}
+      - name: Pack release
+        run: npm pack
+        working-directory: ./dist
+      - name: Upload NPM package file
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.setup.outputs.version }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: dist/${{ format('ng2-charts-{0}.tgz', needs.setup.outputs.version) }}
+          asset_name: ${{ format('ng2-charts-{0}.tgz', needs.setup.outputs.version) }}
+          asset_content_type: application/gzip
+
+  publish-docs:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 'gh-pages'
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        if: ${{ github.event.release.prerelease }}
+        with:
+          name: ng2-charts-docs
+          path: next
+      - uses: actions/download-artifact@v4
+        if: ${{ !github.event.release.prerelease }}
+        with:
+          name: ng2-charts-docs
+      - run: |
+          git config --local user.email ${GITHUB_ACTOR}@users.noreply.github.com
+          git config --local user.name $GITHUB_ACTOR
+          git add -A
+          git commit -m "ci: gh-pages update"
+        continue-on-error: true
+      - name: push to gh-pages
+        uses: ad-m/github-push-action@v0.8.0
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: 'gh-pages'
+
+  version-bump:
+    needs: publish-docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 'master'
+      - run: npm version patch
+        working-directory: ./libs/ng2-charts
+      - run: |
+          git config --local user.email ${GITHUB_ACTOR}@users.noreply.github.com
+          git config --local user.name $GITHUB_ACTOR
+          git add -A
+          git commit -m "ci: bump to next dev version"
+          git push
+        continue-on-error: true

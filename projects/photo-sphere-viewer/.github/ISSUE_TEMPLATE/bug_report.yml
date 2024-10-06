@@ -1,0 +1,59 @@
+name: 🐞 Bug report
+description: File a report to help us improve
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thanks for taking the time to fill out this bug report
+
+        **Please use English or French**, I don't speak other languages.
+
+        Use [markdown codeblocks](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks) when posting code samples, **do not use screenshots**!
+
+        You can quickly create a demo by forking the [basic demo](https://photo-sphere-viewer.js.org/demos/basic/0-config.html) to jsFiddle, Codepen or CodeSandbox.
+  - id: description
+    type: textarea
+    attributes:
+      label: Describe the bug
+      placeholder: Provide a clear description of the bug, with tests cases and steps to reproduce.
+    validations:
+      required: true
+  - id: url
+    type: input
+    attributes:
+      label: Online demo URL
+  - id: version
+    type: dropdown
+    attributes:
+      label: Photo Sphere Viewer version
+      options:
+        - 5.7.2
+        - 5.7.1
+        - 5.7.0
+        - 5.6.0
+        - 5.5.2
+        - 5.5.1
+        - 5.5.0
+        - 5.4.4
+        - 5.4.3
+        - 5.4.2
+        - other
+    validations:
+      required: true
+  - id: plugins
+    type: input
+    attributes:
+      label: Plugins loaded
+  - id: os-browser
+    type: input
+    attributes:
+      label: OS & browser
+    validations:
+      required: true
+  - id: context
+    type: textarea
+    attributes:
+      label: Additional context
+      placeholder: Add any other context about the problem here.

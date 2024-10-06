@@ -1,0 +1,39 @@
+name: Classic (without pa, soundio, apple-alac) for systemd, using a build folder.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "development", "danger" ]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3.5.2
+    - name: Install Dependencies
+      run: sudo apt-get -y --no-install-recommends install build-essential git xmltoman autoconf automake libtool libpopt-dev libconfig-dev libasound2-dev libao-dev libjack-dev libsndio-dev libglib2.0-dev libmosquitto-dev avahi-daemon libavahi-client-dev libssl-dev libsoxr-dev    
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        autoreconf -i ..
+        ../configure --sysconfdir=/etc --with-alsa --with-ao --with-dummy --with-pipe --with-stdout --with-soxr --with-avahi --with-ssl=openssl --with-systemd --with-dbus-interface --with-mpris-interface --with-mqtt-client
+    - name: Make
+      run: |
+        cd build
+        make -j
+    - name: Install
+      run: |
+        cd build
+        sudo make install
+    - name: Invoke
+      run: |
+        sudo systemctl start shairport-sync
+    - name: Terminate
+      run: |
+        sudo systemctl stop shairport-sync
+

@@ -1,0 +1,35 @@
+name: Lint dashboards
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/fission-all/dashboards/**.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'charts/fission-all/dashboards/**.json'
+  workflow_dispatch:
+
+jobs:
+  lint-dashboards:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Install dashboard linter
+        run: |
+          go get github.com/grafana/dashboard-linter
+          go install github.com/grafana/dashboard-linter
+
+      - name: Run dashboard linter
+        run: ./hack/lint-dashboards.sh

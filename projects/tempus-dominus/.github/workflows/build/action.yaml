@@ -1,0 +1,28 @@
+name: Build
+description: Build
+
+inputs:
+  GITHUB_TOKEN:
+    description: 'A Github PAT'
+    required: true
+  SONAR_TOKEN:
+    description: 'A Sonar token'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Unit tests
+      shell: bash
+      run: npm run test:coverage
+    - name: Build
+      shell: bash
+      run: npm run build
+    - name: Build docs
+      shell: bash
+      run: npm run docs
+    - name: SonarCloud Scan
+      uses: sonarsource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ inputs.SONAR_TOKEN }}

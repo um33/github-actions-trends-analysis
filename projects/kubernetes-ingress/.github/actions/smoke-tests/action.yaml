@@ -1,0 +1,78 @@
+name: Run Smoke Tests
+description: Run Smoke Tests for the project
+
+inputs:
+  k8s-version:
+    description: Kubernetes version to use
+    required: false
+  k8s-timeout:
+    description: Timeout to use
+    default: 75s
+    required: false
+  image-type:
+    description: Image type to test
+    required: true
+  image-name:
+    description: Docker image name to test
+    required: true
+  tag:
+    description: Docker image tag to test
+    required: true
+  test-image:
+    description: Test Docker image to use
+    default: gcr.io/f5-gcs-7899-ptg-ingrss-ctlr/dev/test-runner:latest
+    required: false
+  marker:
+    description: Marker to use
+    required: false
+  azure-ad-secret:
+    description: Azure Active Directory secret for JWKs
+    required: false
+
+outputs:
+  test-results-name:
+    description: Test results name
+    value: tests-${{ steps.k8s.outputs.cluster }}
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy Kubernetes
+      id: k8s
+      run: |
+        make -f tests/Makefile create-kind-cluster K8S_CLUSTER_NAME=${{ github.run_id }} K8S_CLUSTER_VERSION=${{ inputs.k8s-version }} K8S_TIMEOUT=${{ inputs.k8s-timeout }}
+        make -f tests/Makefile image-load REGISTRY="" PREFIX=${{ inputs.image-name }} TAG=${{ inputs.tag }} K8S_CLUSTER_NAME=${{ github.run_id }}
+        marker="${{ inputs.marker }}"
+        nospaces="${marker// /_}"
+        sanitized_marker="${nospaces//\'/}"
+        name="${sanitized_marker:-${{ inputs.k8s-version }}}"
+        echo "cluster_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${{ github.run_id }}-control-plane)" >> $GITHUB_OUTPUT
+        echo "cluster=$(echo nginx-${{ inputs.image-type }}-$name)" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Setup Kubeconfig
+      run: |
+        sed -i 's|server:.*|server: https://${{ steps.k8s.outputs.cluster_ip }}:6443|' ~/.kube/kind/config
+      shell: bash
+
+    - name: Run Smoke Tests
+      run: |
+        touch tests-${{ steps.k8s.outputs.cluster }}.html
+        docker run --rm \
+        --name test-runner-${{ github.run_id }} \
+        --network=kind \
+        -v ${{ github.workspace }}/tests:/workspace/tests \
+        -v ~/.kube/kind/config:/root/.kube/config ${{ inputs.test-image }} \
+        --context=kind-${{ github.run_id }} \
+        --image=${{ inputs.image-name }}:${{ inputs.tag }} \
+        --image-pull-policy=Never \
+        --ic-type=nginx${{ contains(inputs.image-type, 'plus') && '-plus' || '' }}-ingress \
+        --service=nodeport --node-ip=${{ steps.k8s.outputs.cluster_ip }} \
+        --html=tests-${{ steps.k8s.outputs.cluster }}.html \
+        --self-contained-html \
+        --durations=10 \
+        --show-ic-logs=yes \
+        --ad-secret=${{ inputs.azure-ad-secret }} \
+        -m ${{ inputs.marker != '' && inputs.marker || '""' }}
+      working-directory: ./tests
+      shell: bash

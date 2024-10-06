@@ -1,0 +1,251 @@
+name: main
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: main-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  get_python_version:
+    runs-on: ubuntu-latest
+    outputs:
+      PYVERSION: ${{ steps.get_python_version.outputs.PYVERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the Python version from Makefile.envs
+        id: get_python_version
+        run: |
+          echo "PYVERSION=$(git grep 'export PYVERSION ?=' Makefile.envs | cut -d' ' -f4)"  >> "$GITHUB_OUTPUT"
+
+  test-python:
+    runs-on: ubuntu-latest
+    needs: get_python_version
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python ${{ needs.get_python_version.outputs.PYVERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.get_python_version.outputs.PYVERSION }}
+      - name: Install requirements
+        shell: bash -l {0}
+        run: |
+          mkdir test-results
+          cd pyodide-build && python3 -m pip install -e ".[test,deploy]" && cd ..
+          python3 -m pip install pytest-cov hypothesis pytz
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          PYODIDE_ROOT=. pytest \
+              --junitxml=test-results/junit.xml \
+              --verbose \
+              --runtime=host \
+              --cov=pyodide_build --cov=pyodide \
+              src pyodide-build packages/micropip/ packages/_tests tools/
+      - uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: false
+
+  build-core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      EMSDK_NUM_CORES: 3
+      EMCC_CORES: 3
+      PYODIDE_JOBS: 3
+      CCACHE_DIR: /tmp/ccache
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache ccache output
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/ccache
+          key: ${{ hashFiles('Makefile.envs') }}-${{ runner.os }}-v20211025-
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: pyodide-env
+          environment-file: environment.yml
+          channels: conda-forge
+
+      - name: Check Versions
+        shell: bash -l {0}
+        run: |
+          python --version
+          node --version
+          npm --version
+          which python
+          which node
+          which npm
+
+      - name: Install dependencies (ubuntu)
+        shell: bash -l {0}
+        if: ${{ contains(runner.os, 'ubuntu') }}
+        run: |
+          sudo apt install -y build-essential git xxd
+
+      - name: Install dependencies (macos)
+        shell: bash -l {0}
+        if: ${{ contains(runner.os, 'macos') }}
+        run: |
+          brew install coreutils
+
+      - name: Install dependencies (Python)
+        shell: bash -l {0}
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build emsdk
+        shell: bash -l {0}
+        run: |
+          which ccache
+
+          ccache -z
+          make -C emsdk
+          ccache -s
+
+      - name: Build Cpython
+        shell: bash -l {0}
+        run: |
+          # This is necessary to use the ccache from emsdk
+          source pyodide_env.sh
+
+          which ccache
+
+          ccache -z
+          make -C cpython
+          ccache -s
+
+      - name: build Pyodide core + numpy
+        shell: bash -l {0}
+        run: |
+          # This is necessary to use the ccache from emsdk
+          source pyodide_env.sh
+          ccache -z
+          PYODIDE_PACKAGES="tag:core,numpy" make
+          ccache -s
+
+      - name: check-size
+        shell: bash -l {0}
+        run: |
+          ls -lh dist/
+
+          pip install brotli
+          ./tools/check_compressed_size.py dist/pyodide.asm.* dist/python_stdlib*
+
+      - name: Store artifacts build
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-build-${{ runner.os }}
+          path: ./dist/
+          retention-days: 60
+
+  test-core:
+    runs-on: ${{ matrix.os }}
+    env:
+      DISPLAY: :99
+
+    needs: [build-core]
+    strategy:
+      fail-fast: false
+      matrix:
+        # os: [ubuntu-latest, macos-latest] # FIXME: macos + playwright is very unstable.
+        os: [ubuntu-latest]
+        runner: [playwright]
+        browser: [chrome]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: core-build-${{ runner.os }}
+          path: ./dist/
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: pyodide-env
+          python-version: "3.12"
+          channels: conda-forge
+
+      - name: install test requirements
+        shell: bash -l {0}
+        run: |
+          pip install -r requirements.txt
+          pip install -e ./pyodide-build
+          python -m playwright install
+
+      - name: run core tests
+        env:
+          BROWSER: ${{ matrix.browser }}
+          RUNNER: ${{ matrix.runner }}
+        shell: bash -l {0}
+        run: |
+          ls -lh
+          ls -lh dist/
+          tools/pytest_wrapper.py src packages/micropip/ \
+            -v \
+            -k "not webworker" \
+            --runtime="${BROWSER}-no-host" \
+            --runner "${RUNNER}" \
+            --durations 50 \
+            --junitxml=test-results/core_test.xml
+
+      - name: run package tests
+        env:
+          BROWSER: ${{ matrix.browser }}
+          RUNNER: ${{ matrix.runner }}
+        shell: bash -l {0}
+        run: |
+          ls -lh
+          ls -lh dist/
+          tools/pytest_wrapper.py packages/*/test* \
+            -v \
+            -k "numpy and not joblib" \
+            --runtime="${BROWSER}-no-host" \
+            --runner "${RUNNER}" \
+            --durations 50 \
+            --junitxml=test-results/packages_test.xml
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: "test-results/*.xml"
+        if: always()
+
+  test-deno:
+    runs-on: ${{ matrix.os }}
+
+    needs: [build-core]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: core-build-${{ runner.os }}
+          path: ./dist/
+
+      - name: install test requirements
+        shell: bash -l {0}
+        run: |
+          curl -fsSL https://deno.land/install.sh | sudo DENO_INSTALL=/usr/local sh -s v1.33.1
+          deno --version
+
+      - name: run deno tests
+        shell: bash -l {0}
+        run: cd src/test-deno && deno task test

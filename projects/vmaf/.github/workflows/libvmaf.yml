@@ -1,0 +1,115 @@
+name: libvmaf
+on:
+  push:
+  pull_request:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  libvmaf-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            CC: ccache gcc
+            CXX: ccache g++
+          - os: ubuntu-latest
+            CC: ccache gcc-9
+            CXX: ccache g++-9
+          - os: ubuntu-latest
+            CC: ccache clang
+            CXX: ccache clang++
+          - os: macos-latest
+            CC: ccache clang
+            CXX: ccache clang++
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    env:
+      CC: ${{ matrix.CC }}
+      CXX: ${{ matrix.CXX }}
+    steps:
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Install meson and ninja
+        run: |
+          python -m pip install --upgrade pip
+          pip install meson
+
+      - name: Install dependencies (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo -E apt-get -yq install ccache ninja-build libomp-dev
+          case "$CC" in
+          *gcc) sudo -E apt-get -yq install gcc g++ nasm ;;
+          *gcc-9)
+            sudo -E apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
+            sudo -E apt-get -yq install gcc-9 g++-9 nasm
+            ;;
+          *clang) sudo -E apt-get -yq install clang nasm ;;
+          esac
+          $CC --version
+          meson --version
+          ccache --version
+
+      - name: Install dependencies (mac)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install -q ninja nasm ccache llvm
+
+          $CC --version
+          meson --version
+          ccache --version
+
+      - uses: actions/checkout@v4
+      - name: Run meson
+        run: |
+          meson setup libvmaf libvmaf/build --buildtype release --prefix $PWD/install -Denable_float=true
+      - name: Run ninja
+        run: |
+          sudo ninja -vC libvmaf/build install
+      - name: Run tests
+        run: |
+          sudo ninja -vC libvmaf/build test
+      - name: Set up tox
+        run: |
+          mkdir -p ~/.ccache && sudo chown -R $(whoami) ~/.ccache
+          pip install tox
+      - name: Run tox tests (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          tox -c python
+      - name: Run tox tests (mac)
+        if: matrix.os == 'macos-latest'
+        run: |
+          PATH=$(brew --prefix)/opt/llvm/bin:$PATH \
+          CC=$(brew --prefix)/opt/llvm/bin/clang \
+          CXX=$(brew --prefix)/opt/llvm/bin/clang++ \
+          tox -c python
+
+      - name: Get binary path & Current Release
+        id: get_info
+        run: |
+          ldd "./install/bin/vmaf" || true
+          echo "path=./install/bin/vmaf" >> $GITHUB_OUTPUT
+          echo "upload_url=$(curl -L https://api.github.com/repos/${{ github.repository }}/releases/tags/$(cut -d/ -f3 <<< ${{ github.ref }}) | jq -r ."upload_url")" >> $GITHUB_OUTPUT
+
+      - name: Upload vmaf
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.CC }}-vmaf
+          path: ${{ steps.get_info.outputs.path }}
+      - name: Upload vmaf
+        if: steps.get_info.outputs.upload_url != 'null'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_info.outputs.upload_url }}
+          asset_path: ${{ steps.get_info.outputs.path }}
+          asset_name: vmaf
+          asset_content_type: application/octet-stream

@@ -1,0 +1,386 @@
+name: .NET CI
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Build
+      run: dotnet build
+    - uses: actions/upload-artifact@v3
+      with:
+        name: build_output
+        retention-days: 1
+        path: |
+          **/*.binlog
+  test-redis:
+    name: Redis provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["Redis"]
+    services:
+      redis:
+        image: redis
+        ports:
+        - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+        ORLEANSREDISCONNECTIONSTRING: "localhost:6379,ssl=False,abortConnect=False"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-postgres:
+    name: PostgreSQL provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["PostgreSql"]
+    services:
+      postgres:
+        image: postgres
+        env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="False positive")]
+          POSTGRES_PASSWORD: postgres
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="False positive")]
+        ORLEANSPOSTGRESCONNECTIONSTRING: "Server=127.0.0.1;Port=5432;Integrated Security=true;Pooling=false;User Id=postgres;Password=postgres;SSL Mode=Disable"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-mariadb:
+    name: MariaDB/MySQL provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["MySql"]
+    services:
+      mariadb:
+        image: mariadb:10.6
+        ports:
+          - 3306:3306
+        env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="False positive")]
+          MARIADB_ROOT_PASSWORD: "mariadb"
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        ORLEANSMYSQLCONNECTIONSTRING: "Server=127.0.0.1;Port=3306;UId=root;Pwd=mariadb;"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-sqlserver:
+    name: Microsoft SQL Server provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["SqlServer"]
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:latest
+        ports:
+          - 1433:1433
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: "Developer"
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="False positive")]
+          SA_PASSWORD: "yourWeak(!)Password"
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        ORLEANSMSSQLCONNECTIONSTRING: "Server=127.0.0.1,1433;User Id=SA;Password=yourWeak(!)Password;"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-azure-storage:
+    if: ${{ false }}
+    name: Azure Storage provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        suite: ["BVT", "SlowBVT", "Functional"]
+        framework: ["net8.0"]
+        provider: ["AzureStorage"]
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:latest
+        ports:
+          - 10000:10000
+          - 10001:10001
+          - 10002:10002
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&Category=${{ matrix.suite }}" --framework ${{ matrix.framework }} --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+# [SuppressMessage("Microsoft.Security", "CSCAN0090:ConfigFile", Justification="Not a secret")]
+# [SuppressMessage("Microsoft.Security", "CSCAN0220:DefaultPasswordContexts", Justification="Not a secret")]
+        ORLEANSDATACONNECTIONSTRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;TableEndpoint=http://127.0.0.1:10002/devstoreaccount1;"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-azure-cosmosdb:
+    if: ${{ false }}
+    name: Azure Cosmos DB provider tests
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        framework: ["net8.0"]
+        provider: ["Cosmos"]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        include-prerelease: true
+    # - name: Install emulator certificate
+    #   run: |
+    #     sleep 90s
+    #     mkdir /tmp/emulatorcerts
+    #     sudo sh -c "curl -k https://127.0.0.1:${{ job.services.cosmosdb-emulator.ports[8081] }}/_explorer/emulator.pem > /tmp/emulatorcert.crt"
+    #     cat /tmp/emulatorcert.crt
+    #     awk 'BEGIN {c=0;} /BEGIN CERT/{c++} { print > "emulatorcert." c ".crt"}' < /tmp/emulatorcert.crt
+    #     sudo cp emulatorcert.*.crt /usr/local/share/ca-certificates/
+    #     sudo update-ca-certificates
+    - name: Start Azure Cosmos DB emulator
+      run: |
+        Write-Host "Launching Azure Cosmos DB Emulator"
+        Import-Module "$env:ProgramFiles\Azure Cosmos DB Emulator\PSModules\Microsoft.Azure.CosmosDB.Emulator"
+        Start-CosmosDbEmulator -NoUI -Consistency Strong -PartitionCount 2 -DefaultPartitionCount 2
+        $IPAddress = "127.0.0.1" #(Get-NetIPAddress -AddressFamily IPV4 -AddressState Preferred -PrefixOrigin Manual | Select-Object IPAddress -First 1).IPAddress ?? "127.0.0.1"
+        Add-Content -Path $env:GITHUB_ENV -Value "ORLEANSCOSMOSDBACCOUNTENDPOINT=https://$($IPAddress):8081/"
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --framework ${{ matrix.framework }} --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        #ORLEANSCOSMOSDBACCOUNTENDPOINT: "https://127.0.0.1:8081/"
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        ORLEANSCOSMOSDBACCOUNTKEY: "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-consul:
+    name: Consul provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["Consul"]
+    services:
+      consul:
+        image: hashicorp/consul
+        ports:
+          - 8500:8500
+          - 8600:8600/tcp
+          - 8600:8600/udp
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+# [SuppressMessage("Microsoft.Security", "CSCAN0090:ConfigFile", Justification="Not a secret")]
+# [SuppressMessage("Microsoft.Security", "CSCAN0220:DefaultPasswordContexts", Justification="Not a secret")]
+        ORLEANSCONSULCONNECTIONSTRING: "http://localhost:8500"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-zookeeper:
+    name: ZooKeeper provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["ZooKeeper"]
+    services:
+      consul:
+        image: bitnami/zookeeper
+        ports:
+          - 2181:2181
+        env:
+          ALLOW_ANONYMOUS_LOGIN: "yes"
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+        ORLEANSZOOKEEPERCONNECTIONSTRING: "localhost:2181"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*
+  test-dynamodb:
+    name: AWS DynamoDB provider tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        provider: ["DynamoDB"]
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports:
+        - 8000:8000
+        env:
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+          AWS_ACCESS_KEY_ID: root
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+          AWS_SECRET_ACCESS_KEY: pass
+          AWS_REGION: us-east-1
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: |
+          3.1.x
+          8.0.x
+    - name: Test
+      run: dotnet test --filter "Category=${{ matrix.provider }}&(Category=BVT|Category=SlowBVT|Category=Functional)" --blame-hang-timeout 10m --logger "trx" -- -parallel none -noshadow
+      env:
+        ORLEANSDYNAMODBSERVICE: "http://127.0.0.1:8000"
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        ORLEANSDYNAMODBACCESSKEY: "root"
+# [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Not a secret")]
+        ORLEANSDYNAMODBSECRETKEY: "pass"
+    - name: Archive Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test_output
+        retention-days: 1
+        path: |
+          **/TestResults/*
+          **/logs/*

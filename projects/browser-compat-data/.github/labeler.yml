@@ -1,0 +1,83 @@
+# This file is used by .github/workflows/labeler.yml to label pull requests based on the files changed in the PR.
+# Object matching syntax: https://github.com/actions/labeler/blob/main/README.md#match-object
+bulk_update :package::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/migrations/**"
+data:api :rabbit2::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "api/**"
+data:browsers :earth_africa::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "browsers/**"
+data:css :art::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "css/**"
+data:html :page_facing_up::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "html/**"
+data:http :mountain_cableway::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "http/**"
+data:js :pager::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "javascript/**"
+data:mathml :heavy_division_sign::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "mathml/**"
+data:svg :paintbrush::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "svg/**"
+data:wasm :mechanical_arm::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "webassembly/**"
+data:webdriver :racing_car::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "webdriver/**"
+data:webext :game_die::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "webextensions/**"
+dependencies :chains::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package-lock.json"
+docs :writing_hand::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+infra :building_construction::
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".*"
+          - "**/*.js"
+          - "**/*.ts"
+          - "**/*.d.ts"
+          - "LICENSE"
+          - "package*"
+          - "utils/**"
+          - ".github/**"
+          - ".husky/**"
+          - ".vscode/**"
+linter :house_with_garden::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "lint/**"
+scripts :scroll::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/**"
+schema :gear::
+  - changed-files:
+      - any-glob-to-any-file:
+          - "schemas/**"

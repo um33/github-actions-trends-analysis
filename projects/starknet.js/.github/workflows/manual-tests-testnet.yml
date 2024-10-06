@@ -1,0 +1,16 @@
+name: '[Manual] Test Testnet'
+on: workflow_dispatch
+
+jobs:
+  tests:
+    name: Run test on ${{ matrix.name }}
+    strategy:
+      max-parallel: 1
+      matrix:
+        name: [rpc-goerli]
+
+    uses: ./.github/workflows/_test.yml
+    secrets:
+      TEST_RPC_URL: ${{ secrets.TEST_RPC_URL }}
+      TEST_ACCOUNT_PRIVATE_KEY: ${{ secrets.TEST_ACCOUNT_PRIVATE_KEY }}
+      TEST_ACCOUNT_ADDRESS: ${{ secrets.TEST_ACCOUNT_ADDRESS }}

@@ -1,0 +1,23 @@
+---
+name: test-retest-action
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+    branches: [devel]
+    paths:
+      - 'actions/retest/**'
+      - '.github/workflows/test-retest-action.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker build
+        # Run cd to avoid loading complete cephcsi directory in docker context
+        # while building retest image.
+        run: cd actions/retest && docker build -t retest .

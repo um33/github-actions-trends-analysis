@@ -1,0 +1,31 @@
+---
+# yamllint disable rule:comments
+name: Close stale issues
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: 0 0 * * *
+permissions:
+  contents: read
+jobs:
+  stale:
+    permissions:
+      issues: write # for actions/stale to close stale issues
+      pull-requests: write # for actions/stale to close stale PRs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@28ca1036281a5e5922ead5184a1bbf96e5fc984e # v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # yamllint disable rule:line-length
+          stale-issue-message: |
+              This issue is stale because it has been open 90 days with no activity.
+              Remove the "stale" label or comment or this will be closed in 14 days.
+          stale-pr-message: |
+              This pull request is stale because it has been open 90 days with no activity.
+              Remove the "stale" label or comment or this will be closed in 14 days.
+          # yamllint enable rule:line-length
+          days-before-stale: 180
+          days-before-close: 28
+          exempt-issue-labels: blocked
+          exempt-pr-labels: blocked

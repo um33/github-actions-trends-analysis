@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test-python:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+        os: ["macos-latest", "ubuntu-latest", "windows-latest", "macos-latest-xlarge"]
+      fail-fast: false
+
+    steps:
+    - name: "Set environment variables (Windows)"
+      if: startsWith(runner.os, 'Windows')
+      shell: pwsh
+      run: |
+        (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
+        $os_version = (Get-CimInstance Win32_OperatingSystem).version
+        Echo "OS_VERSION=$os_version" >> $env:GITHUB_ENV
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: "**/python/pyproject.toml"
+    - name: "Restore RTools40"
+      if: startsWith(runner.os, 'Windows')
+      id: cache-rtools
+      uses: actions/cache@v3
+      with:
+        path: C:/rtools40
+        key: ${{ runner.os }}-${{ env.OS_VERSION }}-rtools-v1
+    - name: Install and test
+      run: |
+        cd python
+        python -m pip install -U --editable ".[dev,parallel]"
+        python -m pytest prophet/tests/
+
+  build-and-test-r:
+
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - {os: ubuntu-20.04, r: 'release', rspm: "https://packagemanager.rstudio.com/cran/__linux__/focal/latest"}
+      fail-fast: false
+
+    env:
+      R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+      RSPM: ${{ matrix.config.rspm }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: r-lib/actions/setup-pandoc@v2
+    - name: Set up R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ matrix.config.r }}
+    - name: Install remotes
+      run: |
+        install.packages('remotes')
+      shell: Rscript {0}
+    - name: Query dependencies
+      run: |
+        saveRDS(remotes::dev_package_deps(pkgdir = "R/", dependencies = TRUE), ".github/depends.Rds", version = 2)
+        writeLines(sprintf("R-%i.%i", getRversion()$major, getRversion()$minor), ".github/R-version")
+      shell: Rscript {0}
+    - name: Restore R package cache
+      if: runner.os != 'Windows'
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.R_LIBS_USER }}
+        key: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-${{ hashFiles('.github/depends.Rds') }}
+        restore-keys: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-
+    - name: Install system dependencies
+      if: runner.os == 'Linux'
+      run: |
+        while read -r cmd
+        do
+          eval sudo $cmd
+        done < <(Rscript -e 'writeLines(remotes::system_requirements(os = "ubuntu", os_release = "20.04", path = "R/"))')
+    - name: Install dependencies
+      run: |
+        remotes::install_deps(pkgdir = "R/", dependencies = NA)
+        remotes::install_cran(c("rcmdcheck", "knitr", "testthat", "readr", "rmarkdown"))
+        install.packages(c("cmdstanr", "posterior"), repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+      shell: Rscript {0}
+    - name: Check
+      uses: r-lib/actions/check-r-package@v2
+      with:
+        working-directory: "R/"
+        upload-snapshots: true

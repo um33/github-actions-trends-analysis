@@ -1,0 +1,72 @@
+name: Auto Update
+
+on:
+  schedule:
+    - cron: '10 10 15 * *'
+
+jobs:
+  precommit-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: dev
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8.x"
+      - name: Run update
+        run: |
+            pip install pre-commit
+            pre-commit autoupdate
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PAT }}
+          author: GitHub <noreply@github.com>
+          add-paths: .pre-commit-config.yaml
+          commit-message: Auto pre-commit update
+          body: |
+            Update pre-commit hooks to latest
+
+            Auto generated
+          branch: auto-update/precommit_update
+          delete-branch: true
+          title: Auto precommit update
+          labels: automated-pr
+          assignees: seladb
+
+  oui-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: dev
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9.x"
+      - name: Run update
+        run: |
+            python3 3rdParty/OUIDataset/create_oui_data.py
+            mv -f PCPP_OUIDataset.json 3rdParty/OUIDataset/PCPP_OUIDataset.json
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PAT }}
+          author: GitHub <noreply@github.com>
+          add-paths: 3rdParty/OUIDataset/PCPP_OUIDataset.json
+          commit-message: Auto OUI Database Update
+          body: |
+            Update OUI database to latest
+
+            Auto generated
+          branch: auto-update/oui_update
+          delete-branch: true
+          title: Auto OUI Database Update
+          labels: automated-pr
+          assignees: seladb

@@ -1,0 +1,9 @@
+name: Unit
+description: Performs unit tests checks
+runs:
+  using: composite
+  steps:
+    - run: pnpm run build
+      shell: sh
+    - run: pnpm run test
+      shell: sh

@@ -1,0 +1,73 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a bug report, please search the existing discussions.
+        To address this bug as fast as possible, we need the following information.
+  - type: input
+    id: livewire-version
+    attributes:
+      label: Livewire version
+      description: Which version of Livewire are you using? Please provide the full version, e.g. v3.2.6.
+      placeholder: v3.2.6
+    validations:
+      required: true
+
+  - type: input
+    id: laravel-version
+    attributes:
+      label: Laravel version
+      description: Which version of Laravel are you using? Please provide the full version, e.g. v10.0.0.
+      placeholder: v10.0.0
+    validations:
+      required: true      
+
+  - type: dropdown
+    id: php-version
+    attributes:
+      label: Which PHP version are you using?
+      options:
+        - PHP 8.3
+        - PHP 8.2
+        - PHP 8.1
+        - PHP 8.0
+        - PHP 7.4
+        - PHP 7.3
+        - PHP 7.2
+        - PHP 7.1
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps To Reproduce
+      description: Which steps do we need to take to reproduce the problem you are having? Any code examples need to be **as short as possible**, remove any code that is unrelated to the bug. This issue will be closed if detailed replication steps are missing.**
+      placeholder: |
+        1.
+        2.
+        3.
+
+  - type: input
+    id: example-repository
+    attributes:
+      label: Repository or Wirebox URL
+      description: Please provide the URL of public [repository](https://github.com/new) or [Wirebox](https://wirebox.app) that contains a fresh Laravel and Livewire installation that only contains the code that reproduces the bug. **Please do not link to your actual project**, only share an example that reproduces the bug with the least amount of code. **Make sure your Wirebox is set to public**.
+    validations:
+      required: true
+      
+  - type: textarea
+    attributes:
+      label: Additional information
+      description: |
+        Links? References? Anything that will give us more context about the issue you are encountering! When providing code snippets, please provide the actual code that is easy to replicate and don't use code screenshots.
+
+  - type: checkboxes
+    attributes:
+      label: Please confirm (incomplete submissions will not be addressed)
+      options:
+        - label: I have provided easy and step-by-step instructions to reproduce the bug.
+          required: true
+        - label: I have provided code samples as text and NOT images.
+          required: true
+        - label: I understand my bug report will be removed if I haven't met the criteria above.
+          required: true

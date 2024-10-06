@@ -1,0 +1,37 @@
+name: Operate Frontend
+on:
+  push:
+    branches:
+      - 'main'
+      - 'stable/**'
+      - 'release/**'
+    paths:
+      - '.github/workflows/operate-frontend.yml'
+      - 'operate/client/**'
+  pull_request:
+    paths:
+      - '.github/workflows/operate-frontend.yml'
+      - 'operate/client/**'
+
+jobs:
+  linting-and-testing:
+    name: Linting & Testing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operate/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: operate/client/yarn.lock
+      - run: yarn install --frozen-lockfile
+        name: Install dependencies
+      - run: yarn ts-check
+        name: Type checks
+      - run: yarn eslint
+        name: ESLint
+      - run: yarn test:ci
+        name: Unit & Integration tests

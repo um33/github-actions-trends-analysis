@@ -1,0 +1,136 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 2 * * 1' # At 02:00 on Monday
+
+permissions: {}
+
+env:
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  test:
+    name: Test
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node-version: [16, 18, 20]
+        include:
+          - os: windows-latest
+            node-version: 18 # LTS
+          - os: macos-latest
+            node-version: 18 # LTS
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: node packages/build/bin/compile-package -b
+      - name: Run package tests
+        run: node packages/build/bin/run-nyc node packages/build/bin/run-mocha --lang en_US.UTF-8 --reporter spec "packages/*/dist/__tests__/**/*.js" "packages/build/test/**/*.js"
+      - name: Run extension tests
+        run: node packages/build/bin/run-nyc node packages/build/bin/run-mocha --lang en_US.UTF-8 --reporter spec "extensions/*/dist/__tests__/**/*.js"
+      - name: Run example tests
+        run: node packages/build/bin/run-nyc node packages/build/bin/run-mocha --lang en_US.UTF-8 --reporter spec "examples/*/dist/__tests__/**/*.js"
+      - name: Generate coverage report
+        run: node packages/build/bin/run-nyc report --reporter=lcov
+      - name: Publish coverage report to Coveralls
+        uses: coverallsapp/github-action@3dfc5567390f6fa9267c0ee9c251e4c8c3f18949 # v2.2.3
+        with:
+          flag-name: run-${{ matrix.os }}-node@${{ matrix.node-version }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage/lcov.info
+          parallel: true
+
+  post-test:
+    name: Post-Test
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    steps:
+    - name: Coveralls finished
+      uses: coverallsapp/github-action@3dfc5567390f6fa9267c0ee9c251e4c8c3f18949 # v2.2.3
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        parallel-finished: true
+
+  test-benchmark:
+    name: Test Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 18 # LTS
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build -w "@loopback/benchmark"
+      - name: Run benchmark tests
+        run: npm run test --ignore-scripts -w "@loopback/benchmark" -- --reporter spec
+
+  code-lint:
+    name: Code Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 18 # LTS
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: node packages/build/bin/compile-package -b
+      - name: Verify code linting
+        run: |
+          node packages/build/bin/run-eslint .
+          node packages/build/bin/run-prettier --check "**/*.ts" "**/*.js" "**/*.md" "!docs/**/*.md"
+      - name: Verify package metadata
+        run: node bin/check-package-metadata.js
+
+  commit-lint:
+    name: Commit Lint
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 18 # LTS
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify commit linting
+        run: npx commitlint --from origin/master --to HEAD --verbose
+
+  verify-docs:
+    name: Verify Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 18 # LTS
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: node packages/build/bin/compile-package -b
+      - name: Verify linting
+        run: node packages/build/bin/run-prettier --check "docs/**/*.md"
+      - name: Verify changes
+        run: ./bin/verify-doc-changes.sh

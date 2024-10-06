@@ -1,0 +1,59 @@
+name: '[PR|Push] Main'
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '__mocks__/**'
+      - '__tests__/**'
+      - 'src/**'
+      - 'package*'
+      - 'ts*'
+      - '!www/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '__mocks__/**'
+      - '__tests__/**'
+      - 'src/**'
+      - 'package*'
+      - 'ts*'
+      - '!www/**'
+
+jobs:
+  skip_check:
+    name: Skip check
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_duplicate.outputs.should_skip }}
+    steps:
+      - id: skip_duplicate
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          cancel_others: 'true'
+
+  tests:
+    name: Run test on ${{ matrix.name }}
+    needs: [skip_check]
+    if: needs.skip_check.outputs.should_skip != 'true'
+    strategy:
+      max-parallel: 1
+      matrix:
+        name: [rpc-goerli]
+
+    uses: ./.github/workflows/_test.yml
+    secrets:
+      TEST_RPC_URL: ${{ secrets.TEST_RPC_URL }}
+      TEST_ACCOUNT_PRIVATE_KEY: ${{ secrets.TEST_ACCOUNT_PRIVATE_KEY }}
+      TEST_ACCOUNT_ADDRESS: ${{ secrets.TEST_ACCOUNT_ADDRESS }}
+
+  release:
+    name: Release
+    needs: [skip_check, tests]
+    if: |
+      !cancelled() && !failure()
+      && needs.skip_check.outputs.should_skip != ''
+      && github.event_name == 'push'
+    uses: ./.github/workflows/_release.yml
+    secrets: inherit

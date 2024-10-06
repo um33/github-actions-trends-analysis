@@ -1,0 +1,31 @@
+name: coverage CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    if: github.repository == 'ant-design/pro-components'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.14.0
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.12.1
+
+      - run: pnpm install
+        if: |
+          steps.cache-pnpm-cache.outputs.cache-hit != 'true' ||
+          steps.cache-node-modules.outputs.cache-hit != 'true'
+      - run: pnpm run test:coverage
+        env:
+          CI: true
+          PROGRESS: none
+          NODE_ENV: test
+          NODE_OPTIONS: --max_old_space_size=4096
+      - run: bash <(curl -s https://codecov.io/bash)

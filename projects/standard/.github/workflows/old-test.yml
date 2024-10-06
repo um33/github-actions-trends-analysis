@@ -1,0 +1,38 @@
+# Special test for the oldest version of Node.js that we "support"
+# even though the linter won't actually run. Test that the command
+# line program exits cleanly.
+
+name: Old test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [0.10.48, 4]
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm install --production
+
+      - name: Test that the command line program exits cleanly.
+        run: ./bin/cmd.cjs
+        shell: bash

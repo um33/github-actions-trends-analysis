@@ -1,0 +1,49 @@
+name: Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - translate/**
+      - .github/workflows/frontend.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - translate/**
+      - .github/workflows/frontend.yml
+  workflow_dispatch:
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '18' }
+      - name: Install dependencies
+        run: npm ci
+      - name: Check TypeScript
+        run: npm run types -- --pretty
+        working-directory: translate
+      - name: build
+        run: npm run build
+        working-directory: translate
+
+  jest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '18' }
+      - name: Install globals
+        run: npm install --global npm@8
+      - name: Install dependencies
+        run: npm ci
+      - name: Test
+        run: npm test --coverage
+        working-directory: translate
+      - uses: codecov/codecov-action@v4
+        with: { flags: frontend }

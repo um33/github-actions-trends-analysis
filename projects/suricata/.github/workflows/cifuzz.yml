@@ -1,0 +1,45 @@
+name: CIFuzz
+
+on:
+  pull_request:
+    paths-ignore:
+      - "doc/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+jobs:
+ Fuzzing:
+   runs-on: ubuntu-latest
+   strategy:
+     fail-fast: false
+     matrix:
+       sanitizer: [address, undefined]
+   steps:
+   - name: Clear unnecessary files
+     run: |
+        df
+        sudo apt clean
+        sudo rm -rf /usr/share/dotnet/ /usr/share/swift /usr/local/.ghcup/ /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/android /usr/local/lib/node_modules
+        df
+   - name: Build Fuzzers (${{ matrix.sanitizer }})
+     uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+     with:
+       oss-fuzz-project-name: 'suricata'
+       dry-run: false
+       sanitizer: ${{ matrix.sanitizer }}
+   - name: Run Fuzzers (${{ matrix.sanitizer }})
+     uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+     with:
+       oss-fuzz-project-name: 'suricata'
+       fuzz-seconds: 600
+       dry-run: false
+       sanitizer: ${{ matrix.sanitizer }}
+   - name: Upload Crash
+     uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
+     if: failure()
+     with:
+       name: ${{ matrix.sanitizer }}-artifacts
+       path: ./out/artifacts

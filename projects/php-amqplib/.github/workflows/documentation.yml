@@ -1,0 +1,44 @@
+name: Update documentation page
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    name: Regenerate phpDocumentator docs
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Setup Graphviz
+      uses: ts-graphviz/setup-graphviz@v1
+    - name: Install PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 7.4
+        extensions: ctype, dom, hash, iconv, json, libxml, mbstring, simplexml, zlib, xml
+        coverage: none
+    - name: Download phpDocumentator
+      run: wget -qN https://github.com/phpDocumentor/phpDocumentor/releases/download/v3.1.2/phpDocumentor.phar
+    - name: Generate docs
+      run: php -d error_reporting=1 ./phpDocumentor.phar run -v --force --defaultpackagename=PhpAmqpLib --title='php-amqplib' -d ./PhpAmqpLib -t ./docs
+    - name: Commit changes
+      run: |
+        cd ./docs
+        rm -rf ./phpdoc-cache-*
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ./*
+        git commit -m "update documentation" || true
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        directory: ./docs
+        branch: gh-pages
+        force: true
+

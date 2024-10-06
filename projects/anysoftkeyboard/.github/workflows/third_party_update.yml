@@ -1,0 +1,159 @@
+---
+name: third-party-update
+
+# always run on the default branch: main
+on:
+  schedule:
+    - cron: '29 04 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/ci/third-party-update/**/*'
+      - '.github/workflows/third_party_update.yml'
+
+env:
+  TERM: dumb
+  TMPDIR: "/tmp"
+  BOT_USERNAME: ${{ secrets.BOT_MASTER_RW_GITHUB_USERNAME }}
+  BOT_TOKEN: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+
+jobs:
+  general-maven-update:
+    runs-on: ubuntu-22.04
+    container: ghcr.io/menny/android_ndk:1.20.0
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+      - name: setup
+        run: ./scripts/ci/ci_setup.sh
+      - name: update-to-maven-deps
+        run: ./scripts/ci/third-party-update/update_third_party_artifacts.sh
+      - name: Sanity verification
+        run: |
+          ./gradlew :api:assembleDebug :api:lintDebug
+          ./gradlew :api:assembleDebug :api:lintDebug
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated Maven Artifacts Update'
+          title: 'Automated Maven Artifacts Update'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          team-reviewers: infra, maintainers
+          branch: 'bot-pr/maven-update'
+          delete-branch:
+            true
+
+  github-actions-update:
+    runs-on: ubuntu-22.04
+    container: ghcr.io/menny/android_base:1.20.0
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+      - name: setup
+        run: ./scripts/ci/ci_setup.sh
+      - name: update-github-actions
+        run: ./scripts/ci/third-party-update/update_github_actions.sh
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated GitHub Actions update from new releases in github.com'
+          title: 'Automated GitHub Actions Update'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          team-reviewers: infra, maintainers
+          branch: 'bot-pr/github-actions-update'
+          delete-branch:
+            true
+
+  third-party-update:
+    strategy:
+      matrix:
+        type: [gradle, robolectric, build_tools, error_prone, spotless]
+        include:
+          - type: gradle
+            pr_body: Latest version found at https://github.com/gradle/gradle/releases
+          - type: robolectric
+            pr_body: Latest version found at https://github.com/robolectric/robolectric/releases
+          - type: build_tools
+            pr_body: Latest version found in `sdkmanager --list` call.
+          - type: error_prone
+            pr_body: |
+              Latest version found at:
+              - https://github.com/tbroyer/gradle-errorprone-plugin/releases
+              - https://github.com/google/error-prone/releases.
+          - type: spotless
+            pr_body: |
+              Latest version found at:
+              - https://plugins.gradle.org/m2/com/diffplug/spotless/spotless-plugin-gradle/maven-metadata.xml
+              - https://github.com/diffplug/spotless
+              - https://github.com/google/google-java-format/releases
+    runs-on: ubuntu-22.04
+    container: ghcr.io/menny/android_ndk:1.20.0
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+      - name: setup
+        run: ./scripts/ci/ci_setup.sh
+      - name: Find latest version
+        run: |
+          LATEST_VERSION="$(./scripts/ci/third-party-update/${{ matrix.type}}/get_latest_version.sh)"
+          echo "Found version ${LATEST_VERSION} for ${{ matrix.type}}."
+          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+      - name: Update
+        run: ./scripts/ci/third-party-update/${{ matrix.type}}/update_to_version.sh "${{ env.LATEST_VERSION }}"
+      - name: Sanity verification
+        run: ./scripts/ci/third-party-update/${{ matrix.type}}/sanity_check.sh
+      - name: Add changed files
+        run: ./scripts/ci/third-party-update/${{ matrix.type}}/add_files_to_commit.sh
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated ${{ matrix.type}} ${{ env.LATEST_VERSION }} update'
+          title: 'Automated ${{ matrix.type}} ${{ env.LATEST_VERSION }} update'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          body: ${{ matrix.pr_body}}
+          team-reviewers: infra, maintainers
+          branch: 'bot-pr/auto-update-${{ matrix.type}}'
+          delete-branch: true
+
+  general-js-deps:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4.1.1
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v3.0.0
+        with:
+          version: 8.6.9
+          run_install: true
+      - uses: actions/setup-node@v4.0.2
+        with:
+          node-version-file: ".nvmrc"
+          cache: 'pnpm'
+      - name: upgrade to latest deps using pnpm
+        run: pnpm upgrade --latest
+      - name: Sanity verification
+        run: pnpm build
+      - name: re-package node binaries
+        run: pnpm package
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6.0.2
+        with:
+          token: ${{ secrets.BOT_MASTER_RW_GITHUB_TOKEN }}
+          commit-message: 'Automated JS Dependencies Update Update'
+          title: 'JS Dependencies Update'
+          committer: 'Polyglot <ask@evendanan.net>'
+          author: 'Polyglot <ask@evendanan.net>'
+          team-reviewers: infra, maintainers
+          branch: 'bot-pr/js-deps-update'
+          delete-branch:
+            true

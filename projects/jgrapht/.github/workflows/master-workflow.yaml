@@ -1,0 +1,83 @@
+name: JGrapht Master build
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'CONTRIBUTORS.md'
+      - 'HISTORY.md'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+        - name: Windows
+          tag: windows-latest
+        - name: macOS
+          tag: macos-latest
+        - name: Ubuntu
+          tag: ubuntu-latest
+    name: Build (${{ matrix.os.name }})
+    runs-on: ${{ matrix.os.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        shell: bash
+        run: |
+          set -e
+          mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V && mvn verify -B && mvn javadoc:aggregate && mvn checkstyle:check -P checkstyle
+
+  snapshot-publish:
+    name: Publish Snapshot
+    needs: build
+    if: github.repository == 'jgrapht/jgrapht'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          cache: 'maven'
+      - run: |
+          set -e
+          mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V && mvn javadoc:aggregate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 14
+      - run: npm install -g hercule@5.0.0
+
+      - name: Run prepareDocs script
+        run: ./etc/prepareDocs.sh
+        shell: bash
+
+      - name: Deploy snapshot to Sonatype
+        env:
+          SONATYPE_USER: ${{ secrets.CI_DEPLOY_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.CI_DEPLOY_PASSWORD }}
+        run: mvn deploy -DskipTests=true --settings etc/snapshot-settings.xml
+        shell: bash
+
+      - name: Publish Github Pages
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        with:
+          token: ${{ secrets.PAGES_TOKEN }}
+          branch: gh-pages
+          folder: docs
+          clean: true

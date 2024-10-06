@@ -1,0 +1,37 @@
+name: i18n-update
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'config/i18n.json'
+      - 'src/locale/en.json'
+
+jobs:
+  i18n-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+          token: ${{ secrets.I18N_PAT }}
+
+      - uses: pnpm/action-setup@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: pnpm i18n
+        run: pnpm i18n
+
+      - name: Commit files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Apply i18n updates

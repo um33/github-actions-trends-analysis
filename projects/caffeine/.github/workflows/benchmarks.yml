@@ -1,0 +1,128 @@
+name: benchmarks
+permissions: read-all
+on: [ push, pull_request ]
+
+env:
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+  PUBLISH_JDK: 21
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [ 11, 21, 23, GraalVM ]
+    env:
+      JAVA_VERSION: ${{ matrix.java }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.adoptium.net:443
+            api.github.com:443
+            caffeine.gradle-enterprise.cloud:443
+            download.java.net:443
+            download.oracle.com:443
+            downloads.gradle.org:443
+            downloads.gradle-dn.com:443
+            gds.oracle.com:443
+            github.com:443
+            jcenter.bintray.com:443
+            objects.githubusercontent.com:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo1.maven.org:443
+            raw.githubusercontent.com:443
+            services.gradle.org:443
+            www.graalvm.org:443
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Compute JMH Benchmark
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ matrix.java }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: >
+            caffeine:jmh --no-daemon -q
+            -PincludePattern=ComputeBenchmark
+            -PbenchmarkParameters=computeType=Caffeine,Guava,ConcurrentHashMap
+      - name: Upload Compute JMH Results to Gist
+        uses: popsiclestick/gist-sync-action@88f8633178625914f2a01abf1a765f7272a580fa # v1.2.0
+        if: >
+          github.event_name == 'push'
+          && github.event.repository.fork == false
+          && endsWith(github.ref, github.event.repository.default_branch)
+        continue-on-error: true
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gist_description: Compute JMH Results
+          gist_title: compute_results_${{ matrix.java }}.json
+          github_file: ./caffeine/build/reports/jmh/results.json
+          gist_url: https://gist.githubusercontent.com/ben-manes/511298014cc5629cbc5e57f09fd4c430
+      - name: Get/Put JMH Benchmark
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ matrix.java }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: >
+            caffeine:jmh --no-daemon -q
+            -PincludePattern=GetPutBenchmark
+            -PbenchmarkParameters=cacheType=Caffeine,Guava,ConcurrentHashMap
+      - name: Upload Get/Put JMH Results to Gist
+        uses: popsiclestick/gist-sync-action@88f8633178625914f2a01abf1a765f7272a580fa # v1.2.0
+        if: >
+          github.event_name == 'push'
+          && github.event.repository.fork == false
+          && endsWith(github.ref, github.event.repository.default_branch)
+        continue-on-error: true
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gist_description: Get/Put JMH Results
+          gist_title: getput_results_${{ matrix.java }}.json
+          github_file: ./caffeine/build/reports/jmh/results.json
+          gist_url: https://gist.githubusercontent.com/ben-manes/b231cf57cf8e144e2247716e777edcf3
+      - name: Put/Remove JMH Benchmark
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ matrix.java }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: >
+            caffeine:jmh --no-daemon -q
+            -PincludePattern=PutRemoveBenchmark
+            -PbenchmarkParameters=cacheType=Caffeine,Guava,ConcurrentHashMap
+      - name: FrequencySketch JMH Benchmark
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ matrix.java }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: >
+            caffeine:jmh --no-daemon -q
+            -PincludePattern=FrequencySketchBenchmark
+            -PbenchmarkParameters=tableSize=134217728
+      - name: TimerWheelBenchmark JMH Benchmark
+        uses: ./.github/actions/run-gradle
+        with:
+          java: ${{ matrix.java }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          arguments: caffeine:jmh --no-daemon -q -PincludePattern=TimerWheelBenchmark
+      - name: Publish JMH benchmarks
+        if: >
+          matrix.java == env.PUBLISH_JDK
+          && github.event_name == 'push'
+          && endsWith(github.ref, github.event.repository.default_branch)
+        run: |
+          {
+            echo '#### [Compute](https://jmh.morethan.io/?gists=511298014cc5629cbc5e57f09fd4c430)'
+            echo -n 'This benchmark that evaluates the overhead due to locking when the entry is'
+            echo -n 'present. The scenarios graphed are all threads retrieving a single entry'
+            echo -n '("sameKey") and threads retrieving different keys based on a Zipf distribution'
+            echo -n '("spread").'
+            echo -e '\n'
+            echo '#### [Get/Put](https://jmh.morethan.io/?gists=b231cf57cf8e144e2247716e777edcf3)'
+            echo -n 'A benchmark that evaluates the read/write performance of a cache. The cache is'
+            echo -n 'pre-populated for a 100% hit rate and a Zipf distribution of keys is used to'
+            echo -n 'mimic application usage patterns.'
+          } >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,36 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  run:    
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest]
+        php-versions: ['8.1', '8.2']
+    name: PHP ${{ matrix.php-versions }} Test on ${{ matrix.operating-system }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Install PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-versions }}
+        extensions: intl, fileinfo, mbstring
+        ini-values: post_max_size=256M, upload_max_filesize=256M, max_execution_time=300, max_input_time=300
+        tools: cs2pr, phpcs
+    - name: Check PHP Version
+      run: php -v
+    - name: Composer & Npm Install
+      run: |
+       composer validate --no-check-all --strict
+       composer install --no-progress --no-suggest --no-interaction --optimize-autoloader
+       pwd
+    - name: Run phpcs
+      continue-on-error: true
+      run: |
+        phpcs --extensions=php -p --standard=$GITHUB_WORKSPACE/vendor/kunena/codestyle/Kunena/ruleset.xml --report=checkstyle $GITHUB_WORKSPACE/src --report-checkstyle=$GITHUB_WORKSPACE/phpcs-report.xml
+    - name: Show PHPCS results in PR
+      continue-on-error: true
+      run: cs2pr $GITHUB_WORKSPACE/phpcs-report.xml --graceful-warnings --colorize

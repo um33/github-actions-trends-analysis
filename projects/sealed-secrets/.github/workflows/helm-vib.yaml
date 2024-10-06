@@ -1,0 +1,47 @@
+name: Verify Helm Chart
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+       - 'helm/**'
+
+env:
+  CSP_API_URL: https://console.cloud.vmware.com
+  CSP_API_TOKEN: ${{ secrets.CSP_API_TOKEN }}
+  VIB_PUBLIC_URL: https://cp.bromelia.vmware.com
+
+jobs:
+  # verify chart in multiple target platforms
+  vib-k8s-verify:
+    runs-on: ubuntu-latest
+    environment: vmware-image-builder
+    strategy:
+      matrix:
+       include:
+         - name: GKE
+           target-platform: gke
+           target-platform-id: 91d398a2-25c4-4cda-8732-75a3cfc179a1
+           target-pipeline: vib-platform-verify.json
+         - name: GKE Skip Recreate
+           target-platform: gke
+           target-platform-id: 91d398a2-25c4-4cda-8732-75a3cfc179a1
+           target-pipeline: vib-platform-verify-skip-recreate.json
+         - name: Openshift
+           target-platform: openshift
+           target-platform-id: ebac9e0d-3931-4515-ba54-e6adada1f174
+           target-pipeline: vib-platform-verify-openshift.json
+      fail-fast: false
+    name: Verify chart (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v3.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+      - uses: vmware-labs/vmware-image-builder-action@v0.6.0
+        with:
+          pipeline: ${{ matrix.target-pipeline }}
+          max-pipeline-duration: 7200
+        env:
+          TARGET_PLATFORM: ${{ matrix.target-platform-id }}

@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  pull_request:
+    paths:
+      - deno.jsonc
+      - '**/*.ts'
+      - .github/workflows/ci.yml
+  workflow_call:
+  push:
+    branches: main
+    paths:
+      - deno.jsonc
+      - '**/*.ts'
+      - .github/workflows/ci.yml
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - run: echo 'TMPDIR=/tmp' >> $GITHUB_ENV
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1   # using ourself to install deno could compromise the tests
+        with:
+          deno-version: 1.39
+      - run: deno cache **/*.test.ts
+      - run: deno task test --coverage=cov_profile --no-check
+      - run: deno coverage cov_profile --lcov --exclude=tests/ --output=cov_profile.lcov
+      - uses: coverallsapp/github-action@v2
+        with:
+          path-to-lcov: cov_profile.lcov
+          parallel: true
+          flag-name: ${{ matrix.os }}
+
+  upload-coverage:
+    needs: tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1   # using ourself to install deno could compromise the tests
+        with:
+          deno-version: 1.39
+      - run: deno lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: 1.39
+      - run: deno task typecheck

@@ -1,0 +1,235 @@
+# Note, this is used in the badge URL!
+name: test
+
+on:
+  push:
+    branches: [dev, master]
+    paths:
+      [
+        "**.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rustfmt.toml",
+        ".github/workflows/*",
+        "!*.md",
+        "!contrib/*",
+        "!docs/*",
+        "!LICENSE",
+        "!*.sh",
+      ]
+  pull_request:
+    paths:
+      [
+        "**.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rustfmt.toml",
+        ".github/workflows/*",
+        "!*.md",
+        "!contrib/*",
+        "!docs/*",
+        "!LICENSE",
+        "!*.sh",
+      ]
+  schedule:
+    # Run CI every week
+    - cron: "00 01 * * 0"
+
+env:
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: -D warnings
+
+# The layering here is as follows:
+#  1. code formatting
+#  2. absence of lints
+#  3. absence of errors and warnings on Linux/x86
+#  4. cross compilation on Windows and Linux/ARM
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.3
+      - name: Install toolchain
+        run: curl https://sh.rustup.rs -sSf | sh -s -- --profile default --default-toolchain stable  -y
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    needs: fmt
+    name: cargo +${{ matrix.toolchain }} clippy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        toolchain: [stable]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.3
+
+      - name: Install toolchain
+        run: curl https://sh.rustup.rs -sSf | sh -s -- --profile default --default-toolchain ${{ matrix.toolchain }}  -y
+
+      - name: Get Rustc version
+        id: get-rustc-version
+        run: echo "version=$(rustc -V)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4.0.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.get-rustc-version.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install developer package dependencies
+        run: sudo apt-get update && sudo apt install -y libunwind-dev && sudo apt-get install libpulse-dev portaudio19-dev libasound2-dev libsdl2-dev gstreamer1.0-dev libgstreamer-plugins-base1.0-dev libavahi-compat-libdnssd-dev
+
+      - run: cargo install cargo-hack
+      - run: cargo hack --workspace --remove-dev-deps
+      - run: cargo clippy -p librespot-core --no-default-features
+      - run: cargo clippy -p librespot-core
+      - run: cargo hack clippy --each-feature -p librespot-discovery
+      - run: cargo hack clippy --each-feature -p librespot-playback
+      - run: cargo hack clippy --each-feature
+
+  test-linux:
+    name: cargo +${{ matrix.toolchain }} check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    needs: clippy
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        toolchain:
+          - "1.71" # MSRV (Minimum supported rust version)
+          - stable
+        experimental: [false]
+        # Ignore failures in beta
+        include:
+          - os: ubuntu-latest
+            toolchain: beta
+            experimental: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.3
+
+      - name: Install toolchain
+        run: curl https://sh.rustup.rs -sSf | sh -s -- --profile minimal --default-toolchain ${{ matrix.toolchain }}  -y
+
+      - name: Get Rustc version
+        id: get-rustc-version
+        run: echo "version=$(rustc -V)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4.0.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.get-rustc-version.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install developer package dependencies
+        run: sudo apt-get update && sudo apt install -y libunwind-dev && sudo apt-get install libpulse-dev portaudio19-dev libasound2-dev libsdl2-dev gstreamer1.0-dev libgstreamer-plugins-base1.0-dev libavahi-compat-libdnssd-dev
+
+      - run: cargo build --workspace --examples
+      - run: cargo test --workspace
+
+      - run: cargo install cargo-hack
+      - run: cargo hack --workspace --remove-dev-deps
+      - run: cargo check -p librespot-core --no-default-features
+      - run: cargo check -p librespot-core
+      - run: cargo hack check --each-feature -p librespot-discovery
+      - run: cargo hack check --each-feature -p librespot-playback
+      - run: cargo hack check --each-feature
+
+  test-windows:
+    needs: test-linux
+    name: cargo +${{ matrix.toolchain }} check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        toolchain:
+          - "1.71" # MSRV (Minimum supported rust version)
+          - stable
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.3
+
+      - name: Install toolchain
+        run: curl https://sh.rustup.rs -sSf | sh -s -- --profile minimal --default-toolchain ${{ matrix.toolchain }}  -y
+
+      - name: Get Rustc version
+        id: get-rustc-version
+        run: echo "version=$(rustc -V)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4.0.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.get-rustc-version.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+
+      - run: cargo build --workspace --examples
+      - run: cargo test --workspace
+
+      - run: cargo install cargo-hack
+      - run: cargo hack --workspace --remove-dev-deps
+      - run: cargo check --no-default-features
+      - run: cargo check
+
+  test-cross-arm:
+    name: cross +${{ matrix.toolchain }} build ${{ matrix.target }}
+    needs: test-linux
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        target: [armv7-unknown-linux-gnueabihf]
+        toolchain:
+          - "1.71" # MSRV (Minimum supported rust version)
+          - stable
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.3
+
+      - name: Install toolchain
+        run: curl https://sh.rustup.rs -sSf | sh -s -- --profile minimal --default-toolchain ${{ matrix.toolchain }}  -y
+
+      - name: Get Rustc version
+        id: get-rustc-version
+        run: echo "version=$(rustc -V)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4.0.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-${{ steps.get-rustc-version.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install cross
+        run: cargo install cross || true
+      - name: Build
+        run: cross build --target ${{ matrix.target }} --no-default-features

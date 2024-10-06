@@ -1,0 +1,45 @@
+# Full CI matrix on all pushes to master branch
+name: macOS CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - '**.yml'
+      - '**.yaml'
+
+jobs:
+  # Runs full project on multiple JDKs
+  testmatrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Baseline support, Current LTS, Current GA, Current EA
+        java: [11, 17, 21]
+        os: [macos-11, macos-12, macos-13, macos-14]
+        include:
+          - os: flyci-macos-large-latest-m1
+            java: 21
+      fail-fast: false
+    name: JDK ${{ matrix.java }}, ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          cache: 'maven'
+      - name: Test with Maven
+        run: ./mvnw clean test -B
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Coverage
+        if: contains(matrix.java, '11') && contains(matrix.os, 'macos-12')
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

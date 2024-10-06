@@ -1,0 +1,70 @@
+# This workflow is for a nightly run against WildFly upstream
+
+name: Manual WildFly Test Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "Runner OS"
+        required: true
+        default: "ubuntu-latest"
+        type: string
+      javaVersion:
+        description: "Java Version"
+        required: true
+        default: "17"
+        type: string
+      wildfly-branch:
+        description: "WildFly Branch"
+        required: true
+        default: "main"
+        type: string
+      wildfly-repo:
+        description: "WildFly Repository"
+        required: true
+        default: "wildfly/wildfly"
+        type: string
+
+jobs:
+  wildfly-build:
+    uses: wildfly/wildfly/.github/workflows/shared-wildfly-build.yml@main
+    with:
+      wildfly-branch: ${{ inputs.wildfly-branch }}
+      wildfly-repo: ${{ inputs.wildfly-repo }}
+
+  resteasy-build:
+    runs-on: ${{ inputs.os }}
+    needs: wildfly-build
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        id: download-m2
+        with:
+          name: wildfly-maven-repository
+          path: .
+      - name: Extract Maven Repo
+        shell: bash
+        run: |
+          tar -xzf wildfly-maven-repository.tar.gz -C ~
+      - name: Set up JDK ${{ inputs.javaVersion }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.javaVersion }}
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Build on ${{ inputs.os }} with Java ${{ inputs.javaVersion }}
+        run: mvn clean install '-Dserver.version=${{needs.wildfly-build.outputs.wildfly-version}}' '-Pjakarta-staging'
+      - name: Upload surefire reports
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: surefire-reports
+          path: '**/surefire-reports/*'
+      - name: Upload server logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: server-logs
+          path: '**/*.log'

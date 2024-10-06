@@ -1,0 +1,300 @@
+# SPDX-FileCopyrightText: 2014 MicroPython & CircuitPython contributors (https://github.com/adafruit/circuitpython/graphs/contributors)
+#
+# SPDX-License-Identifier: MIT
+
+name: Build CI
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  scheduler:
+    runs-on: ubuntu-22.04
+    outputs:
+      docs: ${{ steps.set-matrix.outputs.docs }}
+      ports: ${{ steps.set-matrix.outputs.ports }}
+      windows: ${{ steps.set-matrix.outputs.windows }}
+      cp-version: ${{ steps.set-up-submodules.outputs.version }}
+    steps:
+    - name: Dump GitHub context
+      run: echo "$GITHUB_CONTEXT"
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+    - name: Set up repository
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+        show-progress: false
+        fetch-depth: 1
+    - name: Set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+    - name: Duplicate USB VID/PID check
+      run: python3 -u -m tools.ci_check_duplicate_usb_vid_pid
+    - name: Set up submodules
+      id: set-up-submodules
+      uses: ./.github/actions/deps/submodules
+      with:
+        action: cache
+        version: true
+    - name: Set up external
+      uses: ./.github/actions/deps/external
+      with:
+        action: cache
+    - name: Set up mpy-cross
+      uses: ./.github/actions/mpy_cross
+      with:
+        cp-version: ${{ steps.set-up-submodules.outputs.version }}
+        download: false
+    - name: Get last commit with checks
+      id: get-last-commit-with-checks
+      if: github.event_name == 'pull_request'
+      working-directory: tools
+      run: python3 -u ci_changes_per_commit.py
+      env:
+        REPO: ${{ github.repository }}
+        PULL: ${{ github.event.number }}
+        GITHUB_TOKEN: ${{ github.token }}
+        EXCLUDE_COMMIT: ${{ github.event.pull_request.head.sha }}
+    - name: Set head sha (pull)
+      if: github.event_name == 'pull_request'
+      run: echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+    - name: Set base sha (pull)
+      if: github.event_name == 'pull_request'
+      run: git cat-file -e $SHA && echo "BASE_SHA=$SHA" >> $GITHUB_ENV || true
+      env:
+        SHA: ${{ steps.get-last-commit-with-checks.outputs.commit_sha || github.event.pull_request.base.sha }}
+    - name: Set head sha (push)
+      if: github.event_name == 'push'
+      run: echo "HEAD_SHA=${{ github.event.after }}" >> $GITHUB_ENV
+    - name: Set base sha (push)
+      if: github.event_name == 'push'
+      run: git cat-file -e $SHA && echo "BASE_SHA=$SHA" >> $GITHUB_ENV || true
+      env:
+        SHA: ${{ github.event.before }}
+    - name: Set matrix
+      id: set-matrix
+      run: python3 -u ci_set_matrix.py
+      working-directory: tools
+      env:
+        LAST_FAILED_JOBS: ${{ steps.get-last-commit-with-checks.outputs.check_runs }}
+
+  tests:
+    needs: scheduler
+    uses: ./.github/workflows/run-tests.yml
+    with:
+      cp-version: ${{ needs.scheduler.outputs.cp-version }}
+
+  mpy-cross:
+    needs: scheduler
+    if: needs.scheduler.outputs.ports != '{}'
+    uses: ./.github/workflows/build-mpy-cross.yml
+    secrets: inherit
+    with:
+      cp-version: ${{ needs.scheduler.outputs.cp-version }}
+
+  mpy-cross-mac:
+    runs-on: macos-11
+    needs: scheduler
+    if: needs.scheduler.outputs.ports != '{}'
+    env:
+      CP_VERSION: ${{ needs.scheduler.outputs.cp-version }}
+    steps:
+    - name: Set up repository
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+        show-progress: false
+        fetch-depth: 1
+    - name: Set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+    - name: Set up submodules
+      uses: ./.github/actions/deps/submodules
+    - name: Versions
+      run: |
+        gcc --version
+        python3 --version
+        msgfmt --version
+    - name: Build mpy-cross
+      run: make -C mpy-cross -j4
+    - uses: actions/upload-artifact@v4
+      with:
+        name: mpy-cross-macos-11-x64
+        path: mpy-cross/build/mpy-cross
+    - name: Build mpy-cross (arm64)
+      run: make -C mpy-cross -j4 -f Makefile.m1 V=2
+    - uses: actions/upload-artifact@v4
+      with:
+        name: mpy-cross-macos-11-arm64
+        path: mpy-cross/build-arm64/mpy-cross-arm64
+    - name: Make universal binary
+      run: lipo -create -output mpy-cross-macos-universal mpy-cross/build/mpy-cross mpy-cross/build-arm64/mpy-cross-arm64
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mpy-cross-macos-11-universal
+        path: mpy-cross-macos-universal
+    - name: Upload to S3
+      if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository_owner == 'adafruit') ||
+          (github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'rerequested'))
+      run: |
+        [ -z "$AWS_ACCESS_KEY_ID" ] || aws s3 cp mpy-cross-macos-universal s3://adafruit-circuit-python/bin/mpy-cross/macos-11/mpy-cross-macos-11-${{ env.CP_VERSION }}-universal --no-progress --region us-east-1
+        [ -z "$AWS_ACCESS_KEY_ID" ] || aws s3 cp mpy-cross/build-arm64/mpy-cross-arm64 s3://adafruit-circuit-python/bin/mpy-cross/macos-11/mpy-cross-macos-11-${{ env.CP_VERSION }}-arm64 --no-progress --region us-east-1
+        [ -z "$AWS_ACCESS_KEY_ID" ] || aws s3 cp mpy-cross/build/mpy-cross s3://adafruit-circuit-python/bin/mpy-cross/macos-11/mpy-cross-macos-11-${{ env.CP_VERSION }}-x64 --no-progress --region us-east-1
+      env:
+        AWS_PAGER: ''
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  docs:
+    runs-on: ubuntu-22.04
+    needs: scheduler
+    if: needs.scheduler.outputs.docs == 'True'
+    env:
+      CP_VERSION: ${{ needs.scheduler.outputs.cp-version }}
+    steps:
+    - name: Set up repository
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+        show-progress: false
+        fetch-depth: 1
+    - name: Set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+    - name: Set up submodules
+      uses: ./.github/actions/deps/submodules
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y latexmk librsvg2-bin texlive-fonts-recommended texlive-latex-recommended texlive-latex-extra
+        pip install -r requirements-doc.txt
+    - name: Build and Validate Stubs
+      run: make check-stubs -j4
+    - uses: actions/upload-artifact@v4
+      with:
+        name: stubs
+        path: circuitpython-stubs/dist/*
+    - name: Test Documentation Build (HTML)
+      run: sphinx-build -E -W -b html -D version=${{ env.CP_VERSION }} -D release=${{ env.CP_VERSION }} . _build/html
+    - uses: actions/upload-artifact@v4
+      with:
+        name: docs-html
+        path: _build/html
+    - name: Test Documentation Build (LaTeX/PDF)
+      run: |
+        make latexpdf
+    - uses: actions/upload-artifact@v4
+      with:
+        name: docs-latexpdf
+        path: _build/latex
+    - name: Upload to S3
+      uses: ./.github/actions/upload_aws
+      with:
+        source: circuitpython-stubs/dist/*.tar.gz
+        destination: stubs/circuitpython-stubs-${{ env.CP_VERSION }}.tar.gz
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    - name: Upload stubs to PyPi
+      if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'rerequested')
+      env:
+        TWINE_USERNAME: ${{ secrets.pypi_username }}
+        TWINE_PASSWORD: ${{ secrets.pypi_password }}
+      run: |
+        # python -m build was run by 'make stubs'
+        [ -z "$TWINE_USERNAME" ] || echo "Uploading dev release to PyPi"
+        [ -z "$TWINE_USERNAME" ] || twine upload circuitpython-stubs/dist/*
+
+  windows:
+    runs-on: windows-2022
+    needs: scheduler
+    if: needs.scheduler.outputs.windows == 'True'
+    env:
+      CP_VERSION: ${{ needs.scheduler.outputs.cp-version }}
+    defaults:
+      run:
+        # We define a custom shell script here, although `msys2.cmd` does neither exist nor is it available in the PATH yet
+        shell: msys2 {0}
+    steps:
+    # We want to change the configuration of the git command that actions/checkout will be using
+    # (since it is not possible to set autocrlf through the action yet, see actions/checkout#226).
+    - run: git config --global core.autocrlf input
+      shell: bash
+    - name: Check python coding (cmd)
+      run: python -c "import sys, locale; print(sys.getdefaultencoding(), locale.getpreferredencoding(False))"
+      shell: cmd
+    # We use a JS Action, which calls the system terminal or other custom terminals directly, if required
+    - uses: msys2/setup-msys2@v2
+      with:
+        install: base-devel git wget unzip gcc python-pip
+    # The goal of this was to test how things worked when the default file encoding (locale.getpreferedencoding())
+    # was not UTF-8. However, msys2 python does use utf-8 as the preferred file encoding, and using actions/setup-python
+    # python3.8 gave a broken build, so we're not really testing what we wanted to test.
+    # However, commandline length limits are being tested so that does some good.
+    - name: Check python coding (msys2)
+      run: |
+        locale -v
+        which python; python --version
+        python -c "import sys, locale; print(sys.getdefaultencoding(), locale.getpreferredencoding(False))"
+        which python3; python3 --version
+        python3 -c "import sys, locale; print(sys.getdefaultencoding(), locale.getpreferredencoding(False))"
+    - name: Install dependencies
+      run: |
+        wget --no-verbose -O gcc-arm.zip https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-mingw-w64-i686-arm-none-eabi.zip
+        unzip -q -d /tmp gcc-arm.zip
+        tar -C /tmp/arm-gnu-toolchain* -cf - . | tar -C /usr/local -xf -
+        pip install wheel
+        # requirements_dev.txt doesn't install on windows. (with msys2 python)
+        # instead, pick a subset for what we want to do
+        pip install cascadetoml jinja2 typer click intelhex
+        # check that installed packages work....?
+        which python; python --version; python -c "import cascadetoml"
+        which python3; python3 --version; python3 -c "import cascadetoml"
+    - name: Set up repository
+      uses: actions/checkout@v4
+      with:
+        submodules: false
+        show-progress: false
+        fetch-depth: 1
+    - name: Set up submodules
+      uses: ./.github/actions/deps/submodules
+    - name: build mpy-cross
+      run: make -j4 -C mpy-cross
+    - name: build rp2040
+      run: make -j4 -C ports/raspberrypi BOARD=adafruit_feather_rp2040 TRANSLATION=de_DE
+    - name: build samd21
+      run: make -j4 -C ports/atmel-samd BOARD=feather_m0_express TRANSLATION=zh_Latn_pinyin
+    - name: build samd51
+      run: make -j4 -C ports/atmel-samd BOARD=feather_m4_express TRANSLATION=es
+    - name: build nordic
+      run: make -j4 -C ports/nordic BOARD=feather_nrf52840_express TRANSLATION=fr
+    - name: build stm
+      run: make -j4 -C ports/stm BOARD=feather_stm32f405_express TRANSLATION=pt_BR
+    # I gave up trying to do esp builds on windows when I saw
+    # ERROR: Platform MINGW64_NT-10.0-17763-x86_64 appears to be unsupported
+    # https://github.com/espressif/esp-idf/issues/7062
+
+  ports:
+    needs: [scheduler, mpy-cross, tests]
+    if: needs.scheduler.outputs.ports != '{}'
+    uses: ./.github/workflows/build-boards.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix:
+        port: ${{ fromJSON(needs.scheduler.outputs.ports).ports }}
+    with:
+      boards: ${{ toJSON(fromJSON(needs.scheduler.outputs.ports)[matrix.port]) }}
+      cp-version: ${{ needs.scheduler.outputs.cp-version }}

@@ -1,0 +1,22 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "09:00"
+    timezone: UTC
+  labels:
+    - "automerge"
+  open-pull-requests-limit: 6
+  ignore:
+    - dependency-name: "cbindgen"
+- package-ecosystem: npm
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "10:00"
+    timezone: UTC
+  open-pull-requests-limit: 12
+  labels:
+    - "automerge"

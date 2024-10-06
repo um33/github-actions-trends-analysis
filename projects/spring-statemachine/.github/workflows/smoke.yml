@@ -1,0 +1,44 @@
+name: Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        java: [ 17 ]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: adopt
+        java-version: ${{ matrix.java }}
+        cache: gradle
+    - name: Build with Gradle
+      run: ./gradlew clean build -PstatemachineIncludeTags=smoke
+    - name: Tar Build Logs
+      if: ${{ failure() }}
+      run: |
+        mkdir -p build
+        tar -zc --ignore-failed-read --file build/buildlogs.tar.gz */build/reports */*/build/reports
+    - name: Upload Build Logs
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: buildlogs
+        path: build/buildlogs.tar.gz

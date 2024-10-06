@@ -1,0 +1,55 @@
+name: CodeQL Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # The branches below must be a subset of the branches above.
+    branches: [main]
+  schedule:
+  - cron: '0 8 * * 6'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-codeql:
+    name: Analyze
+    runs-on: ubuntu-22.04
+
+    permissions:
+      security-events: write
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get -y -qq update
+        sudo apt-get -y -qq --no-install-recommends install \
+          cmake \
+          extra-cmake-modules \
+          libarchive-dev \
+          libgl1-mesa-dev \
+          libqt6opengl6-dev \
+          libsqlite3-dev \
+          libvulkan-dev \
+          libxcb-keysyms1-dev \
+          ninja-build \
+          qt6-base-private-dev \
+          qt6-webengine-dev \
+          qt6-webengine-dev-tools
+
+    - name: Configure & Build
+      uses: lukka/run-cmake@v10
+      with:
+        configurePreset: ninja-multi
+        buildPreset: ninja-multi-release
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3

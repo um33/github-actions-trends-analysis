@@ -1,0 +1,174 @@
+name: "CI: npm smoke test"
+
+on:
+  push:
+    tags:
+      - "v**"
+
+permissions: {}
+
+jobs:
+  release-smoke-test:
+    name: "${{ github.ref_name }} ${{ matrix.name }}"
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64-node-npm
+            runs-on: ubuntu-22.04
+            runtime: node
+            package-manager: npm
+          - name: linux-x64-node-pnpm
+            runs-on: ubuntu-22.04
+            runtime: node
+            package-manager: pnpm
+          - name: linux-x64-node-yarn
+            runs-on: ubuntu-22.04
+            runtime: node
+            package-manager: yarn
+          - name: linux-x64-node-yarn-pnp
+            runs-on: ubuntu-22.04
+            runtime: node
+            package-manager: yarn-pnp
+          - name: linux-x64-deno
+            runs-on: ubuntu-22.04
+            runtime: deno
+          - name: linux-x64-bun
+            runs-on: ubuntu-22.04
+            runtime: bun
+
+          - name: darwin-x64-node-npm
+            runs-on: macos-11
+            runtime: node
+            package-manager: npm
+          - name: darwin-x64-node-pnpm
+            runs-on: macos-11
+            runtime: node
+            package-manager: pnpm
+          - name: darwin-x64-node-yarn
+            runs-on: macos-11
+            runtime: node
+            package-manager: yarn
+          - name: darwin-x64-node-yarn-pnp
+            runs-on: macos-11
+            runtime: node
+            package-manager: yarn-pnp
+          - name: darwin-x64-deno
+            runs-on: macos-11
+            runtime: deno
+          - name: darwin-x64-bun
+            runs-on: macos-11
+            runtime: bun
+
+          - name: win32-x64-node-npm
+            runs-on: windows-2019
+            runtime: node
+            package-manager: npm
+          - name: win32-x64-node-pnpm
+            runs-on: windows-2019
+            runtime: node
+            package-manager: pnpm
+          - name: win32-x64-node-yarn
+            runs-on: windows-2019
+            runtime: node
+            package-manager: yarn
+          - name: win32-x64-node-yarn-pnp
+            runs-on: windows-2019
+            runtime: node
+            package-manager: yarn-pnp
+          - name: win32-x64-deno
+            runs-on: windows-2019
+            runtime: deno
+
+    steps:
+      - name: Install Node.js
+        if: ${{ matrix.runtime == 'node' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install pnpm
+        if: ${{ matrix.package-manager == 'pnpm' }}
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - name: Install Deno
+        if: ${{ matrix.runtime == 'deno' }}
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Install Bun
+        if: ${{ matrix.runtime == 'bun' }}
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Version
+        id: version
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setOutput('semver', context.ref.replace('refs/tags/v',''))
+      - name: Create package.json
+        uses: DamianReeves/write-file-action@v1.3
+        with:
+          path: package.json
+          contents: |
+            {
+              "dependencies": {
+                "sharp": "${{ steps.version.outputs.semver }}"
+              },
+              "type": "module"
+            }
+      - name: Create release.mjs
+        uses: DamianReeves/write-file-action@v1.3
+        with:
+          path: release.mjs
+          contents: |
+            import { deepStrictEqual } from 'node:assert';
+            import sharp from 'sharp';
+            deepStrictEqual(['.jpg', '.jpeg', '.jpe', '.jfif'], sharp.format.jpeg.input.fileSuffix);
+
+      - name: Run with Node.js + npm
+        if: ${{ matrix.package-manager == 'npm' }}
+        run: |
+          npm install --ignore-scripts
+          node release.mjs
+
+      - name: Run with Node.js + pnpm
+        if: ${{ matrix.package-manager == 'pnpm' }}
+        run: |
+          pnpm install --ignore-scripts
+          node release.mjs
+
+      - name: Run with Node.js + yarn
+        if: ${{ matrix.package-manager == 'yarn' }}
+        run: |
+          corepack enable
+          yarn set version stable
+          yarn config set enableImmutableInstalls false
+          yarn config set enableScripts false
+          yarn config set nodeLinker node-modules
+          yarn install
+          node release.mjs
+
+      - name: Run with Node.js + yarn pnp
+        if: ${{ matrix.package-manager == 'yarn-pnp' }}
+        run: |
+          corepack enable
+          yarn set version stable
+          yarn config set enableImmutableInstalls false
+          yarn config set enableScripts false
+          yarn config set nodeLinker pnp
+          yarn install
+          yarn node release.mjs
+
+      - name: Run with Deno
+        if: ${{ matrix.runtime == 'deno' }}
+        run: deno run --allow-read --allow-ffi release.mjs
+
+      - name: Run with Bun
+        if: ${{ matrix.runtime == 'bun' }}
+        run: |
+          bun install --ignore-scripts
+          bun release.mjs

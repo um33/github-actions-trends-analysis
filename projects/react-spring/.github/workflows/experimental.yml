@@ -1,0 +1,40 @@
+name: 'Experimental Releases'
+
+on:
+  workflow_dispatch:
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+jobs:
+  experimental:
+    name: 'Experimental Release'
+    if: github.repository == 'pmndrs/react-spring'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+
+      - name: Setup npmrc
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+
+      - name: Install
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build-ci
+
+      - run: ./scripts/version-and-publish.sh
+        env:
+          VERSION: '${{ github.sha }}'
+          DIST_TAG: experimental

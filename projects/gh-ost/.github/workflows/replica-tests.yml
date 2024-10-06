@@ -1,0 +1,24 @@
+name: migration tests
+
+on: [pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        version: [mysql-5.7.25,mysql-8.0.16,PerconaServer-8.0.21]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: migration tests
+      env:
+        TEST_MYSQL_VERSION: ${{ matrix.version }}
+      run:  script/cibuild-gh-ost-replica-tests

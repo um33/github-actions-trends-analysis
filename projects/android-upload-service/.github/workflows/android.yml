@@ -1,0 +1,51 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  android-test:
+    runs-on: macos-latest
+    if: ${{ false }} # skip job as it currently does not support Android API 31
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: run tests
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 33
+        script: ./gradlew connectedCheck
+
+  unit-test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: set up JDK
+      uses: actions/setup-java@v1
+      with:
+        java-version: 17
+    - name: Unit Test
+      run: ./gradlew testDebugUnitTest
+    - name: Android Test Report
+      uses: asadmansr/android-test-report-action@v1.2.0
+      if: ${{ always() }} # IMPORTANT: run Android Test Report regardless of result
+    - name: Build with Gradle
+      run: ./gradlew clean build
+
+  build-demo-app:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: set up JDK
+      uses: actions/setup-java@v1
+      with:
+        java-version: 17
+    - name: Build with Gradle
+      run: cd examples/app && ./gradlew clean assembleDebug

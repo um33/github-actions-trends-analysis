@@ -1,0 +1,28 @@
+name: tests
+
+on:
+  pull_request:
+    paths-ignore:
+      - '*.md'
+  schedule:
+    - cron:  0 23 * * *
+
+jobs:
+  build:
+    name: Run Go tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest, ubuntu-latest ]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v3
+      with:
+        go-version-file: go.mod
+        cache: true
+        cache-dependency-path: go.sum
+
+    - run: make test
+

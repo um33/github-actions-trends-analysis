@@ -1,0 +1,25 @@
+on:
+  schedule:
+  - cron: '30 19 * * *'
+name: Nightly
+jobs:
+  monkey-test:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target: [race-monkey-test, race-ondisk-monkey-test, memfs-monkey-test, memfs-ondisk-monkey-test]
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19.x
+    - name: Test
+      env:
+        TARGET: ${{ matrix.target }}
+      run: |
+        git clone https://github.com/lni/drummer
+        sudo apt-get install librocksdb-dev
+        cd drummer
+        go get github.com/lni/dragonboat/v4@master
+        make test
+        make $TARGET

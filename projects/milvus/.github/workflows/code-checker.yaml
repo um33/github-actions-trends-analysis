@@ -1,0 +1,113 @@
+name: Code Checker
+# TODO: do not trigger action for some document file update
+
+# This workflow is triggered on pushes or pull request to the repository.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    # file paths to consider in the event. Optional; defaults to all.
+    paths:
+      - 'scripts/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'cmd/**'
+      - 'build/**'
+      - 'tests/integration/**'
+      - '.github/workflows/code-checker.yaml'
+      - '.env'
+      - docker-compose.yml
+      - Makefile
+      - '!**.md'
+      - '!build/ci/jenkins/**'
+      # FIXME(wxyu): not need to run code check, update the ci-passed rules and remove these two lines
+      - go.mod
+      - go.sum
+      - .golangci.yml
+      - rules.go
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ubuntu:
+    name: Code Checker AMD64 Ubuntu 20.04
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        if: ${{ ! startsWith(runner.name, 'self') }} # skip this step if it is self-hosted runner
+        with:
+          root-reserve-mb: 20480
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download Caches
+        uses: ./.github/actions/cache
+        with:
+          os: 'ubuntu20.04'
+      - name: Code Check
+        env:
+          OS_NAME: 'ubuntu20.04'
+        run: |
+          ./build/builder.sh /bin/bash -c "make check-proto-product && make verifiers"
+
+  amazonlinux:
+    name: Code Checker Amazonlinux 2023
+    # Run in amazonlinux docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        if: ${{ ! startsWith(runner.name, 'self') }} # skip this step if it is self-hosted runner
+        with:
+          root-reserve-mb: 20480
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download Caches
+        uses: ./.github/actions/cache
+        with:
+          os: 'amazonlinux2023'
+      - name: Code Check
+        run: |
+          sed -i 's/ubuntu20.04/amazonlinux2023/g' .env
+          ./build/builder.sh /bin/bash -c "make install"
+
+  rockylinux:
+    name: Code Checker rockylinux8
+    # Run in amazonlinux docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        if: ${{ ! startsWith(runner.name, 'self') }} # skip this step if it is self-hosted runner
+        with:
+          root-reserve-mb: 20480
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download Caches
+        uses: ./.github/actions/cache
+        with:
+          os: 'rockylinux8'
+      - name: Code Check
+        run: |
+          sed -i 's/ubuntu20.04/rockylinux8/g' .env
+          ./build/builder.sh /bin/bash -c "make install"

@@ -1,0 +1,275 @@
+---
+name: Release
+
+on:
+  push:
+    tags:
+      - v4.*
+  workflow_dispatch: {}
+
+jobs:
+  config:
+    name: Config
+    runs-on: 'ubuntu-latest'
+    strategy:
+      matrix:
+        image: ['quay.io/projectquay/golang:1.20']
+    container:
+      image: ${{ matrix.image }}
+    outputs:
+      version: ${{ steps.setup.outputs.version }}
+      tar_prefix: ${{ steps.setup.outputs.tar_prefix }}
+      is_prerelease: ${{ startsWith(github.ref, 'refs/tags/') && (contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc')) }}
+      image_tag: ${{ steps.setup.outputs.image_tag }}
+      image_repo: ${{ steps.setup.outputs.image_repo }}
+      build_image: ${{ steps.setup.outputs.build_image }}
+      build_go_version: ${{ steps.setup.outputs.build_go_version }}
+      build_cache_key: ${{ steps.setup.outputs.cache_key }}
+      chglog_version: ${{ '0.15.1' }}
+    steps:
+      - name: Setup
+        id: setup
+        run: |
+          : "${tag:="$(basename "${GITHUB_REF}")"}"
+          : "${repo:=$GITHUB_REPOSITORY}"
+          test "${GITHUB_REPOSITORY_OWNER}" = quay && repo="projectquay/${GITHUB_REPOSITORY##*/}" ||:
+          cat <<. >>"$GITHUB_OUTPUT"
+          version=$tag
+          tar_prefix=clair-${tag}/
+          image_tag=${tag#v}
+          image_repo=${repo}
+          build_image=${{ matrix.image }}
+          build_go_version=$(go version | cut -f 3 -d ' ' | sed 's/^go//;s/\.[0-9]\+$//')
+          cache_key=$(go version | md5sum - | cut -f 1 -d ' ')
+          .
+
+  release-archive:
+    name: Create Release Archive
+    runs-on: 'ubuntu-latest'
+    needs: [config]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/go-cache
+        with:
+          go: ${{ needs.config.outputs.build_go_version }}
+      - name: Create Release Archive
+        run: |
+          # Fix the checkout action overwriting the tag: (see https://github.com/actions/checkout/issues/882)
+          git fetch origin "+${GITHUB_REF}:${GITHUB_REF}"
+          git archive --prefix '${{ needs.config.outputs.tar_prefix }}' -o clair.tar "${GITHUB_REF}"
+          go mod vendor
+          tar -rf clair.tar --transform 's,^,${{ needs.config.outputs.tar_prefix }},' vendor
+          gzip clair.tar
+          mv clair.tar.gz clair-${{ needs.config.outputs.version }}.tar.gz
+      - name: Cache Changelog
+        uses: actions/cache@v4
+        id: chglog-cache
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          path: /usr/local/bin/git-chglog
+          key: changelog-${{ needs.config.outputs.chglog_version }}
+      - name: Fetch Changelog
+        if: steps.chglog-cache.outputs.cache-hit != 'true' && github.event_name != 'workflow_dispatch'
+        run: |
+          cd "$RUNNER_TEMP"
+          v="${{ needs.config.outputs.chglog_version }}"
+          f="git-chglog_${v}_linux_amd64.tar.gz"
+          curl -fsOSL "https://github.com/git-chglog/git-chglog/releases/download/v${v}/${f}"
+          tar xvf "${f}"
+          install git-chglog /usr/local/bin
+      - name: Generate changelog
+        shell: bash
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          v="${{ needs.config.outputs.version }}"
+          echo "creating change log for tag: ${v}"
+          git-chglog "${v}" > changelog
+      - name: Fake changelog
+        if: github.event_name == 'workflow_dispatch'
+        run: touch changelog
+      - name: Upload Release Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            clair-${{ needs.config.outputs.version }}.tar.gz
+            changelog
+          if-no-files-found: error
+
+  release-binaries:
+    name: Create Release Binaries
+    runs-on: 'ubuntu-latest'
+    container: ${{ needs.config.outputs.build_image }}
+    needs: [config, release-archive]
+    strategy:
+      matrix:
+        goarch: ['arm64', 'amd64', '386', 'ppc64le', 's390x']
+        goos: ['linux', 'windows', 'darwin']
+        exclude:
+          - goos: darwin
+            goarch: '386'
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: '386'
+          - goos: windows
+            goarch: 'ppc64le'
+          - goos: darwin
+            goarch: 'ppc64le'
+          - goos: windows
+            goarch: 's390x'
+          - goos: darwin
+            goarch: 's390x'
+    env:
+      GOOS: ${{matrix.goos}}
+      GOARCH: ${{matrix.goarch}}
+    steps:
+      - name: Fetch Artifacts
+        uses: actions/download-artifact@v4
+        id: download
+        with:
+          name: release
+      - name: Unpack
+        run: |
+          tar -xz -f ${{steps.download.outputs.download-path}}/clair-${{ needs.config.outputs.version }}.tar.gz --strip-components=1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ needs.config.outputs.build_go_version }}
+      - name: Build
+        # Build with path trimming, ELF debug stripping, and no VCS injection (should be done by the `git archive` process).
+        run: |
+          go build\
+            -trimpath -ldflags="-s -w" -buildvcs=false\
+            -o "clairctl-${{matrix.goos}}-${{matrix.goarch}}"\
+            ./cmd/clairctl
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: clairctl-${{matrix.goos}}-${{matrix.goarch}}
+          if-no-files-found: error
+      - name: Create Artifact on Failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: workspace-${{matrix.goos}}-${{matrix.goarch}}
+          path: ${{ github.workspace }}
+
+  release:
+    name: Release
+    runs-on: 'ubuntu-latest'
+    if: github.event_name == 'push'
+    needs: [config, release-archive, release-binaries]
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Fetch Artifacts
+        uses: actions/download-artifact@v4
+        id: download
+        with:
+          name: release
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        id: create_release
+        with:
+          name: ${{ needs.config.outputs.version }} Release
+          bodyFile: ${{steps.download.outputs.download-path}}/changelog
+          prerelease: ${{ needs.config.outputs.is_prerelease }}
+          artifacts: '${{steps.download.outputs.download-path}}/clair-*'
+
+  publish-container:
+    name: Publish Container
+    runs-on: 'ubuntu-latest'
+    needs: [config, release-archive, release]
+    steps:
+      - name: Fetch Artifacts
+        uses: actions/download-artifact@v4
+        id: download
+        with:
+          name: release
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - name: Extract Release
+        run: |
+          mkdir "${{ runner.temp }}/build"
+          tar -xz -f ${{steps.download.outputs.download-path}}/clair-${{ needs.config.outputs.version }}.tar.gz --strip-components=1 -C "${{ runner.temp }}/build"
+      - name: Build Container
+        uses: docker/build-push-action@v5
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: ${{ runner.temp }}/build
+          platforms: linux/amd64,linux/arm64,linux/ppc64le,linux/s390x
+          push: true
+          tags: |
+            quay.io/${{ needs.config.outputs.image_repo }}:${{ needs.config.outputs.image_tag }}
+      - name: Checkout
+        if: needs.config.outputs.is_prerelease == 'true'
+        uses: actions/checkout@v4
+      - name: Set Expiration
+        if: needs.config.outputs.is_prerelease == 'true'
+        uses: ./.github/actions/set-image-expiration
+        with:
+          repo: ${{ needs.config.outputs.image_repo }}
+          tag: ${{ needs.config.outputs.image_tag }}
+          token: ${{ secrets.QUAY_API_TOKEN }}
+
+  publish-binaries:
+    name: Publish Binaries
+    runs-on: 'ubuntu-latest'
+    needs: [release-archive, release]
+    strategy:
+      matrix:
+        goarch: ['arm64', 'amd64', '386', 'ppc64le', 's390x']
+        goos: ['linux', 'windows', 'darwin']
+        exclude:
+          - goos: darwin
+            goarch: '386'
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: '386'
+          - goos: darwin
+            goarch: ppc64le
+          - goos: windows
+            goarch: ppc64le
+          - goos: windows
+            goarch: 's390x'
+          - goos: darwin
+            goarch: 's390x'
+    steps:
+      - name: Fetch Archive
+        uses: actions/download-artifact@v4
+        id: download
+        with:
+          name: release
+      - name: Publish clairctl-${{matrix.goos}}-${{matrix.goarch}}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: ${{steps.download.outputs.download-path}}/clairctl-${{matrix.goos}}-${{matrix.goarch}}
+          asset_name: clairctl-${{matrix.goos}}-${{matrix.goarch}}
+          asset_content_type: application/octet-stream
+
+  deploy-documentation:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/documentation

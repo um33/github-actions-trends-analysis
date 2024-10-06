@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/**'
+
+jobs:
+
+  # build and test, then upload logs if failure
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        java: [ 17 ]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: adopt
+        java-version: ${{ matrix.java }}
+        cache: gradle
+    - name: Build with Gradle
+      run: ./gradlew clean build
+      env:
+        GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USER }}
+        GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
+        GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_SECRET_ACCESS_KEY }}
+    - name: Tar Build Logs
+      if: ${{ failure() }}
+      run: |
+        mkdir -p build
+        tar \
+          -zc \
+          --ignore-failed-read \
+          --file build/buildlogs.tar.gz \
+          */build/reports \
+          */*/build/reports
+    - name: Upload Build Logs
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: buildlogs
+        path: build/buildlogs.tar.gz
+
+  # if build job succeed, build without tests and publish
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: adopt
+        java-version: 17
+        cache: gradle
+    - uses: jfrog/setup-jfrog-cli@v4
+      with:
+        version: 2.52.10
+      env:
+        JF_ENV_SPRING: ${{ secrets.JF_ARTIFACTORY_SPRING }}
+
+    # setup non persistent config for jfrog gradle to use server defined in
+    # secret which points via virtual repo into spring local repo.
+    # modify default build name and number as we don't like how those
+    # gets used from action defaults.
+    - name: Configure JFrog Cli
+      run: |
+        jf gradlec \
+          --use-wrapper \
+          --uses-plugin \
+          --deploy-ivy-desc=false \
+          --server-id-resolve=repo.spring.io \
+          --server-id-deploy=repo.spring.io \
+          --repo-resolve=snapshot \
+          --repo-deploy=snapshot
+        echo JFROG_CLI_BUILD_NAME=spring-statemachine-main >> $GITHUB_ENV
+        echo JFROG_CLI_BUILD_NUMBER=$GITHUB_RUN_NUMBER >> $GITHUB_ENV
+
+    # as we already tested just build and publish
+    - name: Build and Publish Snapshot
+      run: |
+        jf gradle clean build -x test artifactoryPublish
+      env:
+        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
+        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}
+        GRADLE_ENTERPRISE_CACHE_USERNAME: ${{ secrets.GRADLE_ENTERPRISE_CACHE_USER }}
+        GRADLE_ENTERPRISE_CACHE_PASSWORD: ${{ secrets.GRADLE_ENTERPRISE_CACHE_PASSWORD }}
+        GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_SECRET_ACCESS_KEY }}
+    # publish build info so that we can see it in artifactory "builds"
+    - name: Publish Build Info
+      run: |
+        jf rt build-publish

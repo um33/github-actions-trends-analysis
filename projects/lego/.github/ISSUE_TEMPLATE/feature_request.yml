@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest an idea for this project.
+body:
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Welcome
+      options:
+        - label: Yes, I've searched similar issues on GitHub and didn't find any.
+          required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: How do you use lego?
+      options:
+        - Library
+        - Binary
+        - Docker image
+        - Through Traefik
+        - Through Caddy
+        - Through Terraform ACME provider
+        - Through Bitnami
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Detailed Description
+      placeholder: Description.
+    validations:
+      required: true

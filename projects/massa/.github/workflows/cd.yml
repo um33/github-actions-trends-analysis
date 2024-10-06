@@ -1,0 +1,143 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - TEST.*
+      - DEVN.*
+      - MAIN.*
+      - SECU.*
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        platform: [x86_64, arm64]
+        include:
+          - os: ubuntu-latest
+            platform: x86_64
+            target: x86_64-unknown-linux-gnu
+            name: release_linux.tar.gz
+          - os: ubuntu-latest
+            platform: arm64
+            target: aarch64-unknown-linux-gnu
+            name: release_linux_arm64.tar.gz
+          - os: windows-latest
+            platform: x86_64
+            target: x86_64-pc-windows-gnu
+            name: release_windows.zip
+          - os: macOS-latest
+            platform: x86_64
+            target: x86_64-apple-darwin
+            name: release_macos.tar.gz
+          - os: macOS-latest
+            platform: arm64
+            target: aarch64-apple-darwin
+            name: release_macos_aarch64.tar.gz
+        exclude:
+          - os: windows-latest
+            platform: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+      - uses: ilammy/setup-nasm@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.74.1
+          target: ${{ matrix.target }}
+          override: true
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions-rs/cargo@v1
+        if: matrix.platform != 'arm64'
+        with:
+          command: build
+          args: --profile release_prebuilt
+      - uses: actions-rs/cargo@v1
+        if: matrix.platform == 'arm64'
+        with:
+          use-cross: true
+          command: build
+          args: --profile release_prebuilt --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          mkdir massa && cd massa && mkdir massa-node && mkdir massa-client
+          if [[ "${{ matrix.platform }}" == "arm64" ]]
+          then
+            cp -v ../target/${{ matrix.target }}/release_prebuilt/massa-node massa-node/massa-node
+            cp -v ../target/${{ matrix.target }}/release_prebuilt/massa-client massa-client/massa-client
+          else
+            cp -v ../target/release_prebuilt/massa-node massa-node/massa-node
+            cp -v ../target/release_prebuilt/massa-client massa-client/massa-client
+          fi
+          cp -rv ../massa-node/config massa-node/config
+          cp -rv ../massa-node/base_config massa-node/base_config
+          cp -rv ../massa-node/storage massa-node/storage
+          cp -rv ../massa-client/config massa-client/config
+          cp -rv ../massa-client/base_config massa-client/base_config
+          cd ..
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]
+          then
+            7z a massa_${GITHUB_REF/refs\/tags\//}_${{ matrix.name }} massa
+          else
+            tar czvf massa_${GITHUB_REF/refs\/tags\//}_${{ matrix.name }} massa
+          fi
+          cd -
+      - name: Upload ${{ matrix.os }}_${{ matrix.platform }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: massa_artifacts_${{ matrix.name }}
+          path: |
+            massa_*.zip
+            massa_*.tar.gz
+          if-no-files-found: error
+      - name: Publish ${{ matrix.os }}_${{ matrix.platform }} artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            massa_*.zip
+            massa_*.tar.gz
+
+  checksum:
+    needs: release
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Move all artifacts to workspace
+        run: |
+          source_directory="artifacts"
+          release_directory="${{ github.workspace }}"
+          zip_pattern="massa_*.zip"
+          tar_pattern="massa_*.tar.gz"
+
+          mkdir -p "$release_directory"
+          find "$source_directory" -type f \( -name "$zip_pattern" -o -name "$tar_pattern" \) -exec mv -t "$release_directory" {} +
+      - name: Generate checksums file
+        uses: jmgilman/actions-generate-checksum@v1
+        with:
+          method: sha256
+          patterns: |
+            massa_*.zip
+            massa_*.tar.gz
+          output: checksums.txt
+      - name: Publish checksums file
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            checksums.txt

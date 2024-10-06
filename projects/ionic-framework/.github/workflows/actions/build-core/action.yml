@@ -1,0 +1,34 @@
+name: 'Build Ionic Core'
+description: 'Build Ionic Core'
+inputs:
+  ionicons-version:
+    description: 'The NPM tag of ionicons to install.'
+    type: string
+    required: false
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+    - name: Install Dependencies
+      run: npm install
+      working-directory: ./core
+      shell: bash
+    # If an Ionicons version was specified install that.
+    # Otherwise just use the version defined in the package.json.
+    - name: Install Ionicons Version
+      if: inputs.ionicons-version != ''
+      run: npm install ionicons@${{ inputs.ionicons-version }}
+      working-directory: ./core
+      shell: bash
+    - name: Build Core
+      run: npm run build -- --ci
+      working-directory: ./core
+      shell: bash
+    - uses: ./.github/workflows/actions/upload-archive
+      with:
+        name: ionic-core
+        output: core/CoreBuild.zip
+        paths: core/dist core/components core/css core/hydrate core/loader core/src/components.d.ts core/api.txt

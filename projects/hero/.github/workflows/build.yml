@@ -1,0 +1,37 @@
+on:
+  push:
+    branches:
+      - master
+name: Build
+jobs:
+  test:
+    name: Build
+    runs-on: macOS-latest
+    strategy:
+        matrix:
+          destination: [
+            'platform=Any iOS Simulator',
+            'platform=Any tvOS Simulator',
+            'platform=macOS,arch=x86_64',
+            'platform=macOS,arch=arm64',
+            'platform=macCatalyst,arch=x86_64',
+            'platform=macCatalyst,arch=arm64',
+            ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Build
+        run: |
+          pod install
+          set -o pipefail && \
+          xcodebuild clean build \
+          -workspace Hero.xcworkspace \
+          -scheme Hero \
+          -destination "${destination}" \
+          -parallelizeTargets -showBuildTimingSummary \
+          -enableCodeCoverage YES \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          | xcpretty
+        env:
+         destination: ${{ matrix.destination }}

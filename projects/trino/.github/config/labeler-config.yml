@@ -1,0 +1,44 @@
+# Pull Request Labeler Github Action Configuration: https://github.com/marketplace/actions/labeler
+"tests:hive":
+  - changed-files:
+    - any-glob-to-any-file: ['lib/trino-orc/**', 'lib/trino-parquet/**', 'lib/trino-hive-formats/**', 'plugin/trino-hive/**', 'testing/trino-product-tests/**', 'lib/trino-filesystem/**', 'lib/trino-filesystem-*/**']
+
+jdbc:
+  - changed-files:
+    - any-glob-to-any-file: 'client/trino-jdbc/**'
+
+bigquery:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-bigquery/**'
+
+delta-lake:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-delta-lake/**'
+
+hive:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-hive/**'
+
+hudi:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-hudi/**'
+
+iceberg:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-iceberg/**'
+
+mongodb:
+  - changed-files:
+    - any-glob-to-any-file: 'plugin/trino-mongodb/**'
+
+docs:
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**'
+
+release-notes:
+  - changed-files:
+    - any-glob-to-any-file: ['docs/src/main/sphinx/release/**', 'docs/src/main/sphinx/release.rst']
+
+ui:
+  - changed-files:
+    - any-glob-to-any-file: 'core/trino-main/src/main/resources/webapp/**'

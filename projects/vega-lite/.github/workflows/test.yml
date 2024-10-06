@@ -1,0 +1,117 @@
+name: Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Node
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          cache: 'yarn'
+          node-version: latest
+
+      - name: Install Node dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Tests
+        run: yarn jest test/
+
+      - name: Example tests
+        run: yarn jest examples/
+
+      - name: Build
+        run: yarn build
+
+  runtime-lint-coverage:
+    name: Runtime, Linting, and Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          cache: 'yarn'
+          node-version: latest
+
+      - name: Install Node dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Install extra dependencies for Puppeteer
+        run: sudo apt-get install libgbm1
+
+      - name: Build
+        run: yarn build:only
+
+      - name: Typechecks
+        run: yarn tsc
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Runtime tests
+        run: yarn test:runtime
+
+      - name: Test coverage
+        run: yarn jest test/ --collectCoverage=true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4.1.1
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  test-cli:
+    name: CLI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          cache: 'yarn'
+          node-version: latest
+
+      - name: Install Node dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Build
+        run: yarn build:only
+
+      - name: Compile Vega
+        run: |
+          bin/vl2vg examples/specs/bar.vl.json -p > bar.vg.json
+          cat bar.vg.json
+
+      - name: Diff compiled Vega
+        run: diff bar.vg.json examples/compiled/bar.vg.json
+
+      - name: Compile PNG, SVG, PDF
+        run: |
+          bin/vl2png examples/specs/bar.vl.json > bar.png
+          bin/vl2svg examples/specs/bar.vl.json > bar.svg
+          bin/vl2pdf examples/specs/bar.vl.json > bar.pdf
+
+      - name: Compile from stdin (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          bin/vl2vg -p < examples/specs/bar.vl.json > bar-stdin.vg.json
+          bin/vl2png < examples/specs/bar.vl.json > bar-stdin.png
+          bin/vl2svg < examples/specs/bar.vl.json > bar-stdin.svg
+          bin/vl2pdf < examples/specs/bar.vl.json > bar-stdin.pdf

@@ -1,0 +1,163 @@
+name: Pull Request Verification
+
+on:
+  pull_request
+
+jobs:
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: nuget/setup-nuget@v1
+      with:
+        nuget-api-key: ${{ secrets.NuGetAPIKey }}
+    - run: nuget restore WickedEngine.sln
+    - name: Build
+      shell: cmd
+      run: |
+        "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe" WickedEngine.sln /t:OfflineShaderCompiler /m /p:Configuration=Release /p:Platform=x64
+        cd "WickedEngine"
+        "../BUILD/x64/Release/OfflineShaderCompiler/OfflineShaderCompiler.exe" hlsl6 spirv shaderdump strip_reflection
+        cd ..
+        "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe" WickedEngine.sln /t:rebuild /m /p:Configuration=Release /p:Platform=x64
+    
+    - name: Move files
+      shell: cmd
+      run: |
+        move BUILD\x64\Release\Editor_Windows\Editor_Windows.exe .\
+        move Editor\config.ini .\
+        move Editor\startup.lua .\
+        move Editor\terrain .\
+        move Editor\languages .\
+        move Editor\fonts .\
+        move Content\Documentation .\
+        
+    - name: Package Editor
+      uses: actions/upload-artifact@v2
+      with:
+        name: Editor (Windows)
+        path: |
+          Documentation/
+          terrain/
+          languages/
+          fonts/
+          config.ini
+          startup.lua
+          Editor_Windows.exe
+
+  
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install libsdl2-dev
+
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(nproc)
+        echo "---Generating Shader Dump---"
+        cd WickedEngine
+        ./offlineshadercompiler spirv rebuild shaderdump
+        mv wiShaderDump.h ../../WickedEngine/
+        cd ..
+        echo "---Rebuilding with ShaderDump---"
+        make -B -j $(nproc)
+
+        
+    - name: Move binaries
+      run: |
+        mv build/Editor/WickedEngineEditor ./
+        mv Editor/config.ini ./
+        mv Editor/startup.lua ./
+        mv Editor/terrain ./
+        mv Editor/languages ./
+        mv Editor/fonts ./
+        mv Content/Documentation ./
+        
+    - name: Package Editor
+      uses: actions/upload-artifact@v2
+      with:
+        name: Editor (Linux)
+        path: |
+          Documentation/
+          terrain/
+          languages/
+          fonts/
+          config.ini
+          startup.lua
+          WickedEngineEditor
+
+  content:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Package Content
+      uses: actions/upload-artifact@v2
+      with:
+        name: Content
+        path: |
+          Content/models
+          Content/scripts
+
+    
+  #linux-steamdeck:
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #  - uses: actions/checkout@v2
+
+  #  - name: Install dependencies
+  #    run: |
+  #      sudo apt update
+  #      sudo apt install libsdl2-dev
+
+  #  - name: Build
+  #    run: |
+  #      mkdir build
+  #      echo "---Building Command Strings---"
+  #      echo -e "#!/bin/bash \
+  #      \nmkdir -p $(dirname $PWD) \
+  #      \nln -s /build $PWD \
+  #      \ncd /build/build \
+  #      \ncmake .. -DCMAKE_BUILD_TYPE=Release \
+  #      \nmake \
+  #      \necho \"---Generating Shader Dump---\" \
+  #      \ncd WickedEngine \
+  #      \n./offlineshadercompiler spirv rebuild shaderdump\nmv wiShaderDump.h ../../WickedEngine/ \
+  #      \necho \"---Rebuilding with ShaderDump---\" \
+  #      \ncd .. \
+  #      \nmake -B" > build.sh
+  #      chmod +x build.sh
+  #      echo "---Executing Containerized Build---"
+  #      podman run --name sniper -v $PWD:/build registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest /build/build.sh
+  #      podman container rm sniper
+        
+  #  - name: Move files
+  #    run: |
+  #      mv build/Editor/WickedEngineEditor ./
+  #      mv Editor/config.ini ./
+  #      mv Editor/startup.lua ./
+  #      mv Editor/terrain ./
+  #      mv Editor/languages ./
+  #      mv Editor/fonts ./
+  #      mv Content/Documentation ./
+        
+  #  - name: Package Editor
+  #    uses: actions/upload-artifact@v2
+  #    with:
+  #      name: Editor (Linux - Steam Deck)
+  #      path: |
+  #        Documentation/
+  #        terrain/
+  #        languages/
+  #        fonts/
+  #        config.ini
+  #        startup.lua
+  #        WickedEngineEditor

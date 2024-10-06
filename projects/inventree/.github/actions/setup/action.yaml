@@ -1,0 +1,95 @@
+name: 'Setup Enviroment'
+description: 'Setup the environment for general InvenTree tests'
+author: 'InvenTree'
+inputs:
+    python:
+        required: false
+        description: 'Install python.'
+        default: 'true'
+    npm:
+        required: false
+        description: 'Install npm.'
+        default: 'false'
+
+    install:
+        required: false
+        description: 'Install the InvenTree requirements?'
+        default: 'false'
+    dev-install:
+        required: false
+        description: 'Install the InvenTree development requirements?'
+        default: 'false'
+    update:
+        required: false
+        description: 'Should a full update cycle be run?'
+        default: 'false'
+
+    apt-dependency:
+        required: false
+        description: 'Extra APT package for install.'
+    pip-dependency:
+        required: false
+        description: 'Extra python package for install.'
+
+runs:
+    using: 'composite'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v4.1.1
+
+      # Python installs
+      - name: Set up Python ${{ env.python_version }}
+        if: ${{ inputs.python == 'true' }}
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # pin@v5.0.0
+        with:
+          python-version: ${{ env.python_version }}
+          cache: pip
+      - name: Install Base Python Dependencies
+        if: ${{ inputs.python == 'true' }}
+        shell: bash
+        run: |
+          python3 -m pip install -U pip
+          pip3 install invoke wheel uv
+      - name: Set the VIRTUAL_ENV variable for uv to work
+        run: echo "VIRTUAL_ENV=${Python_ROOT_DIR}" >> $GITHUB_ENV
+        shell: bash
+      - name: Install Specific Python Dependencies
+        if: ${{ inputs.pip-dependency }}
+        shell: bash
+        run: uv pip install ${{ inputs.pip-dependency }}
+
+      # NPM installs
+      - name: Install node.js ${{ env.node_version }}
+        if: ${{ inputs.npm == 'true' }}
+        uses: actions/setup-node@1a4442cacd436585916779262731d5b162bc6ec7  # pin to v3.8.2
+        with:
+          node-version: ${{ env.node_version }}
+          cache: 'npm'
+          cache-dependency-path: src/backend/package-lock.json
+      - name: Install npm packages
+        if: ${{ inputs.npm == 'true' }}
+        shell: bash
+        run: cd src/backend && npm install
+
+      # OS installs
+      - name: Install OS Dependencies
+        if: ${{ inputs.apt-dependency }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install ${{ inputs.apt-dependency }}
+          sudo apt-get install ${{ inputs.apt-dependency }}
+
+      # Invoke commands
+      - name: Install dev requirements
+        if: ${{ inputs.dev-install == 'true' ||inputs.install == 'true' }}
+        shell: bash
+        run: uv pip install -r src/backend/requirements-dev.txt
+      - name: Run invoke install
+        if: ${{ inputs.install == 'true' }}
+        shell: bash
+        run: invoke install --uv
+      - name: Run invoke update
+        if: ${{ inputs.update == 'true' }}
+        shell: bash
+        run: invoke update --uv

@@ -1,0 +1,56 @@
+name: Determine build parameters
+description: Determine Multipass build parameters (labels, snap channels etc.)
+
+inputs:
+  release-branch-re:
+    description: "Release branch pattern"
+    default: ^refs/heads/release/[0-9\.]+$
+  release-tag-re:
+    description: "Release tag pattern"
+    default: ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$
+
+outputs:
+  label:
+    description: Label to annotate the build version with
+    value: ${{ steps.build-params.outputs.label }}
+  channel:
+    description: Snap channel to publish to
+    value: ${{ steps.build-params.outputs.channel }}
+
+runs:
+  using: composite
+
+  steps:
+  - name: Determine build parameters
+    id: build-params
+    shell: bash
+    run: |
+      # Respect build parameters of the dispatch.
+      if [ ${{ github.event_name }} == "repository_dispatch" ]; then
+        echo "label=${{ github.event.client_payload.label }}" >> $GITHUB_OUTPUT
+
+      # If it's a pull request or `trying` push, annotate with `pr#` and publish to `edge/pr#`.
+      elif [ ${{ github.event_name }} == "pull_request" ]; then
+        echo "label=pr${{ github.event.number }}" >> $GITHUB_OUTPUT
+        echo "channel=edge/pr${{ github.event.number }}" >> $GITHUB_OUTPUT
+
+      # If it's a merge group, annotate with `ci#` and publish to `edge/ci#`.
+      elif [ ${{ github.event_name }} == "merge_group" ]; then
+        echo "label=ci${{ github.run_number }}" >> $GITHUB_OUTPUT
+        echo "channel=edge/ci${{ github.run_number}}" >> $GITHUB_OUTPUT
+
+      # If it's a release tag or branch, publish to the `beta` channel.
+      elif [[ ${{ github.ref }} =~ ${{ inputs.release-branch-re }} \
+        || ${{ github.ref }} =~ ${{ inputs.release-tag-re }} ]]; then
+        echo "channel=beta" >> $GITHUB_OUTPUT
+
+      # All other pushes annotate with the CI run number.
+      # This includes `main`, as `edge` will get published from automatic builds on snapcraft.io.
+      elif [[ ${{ github.event_name }} == "push" || ${{ github.event_name }} == "workflow_dispatch" ]]; then
+        echo "label=ci${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      # This shouldn't happen.
+      else
+          echo "##[error] Build parameter determination fell through"
+          exit 1
+      fi

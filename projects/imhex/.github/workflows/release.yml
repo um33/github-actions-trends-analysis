@@ -1,0 +1,173 @@
+permissions:
+  contents: write
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  release-update-repos:
+    runs-on: ubuntu-latest
+    name: Release Update Repos
+
+    steps:
+      - name: 🧰 Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ImHex
+
+      - name: 📜 Verify version and set version variable
+        run: |
+          set -x
+          project_version=`cat ImHex/VERSION`
+          tag_version="${{github.event.release.tag_name}}"
+          tag_version="${tag_version:1}"
+          if [ "$project_version" != "$tag_version" ]; then
+            echo "::warning::$project_version and $tag_version are not the same ! Refusing to populate release"
+            exit 1
+          fi
+
+          echo "IMHEX_VERSION=$project_version" >> $GITHUB_ENV
+
+      - name: 🎫 Create PatternLanguage release
+        uses: ncipollo/release-action@v1
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        if: "${{ env.RELEASE_TOKEN != '' }}"
+        with:
+          tag: ImHex-v${{ env.IMHEX_VERSION }}
+          repo: PatternLanguage
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: 🎫 Create ImHex-Patterns release
+        uses: ncipollo/release-action@v1
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        if: "${{ env.RELEASE_TOKEN != '' }}"
+        with:
+          tag: ImHex-v${{ env.IMHEX_VERSION }}
+          repo: ImHex-Patterns
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: 🎫 Create imhex-download-sdk release
+        uses: ncipollo/release-action@v1
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        if: "${{ env.RELEASE_TOKEN != '' }}"
+        with:
+          tag: v${{ env.IMHEX_VERSION }}
+          repo: imhex-download-sdk
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+  release-upload-artifacts:
+    runs-on: ubuntu-latest
+    name: Release Upload Artifacts
+
+    steps:
+      - name: 🧰 Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ImHex
+          submodules: recursive
+
+      - name: 📜 Verify version and set version variable
+        run: |
+          set -x
+          project_version=`cat ImHex/VERSION`
+          tag_version="${{github.event.release.tag_name}}"
+          tag_version="${tag_version:1}"
+          if [ "$project_version" != "$tag_version" ]; then
+            echo "::warning::$project_version and $tag_version are not the same ! Refusing to populate release"
+            exit 1
+          fi
+
+          echo "IMHEX_VERSION=$project_version" >> $GITHUB_ENV
+
+      - name: 🗜️ Create tarball from sources with dependencies
+        run: tar --exclude-vcs -czvf Full.Sources.tar.gz ImHex
+
+      - name: ⬇️ Download artifacts from latest workflow
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          workflow: build.yml
+          branch: ${{ github.event.release.target_commitish }}
+          workflow_conclusion: success
+          skip_unpack: true
+
+      - name: 🗜️ Unzip files when needed
+        run: |
+          set -x
+          for zipfile in ./*.zip
+          do
+              if [ `zipinfo -1 "$zipfile" | wc -l` -eq 1 ];
+              then
+                echo "unzipping $zipfile"
+                unzip "$zipfile"
+                rm "$zipfile"
+              else
+                echo "keeping $zipfile zipped"
+              fi
+          done
+
+      - name: 🟩 Rename artifacts when needed
+        run: |
+          mv "Windows Portable x86_64.zip" imhex-${{ env.IMHEX_VERSION }}-Windows-Portable-x86_64.zip
+          mv "Windows Portable NoGPU x86_64.zip" imhex-${{ env.IMHEX_VERSION }}-Windows-Portable-NoGPU-x86_64.zip
+
+      - name: ⬆️ Upload everything to release
+        uses: softprops/action-gh-release@4634c16e79c963813287e889244c50009e7f0981
+        with:
+          files: '*'
+
+      - name: ✒️ Prepare PKGBUILD
+        run: |
+          set -x
+          cp ImHex/dist/Arch/PKGBUILD .
+          
+          hash=`md5sum imhex-${{ env.IMHEX_VERSION }}-ArchLinux-x86_64.pkg.tar.zst | cut -d ' ' -f 1`
+
+          sed -i 's/%version%/${{ env.IMHEX_VERSION }}/g' PKGBUILD
+          sed -i "s/(SKIP)/($hash)/g" PKGBUILD
+
+      - name: ⬆️ Publish AUR package
+
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        if: "${{ env.AUR_SSH_PRIVATE_KEY != '' }}"
+
+        uses: KSXGitHub/github-actions-deploy-aur@v2
+        with:
+          pkgname: imhex-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: iTrooz
+          commit_email: itrooz@protonmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Bump to version ${{ env.IMHEX_VERSION }}
+          ssh_keyscan_types: rsa,dsa,ecdsa,ed25519
+
+  release-update-winget:
+    name: Release update winget package
+    needs: release-upload-artifacts
+    runs-on: windows-latest
+    steps:
+      - name: ⬇️ Download dependencies
+        shell: pwsh
+        run: |
+          iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+      - name: ⬆️ Update winget manifest
+        shell: pwsh
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        if: "${{ env.WINGET_GITHUB_TOKEN != '' }}"
+        run: |
+          $tagname = $env:GITHUB_REF.Replace("refs/tags/", "")
+          $version = $tagname.Replace("v", "")
+          $url = "https://github.com/WerWolv/ImHex/releases/download/${tagname}/imhex-${version}-Windows-x86_64.msi"
+          .\wingetcreate.exe update WerWolv.ImHex -u $url --version $version
+          if ($version -notmatch "-") {
+            .\wingetcreate.exe submit .\manifests\w\WerWolv\ImHex\${version}\ --token $env:WINGET_GITHUB_TOKEN
+          }

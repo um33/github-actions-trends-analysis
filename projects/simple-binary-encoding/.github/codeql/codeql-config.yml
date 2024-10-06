@@ -1,0 +1,28 @@
+name: "SBE CodeQL Scanning"
+
+queries:
+  - uses: security-and-quality
+
+query-filters:
+  - exclude:
+      id: java/iterator-implements-iterable
+  - exclude:
+      id: java/missing-override-annotation
+  - exclude:
+      id: java/uncaught-number-format-exception
+  - exclude:
+      id: java/unused-parameter
+  - exclude:
+      id: java/confusing-method-signature
+  - exclude:
+      id: java/local-shadows-field
+  - exclude:
+      id: cs/useless-assignment-to-local
+  - exclude:
+      id: cs/complex-block
+  - exclude:
+      id: cs/constant-comparison
+  - exclude:
+      id: cpp/trivial-switch
+  - exclude:
+      id: cpp/poorly-documented-function

@@ -1,0 +1,30 @@
+playground:
+  - playground/*
+  - playground/**/*
+
+accessibility:
+  - packages/accessibility/*
+  - packages/accessibility/**/*
+
+core:
+  - packages/core/*
+  - packages/core/**/*
+
+sortable:
+  - packages/sortable/*
+  - packages/sortable/**/*
+
+modifiers:
+  - packages/modifiers/*
+  - packages/modifiers/**/*
+
+utilities:
+  - packages/utilities/*
+  - packages/utilities/**/*
+
+cypress:
+  - cypress/*
+  - cypress/**/*
+
+repo:
+  - ./*

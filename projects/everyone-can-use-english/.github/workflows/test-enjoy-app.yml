@@ -1,0 +1,74 @@
+name: Test Enjoy App
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "enjoy/**"
+      - "yarn.lock"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "enjoy/**"
+      - "yarn.lock"
+jobs:
+  e2e-test:
+    timeout-minutes: 60
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-12, macos-14, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/cache@v4
+        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        with:
+          path: "**/node_modules"
+          key: ${{ matrix.os }}-${{ hashFiles('**/yarn.lock') }}
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Install sdl2 for macOS12
+        if: matrix.os == 'macos-12'
+        run: |
+          brew update
+          brew install sdl2
+
+      - name: Package App
+        run: yarn enjoy:package
+
+      - name: Run main tests with xvfb-run on Ubuntu
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" -- yarn enjoy:test:main
+
+      - name: Run main tests on macOS or Windows
+        if: contains(matrix.os, 'macos') || contains(matrix.os, 'windows')
+        run: yarn enjoy:test:main
+
+      - name: Run renderer tests with xvfb-run on Ubuntu
+        if: contains(matrix.os, 'ubuntu')
+        continue-on-error: true
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" -- yarn enjoy:test:renderer
+
+      - name: Run renderer tests on macOS or Windows
+        if: contains(matrix.os, 'macos') || contains(matrix.os, 'windows')
+        continue-on-error: true
+        run: yarn enjoy:test:renderer
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{matrix.os}}-playwright-report
+          path: enjoy/playwright-report/
+          retention-days: 30

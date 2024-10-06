@@ -1,0 +1,111 @@
+{
+  extends: [
+    'config:best-practices',
+    ':separateMultipleMajorReleases',
+    'schedule:daily',
+  ],
+  commitMessageSuffix: ' in {{packageFile}}',
+  dependencyDashboardAutoclose: true,
+  automerge: true,
+  baseBranches: [
+    'main',
+    '/^release-.*/',
+  ],
+  platformAutomerge: true,
+  labels: [
+    'dependencies',
+  ],
+  postUpdateOptions: [
+    'gomodTidy',
+    'gomodUpdateImportPaths',
+    'pnpmDedupe',
+  ],
+  prHourlyLimit: 1,
+  lockFileMaintenance: {
+    enabled: true,
+  },
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    enabled: true,
+    labels: [
+      'security',
+    ],
+  },
+  packageRules: [
+    {
+      matchPackageNames: [
+        'vuepress',
+        '@vuepress/client',
+        '@vuepress/markdown',
+        '@vuepress/utils',
+      ],
+      groupName: 'vuepress',
+      allowedVersions: '!/pre.*$/',
+    },
+    {
+      matchFileNames: [
+        'testing/**',
+      ],
+      matchPackagePatterns: [
+        'conftest',
+      ],
+      additionalBranchPrefix: '{{packageFileDir}}-',
+      groupName: 'conftest-testing',
+    },
+    {
+      ignorePaths: [
+        'testing/**',
+      ],
+      matchPackagePatterns: [
+        'github-actions',
+      ],
+      groupName: 'github-',
+    },
+    {
+      matchDatasources: [
+        'docker',
+      ],
+      matchPackageNames: [
+        'node',
+        'cimg/node',
+      ],
+      versioning: 'node',
+    },
+  ],
+  customManagers: [
+    {
+      customType: 'regex',
+      fileMatch: [
+        '(^|/)Dockerfile$',
+        '(^|/)Dockerfile\\.[^/]*$',
+      ],
+      matchStrings: [
+        'renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?\\sENV .*?_VERSION=(?<currentValue>.*)\\s',
+      ],
+      versioningTemplate: '{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}',
+      extractVersionTemplate: '^v(?<version>\\d+\\.\\d+\\.\\d+)',
+    },
+    {
+      customType: 'regex',
+      fileMatch: [
+        '.*go$',
+      ],
+      matchStrings: [
+        '\\sconst .*Version = "(?<currentValue>.*)"\\s// renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?\\s',
+      ],
+      versioningTemplate: '{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}',
+      extractVersionTemplate: '^v(?<version>\\d+\\.\\d+\\.\\d+)',
+    },
+    {
+      customType: 'regex',
+      fileMatch: [
+        '.circleci/config.yml$',
+      ],
+      matchStrings: [
+        'renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?\\s.*?_VERSION: (?<currentValue>.*)\\s',
+      ],
+      versioningTemplate: '{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}',
+      extractVersionTemplate: '^v(?<version>\\d+\\.\\d+\\.\\d+)',
+    },
+  ],
+}

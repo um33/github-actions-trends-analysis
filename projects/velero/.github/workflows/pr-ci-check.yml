@@ -1,0 +1,32 @@
+name: Pull Request CI Check
+on: [pull_request]
+jobs:
+  build:
+    name: Run CI
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+        id: go
+      - name: Check out the code
+        uses: actions/checkout@v2
+      - name: Fetch cached go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Make ci
+        run: make ci
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          verbose: true
+          fail_ci_if_error: true

@@ -1,0 +1,57 @@
+name: "Upgrade poetry and yarn dependencies"
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  depends:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+      fail-fast: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: "develop"
+          token: ${{ secrets.PAT }}
+      - name: Setup Poetry
+        uses: 5yutan5/setup-poetry-env@v1.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          python-cache-dependency-path: pyproject.toml
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+      - name: Install yarn
+        run: npm install -g yarn
+      - name: Run
+        run: |
+          pip install poethepoet
+          poe depup
+      - if: success() && !env.ACT
+        name: Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Update poetry (python) and yarn (npm) dependencies
+          commit_options: "--no-verify --signoff"
+
+          file_pattern: package.json yarn.lock pyproject.toml
+
+          # Optional commit user and author settings
+          commit_user_name: miigotu
+          commit_user_email: miigotu@gmail.com
+          commit_author: miigotu <miigotu@gmail.com>
+
+          push_options: "--force"
+          disable_globbing: true
+          # skip_fetch: true
+          add_options: "-u"

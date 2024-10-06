@@ -1,0 +1,46 @@
+name: code_lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  golangci_lint:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v3
+      with:
+        go-version: "1.21"
+
+    - run: touch internal/servers/hls/hls.min.js
+
+    - uses: golangci/golangci-lint-action@v4
+      with:
+        version: v1.55.0
+
+  mod_tidy:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v2
+      with:
+        go-version: "1.21"
+
+    - run: |
+        go mod tidy
+        git diff --exit-code
+
+  api_docs:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: make apidocs-lint

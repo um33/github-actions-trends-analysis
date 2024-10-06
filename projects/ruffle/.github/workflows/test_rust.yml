@@ -1,0 +1,182 @@
+name: Test Rust
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Paths filter
+    runs-on: ubuntu-22.04
+    outputs:
+      should_run: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: AurorNZ/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            src:
+              - '!web/package.json'
+              - '!web/package-lock.json'
+              - '!web/packages/**'
+              - '!**/*.md'
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.should_run == 'true'
+    name: Test Rust ${{ matrix.rust_version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.rust_version == 'nightly' || matrix.rust_version == 'beta' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_version: [stable]
+        os: [ubuntu-22.04, windows-latest, macos-14]
+        include:
+          - rust_version: nightly
+            os: ubuntu-22.04
+          - rust_version: beta
+            os: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust_version }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository ppa:kisak/kisak-mesa -y
+          sudo apt-get update
+          sudo apt install -y libasound2-dev libxcb-shape0-dev libxcb-xfixes0-dev libgtk-3-dev mesa-vulkan-drivers libpango1.0-dev libudev-dev
+
+      - name: Cache Cargo output
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "desktop"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Install cargo nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests with image tests
+        if: runner.os != 'macOS'
+        # TODO: Disallow retries in general once we can allow only after SIGABRT.
+        # See: https://github.com/nextest-rs/nextest/issues/1172
+        run: cargo nextest run --cargo-profile ci --workspace --locked --no-fail-fast --retries 2 -j 4 --features imgtests,lzma,jpegxr
+        env:
+          # This is to counteract the disabling by rust-cache.
+          # See: https://github.com/Swatinem/rust-cache/issues/43
+          CARGO_INCREMENTAL: '1'
+          # Supposedly makes "Updating crates.io index" faster on Windows.
+          # See: https://github.com/rust-lang/cargo/issues/9167
+          CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+          XDG_RUNTIME_DIR: '' # dummy value, just to silence warnings about it missing
+
+      - name: Run tests without image tests
+        if: runner.os == 'macOS'
+        run: cargo nextest run --cargo-profile ci --workspace --locked --no-fail-fast -j 4 --features lzma,jpegxr
+        env:
+          XDG_RUNTIME_DIR: '' # dummy value, just to silence warnings about it missing
+
+      - name: Upload images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swf_images_${{ matrix.rust_version }}_${{ matrix.os }}
+          path: |
+            tests*/**/*.actual*.png
+            tests*/**/*.difference*.png
+
+  lints:
+    needs: changes
+    if: needs.changes.outputs.should_run == 'true'
+    name: Lints with Rust ${{ matrix.rust_version }}
+    runs-on: ubuntu-22.04
+    continue-on-error: ${{ matrix.rust_version == 'nightly' || matrix.rust_version == 'beta' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_version: [stable, beta, nightly]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust_version }}
+          components: rustfmt, clippy
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt install -y libasound2-dev libxcb-shape0-dev libxcb-xfixes0-dev libgtk-3-dev mesa-vulkan-drivers libpango1.0-dev libudev-dev
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check clippy (with tests)
+        # Don't fail the build for clippy on nightly, since we get a lot of false-positives
+        run: cargo clippy --all --all-features --tests ${{ (matrix.rust_version != 'nightly' && '-- -D warnings') || '' }}
+
+      - name: Check clippy (without tests)
+        # Don't fail the build for clippy on nightly, since we get a lot of false-positives
+        run: cargo clippy --all --all-features ${{ (matrix.rust_version != 'nightly' && '-- -D warnings') || '' }}
+
+      - name: Check documentation
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  dependencies:
+    needs: changes
+    if: needs.changes.outputs.should_run == 'true'
+    name: Check dependencies
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check licenses, duplicates, and advisories
+        uses: EmbarkStudios/cargo-deny-action@v1
+
+      - name: Check unused dependencies
+        uses: bnjbvr/cargo-machete@main
+        # So the previous step failing doesn't prevent this one from running.
+        if: always()
+
+  check-required:
+    needs: changes
+    if: needs.changes.outputs.should_run == 'false'
+    name: Test Rust ${{ matrix.rust_version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        rust_version: [stable]
+        os: [ubuntu-22.04, windows-latest, macos-14]
+        include:
+          - rust_version: nightly
+            os: ubuntu-22.04
+          - rust_version: beta
+            os: ubuntu-22.04
+
+    steps:
+      - name: No-op
+        run: echo noop

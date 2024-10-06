@@ -1,0 +1,26 @@
+﻿name: Build Blazor
+
+on:
+  push:
+    paths:
+      - 'ServiceStack.Blazor/**'
+      - '.github/workflows/build-blazor.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-blazor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.100'
+          
+
+      - name: Build
+        working-directory: ServiceStack.Blazor/build
+        run: dotnet build ./build.proj
+          

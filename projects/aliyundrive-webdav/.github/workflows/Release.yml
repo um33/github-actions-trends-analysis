@@ -1,0 +1,591 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - name: Build wheels - x86_64
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          args: --release --out dist --strip
+          sccache: 'true'
+      - name: Install built wheel - x86_64
+        run: |
+          pip install aliyundrive-webdav --no-index --find-links dist --force-reinstall
+          aliyundrive-webdav --help
+      - name: Build wheels - universal2
+        uses: PyO3/maturin-action@v1
+        with:
+          target: universal2-apple-darwin
+          args: --release --out dist --strip
+          sccache: 'true'
+      - name: Install built wheel - universal2
+        run: |
+          pip install aliyundrive-webdav --no-index --find-links dist --force-reinstall
+          aliyundrive-webdav --help
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+          if-no-files-found: error
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: apple-darwin-bin
+          path: target/release/aliyundrive-webdav
+          if-no-files-found: error
+      - name: Get tag
+        if: "startsWith(github.ref, 'refs/tags/')"
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+      - name: Archive binary
+        if: "startsWith(github.ref, 'refs/tags/')"
+        run: |
+          cd target/release
+          tar czvf aliyundrive-webdav-${{ steps.tag.outputs.tag }}.apple-darwin.tar.gz aliyundrive-webdav
+          shasum -a 256 aliyundrive-webdav-${{ steps.tag.outputs.tag }}.apple-darwin.tar.gz > aliyundrive-webdav-${{ steps.tag.outputs.tag }}.apple-darwin.tar.gz.sha256
+          cd -
+      - name: Upload binary to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            target/release/aliyundrive-webdav*.tar.gz
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+          - arch: x86
+            target: i686-pc-windows-msvc
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        if: matrix.platform.arch != 'arm64'
+        with:
+          python-version: 3.9
+          architecture: ${{ matrix.platform.arch }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build wheels
+        if: matrix.platform.arch != 'arm64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --strip
+      - name: Build wheels
+        if: matrix.platform.arch == 'arm64'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --strip --no-default-features --features atomic64,native-tls
+          sccache: 'true'
+      - name: Install built wheel
+        if: matrix.platform.arch != 'arm64'
+        run: |
+          pip install aliyundrive-webdav --no-index --find-links dist --force-reinstall
+          aliyundrive-webdav --help
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+          if-no-files-found: error
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-${{ matrix.platform.arch }}-bin
+          path: target/${{ matrix.platform.target }}/release/aliyundrive-webdav.exe
+          if-no-files-found: error
+      - name: Get tag
+        if: "startsWith(github.ref, 'refs/tags/')"
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+      - name: Archive binary
+        if: "startsWith(github.ref, 'refs/tags/')"
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          7z a aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.zip aliyundrive-webdav.exe
+          cd -
+      - name: Upload binary to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            target/${{ matrix.platform.target }}/release/*.zip
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - target: "x86_64-unknown-linux-musl"
+            wheel: true
+            deb: true
+          - target: "i686-unknown-linux-musl"
+            wheel: true
+            deb: true
+          - target: "aarch64-unknown-linux-musl"
+            wheel: true
+            deb: true
+          - target: "armv7-unknown-linux-musleabihf"
+            wheel: true
+            deb: true
+          - target: "armv7-unknown-linux-musleabi"
+            wheel: false
+            deb: true
+          - target: "arm-unknown-linux-musleabihf"
+            wheel: false
+            deb: false
+          - target: "arm-unknown-linux-musleabi"
+            wheel: false
+            deb: false
+    container:
+      image: docker://ghcr.io/rust-cross/rust-musl-cross:${{ matrix.platform.target }}
+      env:
+        CFLAGS_armv7_unknown_linux_musleabihf: '-mfpu=vfpv3-d16'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build wheels - manylinux
+        uses: PyO3/maturin-action@main
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          container: off
+          args: --release -o dist --strip
+          sccache: 'true'
+      - name: Build wheels - musllinux
+        if: matrix.platform.wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: musllinux_1_1
+          container: off
+          args: --release --out dist --strip
+          sccache: 'true'
+      - name: Install cargo packages
+        if: matrix.platform.deb
+        run: pip install cargo-deb cargo-generate-rpm
+      - name: Build Debian package
+        if: matrix.platform.deb
+        run: cargo deb --target=${{ matrix.platform.target }} --no-build --no-strip
+      - name: Build RPM package
+        if: matrix.platform.deb
+        run: cargo generate-rpm --target=${{ matrix.platform.target }} --payload-compress none
+      - name: Upload wheels
+        if: matrix.platform.wheel
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+          if-no-files-found: error
+      - name: Install upx
+        working-directory: /tmp
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          set -ex
+          git clone --recursive https://github.com/upx/upx.git
+          cd upx
+          make
+          cp build/release/upx /usr/local/bin/upx
+      - name: Upx compress binary
+        run: upx target/${{ matrix.platform.target }}/release/aliyundrive-webdav
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.target }}-bin
+          path: target/${{ matrix.platform.target }}/release/aliyundrive-webdav
+          if-no-files-found: error
+      - name: Upload deb artifacts
+        if: matrix.platform.deb
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.target }}-deb
+          path: target/${{ matrix.platform.target }}/debian/aliyundrive-webdav_*.deb
+          if-no-files-found: error
+      - name: Upload RPM artifacts
+        if: matrix.platform.deb
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.target }}-rpm
+          path: target/${{ matrix.platform.target }}/generate-rpm/aliyundrive-webdav*.rpm
+          if-no-files-found: error
+      - name: Get tag
+        if: "startsWith(github.ref, 'refs/tags/')"
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+      - name: Archive binary
+        if: "startsWith(github.ref, 'refs/tags/')"
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          tar czvf aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz aliyundrive-webdav
+          shasum -a 256 aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz > aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz.sha256
+          cd -
+      - name: Upload binaries to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            target/${{ matrix.platform.target }}/release/aliyundrive-webdav*.tar.gz*
+            target/${{ matrix.platform.target }}/debian/aliyundrive-webdav_*.deb
+            target/${{ matrix.platform.target }}/generate-rpm/aliyundrive-webdav*.rpm
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+      - name: Remove cached deb and RPM packages
+        if: matrix.platform.deb
+        run: |
+          rm -rf target/${{ matrix.platform.target }}/debian
+          rm -rf target/${{ matrix.platform.target }}/generate-rpm
+
+  linux-others:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - target: "armv5te-unknown-linux-musleabi"
+            cargo_extra_args: --no-default-features --features rustls-tls
+          - target: "mips-unknown-linux-musl"
+            cargo_extra_args: --no-default-features --features native-tls-vendored
+          - target: "mipsel-unknown-linux-musl"
+            cargo_extra_args: --no-default-features --features native-tls-vendored
+    container:
+      image: docker://ghcr.io/rust-cross/rust-musl-cross:${{ matrix.platform.target }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform.target }}
+      - name: Build
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static -C link-arg=-s
+        run: |
+          cargo build --release --target ${{ matrix.platform.target }} ${{ matrix.platform.cargo_extra_args }}
+      - name: Upx compress binary
+        uses: crazy-max/ghaction-upx@v1
+        with:
+          version: v3.95  # v3.96 breaks mipsel, https://github.com/upx/upx/issues/504
+          files: target/${{ matrix.platform.target }}/release/aliyundrive-webdav
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.target }}-bin
+          path: target/${{ matrix.platform.target }}/release/aliyundrive-webdav
+          if-no-files-found: error
+      - name: Get tag
+        if: "startsWith(github.ref, 'refs/tags/')"
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+      - name: Archive binary
+        if: "startsWith(github.ref, 'refs/tags/')"
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          tar czvf aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz aliyundrive-webdav
+          shasum -a 256 aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz > aliyundrive-webdav-${{ steps.tag.outputs.tag }}.${{ matrix.platform.target }}.tar.gz.sha256
+          cd -
+      - name: Upload binary to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            target/${{ matrix.platform.target }}/release/aliyundrive-webdav*.tar.gz*
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+
+  openwrt:
+    name: OpenWrt Package - ${{ matrix.target.arch }}
+    runs-on: ubuntu-20.04
+    needs: [ linux, linux-others ]
+    environment: OpenWrt
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - arch: "aarch64_generic"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/rockchip/armv8/openwrt-sdk-22.03.2-rockchip-armv8_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "arm_cortex-a9"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/bcm53xx/generic/openwrt-sdk-22.03.2-bcm53xx-generic_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz"
+          - arch: "aarch64_cortex-a53"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/bcm27xx/bcm2710/openwrt-sdk-22.03.2-bcm27xx-bcm2710_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "aarch64_cortex-a72"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/bcm27xx/bcm2711/openwrt-sdk-22.03.2-bcm27xx-bcm2711_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "x86_64"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/x86/64/openwrt-sdk-22.03.2-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "i386_pentium4"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/x86/generic/openwrt-sdk-22.03.2-x86-generic_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "arm_mpcore"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/oxnas/ox820/openwrt-sdk-22.03.2-oxnas-ox820_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz"
+          - arch: "arm_cortex-a5_vfpv4"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/at91/sama5/openwrt-sdk-22.03.2-at91-sama5_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz"
+          - arch: "arm_cortex-a7_neon-vfpv4"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/ipq40xx/generic/openwrt-sdk-22.03.2-ipq40xx-generic_gcc-11.2.0_musl_eabi.Linux-x86_64.tar.xz"
+          - arch: "mipsel_24kc"
+            sdk: "https://downloads.openwrt.org/releases/22.03.2/targets/ramips/mt7621/openwrt-sdk-22.03.2-ramips-mt7621_gcc-11.2.0_musl.Linux-x86_64.tar.xz"
+          - arch: "mips_24kc"
+            sdk: "https://archive.openwrt.org/releases/19.07.7/targets/ar71xx/nand/openwrt-sdk-19.07.7-ar71xx-nand_gcc-7.5.0_musl.Linux-x86_64.tar.xz"
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install build requirements
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+          gettext git java-propose-classpath libelf-dev libncurses5-dev \
+          libncursesw5-dev libssl-dev python2.7-dev python3 unzip wget \
+          python3-distutils python3-setuptools python3-dev rsync subversion \
+          swig time xsltproc zlib1g-dev
+      - name: Install OpenWrt SDK
+        run: |
+          set -e
+          wget -O openwrt-sdk.tar.xz ${{ matrix.target.sdk }}
+          xz -q -d openwrt-sdk.tar.xz && tar -xvf openwrt-sdk.tar
+          mv -f openwrt-sdk-* openwrt-sdk
+      - name: Build Package
+        run: |
+          set -e
+          echo "src-link aliyundrive $GITHUB_WORKSPACE/openwrt" > openwrt-sdk/feeds.conf
+          echo 'CONFIG_PACKAGE_aliyundrive-webdav=y
+          CONFIG_PACKAGE_luci-app-aliyundrive-webdav=y
+          ' >> openwrt-sdk/.config
+          cd openwrt-sdk
+          cat feeds.conf.default >> feeds.conf
+          cat feeds.conf
+
+          ./scripts/feeds update -a > /dev/null
+          make defconfig
+
+          ./scripts/feeds install -d y -f -a
+          make package/aliyundrive-webdav/compile V=s
+          make package/luci-app-aliyundrive-webdav/compile V=s
+          tree bin/packages/
+      - name: Archive package
+        uses: actions/upload-artifact@v3
+        with:
+          name: aliyundrive-webdav-openwrt-${{ matrix.target.arch }}
+          path: openwrt-sdk/bin/packages/*/aliyundrive/aliyundrive-webdav*.ipk
+          if-no-files-found: error
+      - name: Archive luci packages
+        uses: actions/upload-artifact@v3
+        if: ${{ matrix.target.arch == 'aarch64_generic' }}
+        with:
+          name: aliyundrive-webdav-openwrt-${{ matrix.target.arch }}
+          path: openwrt-sdk/bin/packages/*/aliyundrive/luci-*.ipk
+          if-no-files-found: error
+      - name: Upload package to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            openwrt-sdk/bin/packages/*/aliyundrive/aliyundrive-webdav*.ipk
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+      - name: Upload luci packages to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: ${{ startsWith(github.ref, 'refs/tags/') && matrix.target.arch == 'aarch64_generic' }}
+        with:
+          files: |
+            openwrt-sdk/bin/packages/*/aliyundrive/luci-*.ipk
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+
+  openwrt-gl-inet:
+    name: OpenWrt Package - ${{ matrix.target.arch }}
+    runs-on: ubuntu-latest
+    needs: [ linux, linux-others ]
+    environment: OpenWrt
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - arch: siflower-1806
+            path: sdk/1806/siflower
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install build requirements
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+          gettext git java-propose-classpath libelf-dev libncurses5-dev \
+          libncursesw5-dev libssl-dev python2.7-dev python3 unzip wget \
+          python3-distutils python3-setuptools python3-dev rsync subversion \
+          swig time xsltproc zlib1g-dev
+      - name: Install OpenWrt SDK
+        run: |
+          set -e
+          git clone https://github.com/gl-inet/sdk.git openwrt-sdk
+          cd openwrt-sdk
+          ./download.sh ${{ matrix.target.arch }}
+      - name: Build Package
+        run: |
+          set -e
+          cd openwrt-sdk/${{ matrix.target.path }}
+          ln -s $GITHUB_WORKSPACE/openwrt/aliyundrive-webdav package/aliyundrive-webdav
+
+          echo 'CONFIG_PACKAGE_aliyundrive-webdav=y
+          CONFIG_PACKAGE_luci-app-aliyundrive-webdav=y
+          ' >> .config
+          cp feeds.conf.default feeds.conf
+          cat feeds.conf
+
+          ./scripts/feeds update -a > /dev/null
+          make defconfig
+
+          ./scripts/feeds install -d y -f -a
+          make package/aliyundrive-webdav/compile V=s
+          tree bin/packages/
+      - name: Archive package
+        uses: actions/upload-artifact@v3
+        with:
+          name: aliyundrive-webdav-openwrt-${{ matrix.target.arch }}
+          path: openwrt-sdk/${{ matrix.target.path }}/bin/packages/*/base/aliyundrive-webdav*.ipk
+          if-no-files-found: error
+      - name: Upload package to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          files: |
+            openwrt-sdk/${{ matrix.target.path }}/bin/packages/*/base/aliyundrive-webdav*.ipk
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          generate_release_notes: true
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [ linux ]
+    environment: Docker Hub
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          name: x86_64-unknown-linux-musl-bin
+      - run: |
+          chmod a+x aliyundrive-webdav
+          mv aliyundrive-webdav aliyundrive-webdav-amd64
+      - uses: actions/download-artifact@v3
+        with:
+          name: i686-unknown-linux-musl-bin
+      - run: |
+          chmod a+x aliyundrive-webdav
+          mv aliyundrive-webdav aliyundrive-webdav-386
+      - uses: actions/download-artifact@v3
+        with:
+          name: aarch64-unknown-linux-musl-bin
+      - run: |
+          chmod a+x aliyundrive-webdav
+          mv aliyundrive-webdav aliyundrive-webdav-arm64
+      - uses: actions/download-artifact@v3
+        with:
+          name: armv7-unknown-linux-musleabihf-bin
+      - run: |
+          chmod a+x aliyundrive-webdav
+          mv aliyundrive-webdav aliyundrive-webdav-armv7
+      - uses: actions/download-artifact@v3
+        with:
+          name: arm-unknown-linux-musleabihf-bin
+      - run: |
+          chmod a+x aliyundrive-webdav
+          mv aliyundrive-webdav aliyundrive-webdav-armv6
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: |
+            messense/aliyundrive-webdav
+            ghcr.io/messense/aliyundrive-webdav
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - name: Setup QEMU
+        uses: dbhi/qus/action@main
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to DockerHub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: docker build
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6
+          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - name: Docker Hub Description
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+          repository: messense/aliyundrive-webdav
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    environment:
+      name: PyPI
+      url: https://pypi.org/project/aliyundrive-webdav/
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: [ linux, macos ]
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheels
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          pip install --upgrade twine
+          twine upload --skip-existing *

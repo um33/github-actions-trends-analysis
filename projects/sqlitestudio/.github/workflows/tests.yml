@@ -1,0 +1,115 @@
+env:
+    TCL_VERSION: '8.6'
+    SQLITE_VERSION: '3410200'
+    SQLITE_RELEASE_YEAR: '2023'
+    PYTHON_VERSION: '3.9'
+    PORTABLE_DIR: ${{ github.workspace }}/output/portable/SQLiteStudio
+
+name: Unit tests
+
+on:
+    push:
+        branches:
+            - master
+            - 3.2
+            - 3.3
+            - 3.4
+        paths:
+            - '**.cpp'
+            - '**.hpp'
+            - '**.c'
+            - '**.h'
+            - '**.pro'
+            - '**.pri'
+            - '**.ui'
+            - '**.qrc'
+            - '**/tests.yml'
+
+jobs:
+    build:
+        runs-on: ubuntu-22.04
+
+        strategy:
+            matrix:
+                QT_VERSION: ['5.15.2']
+
+        steps:
+            - uses: actions/setup-python@v4
+              with:
+                python-version: ${{ env.PYTHON_VERSION }}
+                architecture: 'x64'
+              
+            - name: Qt installation dir
+              id: qt-installation-dir
+              run: echo "DIR=$(readlink -f ${{ github.workspace }}/..)" >> $GITHUB_OUTPUT
+              
+            - name: Install Qt
+              uses: jurplel/install-qt-action@v3
+              with:
+                cache: true
+                version: ${{ matrix.QT_VERSION }}
+                host: 'linux'
+                dir: '${{ steps.qt-installation-dir.DIR }}'
+                aqtversion: '==3.0.*'
+                py7zrversion: '==0.20.*'
+                setup-python: 'false'
+                extra: '--external 7z'
+
+            - name: Clone repo
+              uses: actions/checkout@v3
+              with:
+                ref: ${{ env.GITHUB_REF }}
+
+            - name: Install SQLite3
+              run: |
+                sudo rm -f /usr/lib/libsqlite* /usr/local/lib/libsqlite* /usr/include/sqlite* /usr/local/include/sqlite* /usr/lib/x86_64-linux-gnu/libsqlite*
+                wget http://sqlite.org/$SQLITE_RELEASE_YEAR/sqlite-amalgamation-$SQLITE_VERSION.zip
+                unzip sqlite-amalgamation-$SQLITE_VERSION.zip
+                cd sqlite-amalgamation-$SQLITE_VERSION
+                gcc sqlite3.c -lpthread -ldl -lm -Os -fpic -shared -o libsqlite3.so \
+                    -DSQLITE_ENABLE_UPDATE_DELETE_LIMIT \
+                    -DSQLITE_ENABLE_DBSTAT_VTAB \
+                    -DSQLITE_ENABLE_BYTECODE_VTAB \
+                    -DSQLITE_ENABLE_COLUMN_METADATA \
+                    -DSQLITE_ENABLE_EXPLAIN_COMMENTS \
+                    -DSQLITE_ENABLE_FTS3 \
+                    -DSQLITE_ENABLE_FTS4 \
+                    -DSQLITE_ENABLE_FTS5 \
+                    -DSQLITE_ENABLE_GEOPOLY \
+                    -DSQLITE_ENABLE_JSON1 \
+                    -DSQLITE_ENABLE_RTREE \
+                    -DSQLITE_ENABLE_MATH_FUNCTIONS
+                strip libsqlite3.so
+                sudo cp -P libsqlite3.so* /usr/local/lib/
+                sudo cp *.h /usr/local/include/
+
+            - name: Install Tcl
+              run: sudo apt-get install -qq libtcl$TCL_VERSION tcl$TCL_VERSION-dev
+
+            - name: Install other tools/dependencies
+              run: |
+                sudo apt install libreadline-dev libncurses5-dev
+                echo "${{ github.workspace }}/../Qt/${{ matrix.QT_VERSION }}/gcc_64/bin" >> $GITHUB_PATH
+
+            - name: Prepare output dir
+              run: mkdir output output/build output/build/Plugins
+
+            - name: Compile SQLiteStudio3
+              working-directory: output/build
+              run: |
+                qmake CONFIG+=portable CONFIG+=debug DEFINES+=tests ../../SQLiteStudio3
+                make -j 2
+
+            - name: Compile Plugins
+              working-directory: output/build/Plugins
+              run: |
+                qmake CONFIG+=portable CONFIG+=debug DEFINES+=tests "INCLUDEPATH+=$pythonLocation/include/python$PYTHON_VERSION" "LIBS += -L$pythonLocation/lib" ../../../Plugins
+                make -j 1
+
+            - name: Run tests
+              working-directory: output/SQLiteStudio
+              run: |
+                sudo cp -P /usr/local/lib/libsqlite3.so* ./lib/
+                export LD_LIBRARY_PATH="./lib"
+                ldd tst_tablemodifiertest
+                for f in tst_*; do ./$f; done

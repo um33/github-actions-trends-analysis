@@ -1,0 +1,82 @@
+name: Checks
+
+on:
+  push:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  unit_tests:
+    strategy:
+      matrix:
+        include:
+          - runs-on: ubuntu-latest
+            target: linux_amd64
+          - runs-on: windows-latest
+            target: windows_amd64
+          - runs-on: macos-latest
+            target: darwin_amd64
+      fail-fast: false
+
+    name: "Unit Tests on ${{ matrix.target }}"
+    runs-on: "${{ matrix.runs-on }}"
+    steps:
+      - name: "Disable git crlf conversions"
+        if: ${{ runner.os == 'Windows' }}
+        # HCL preserves the input line endings when processing a heredoc,
+        # and our tests for heredocs are written to expect the result for
+        # the source code as checked in to the repository, so git's normal
+        # tampering with the line endings would invalidate those tests.
+        run: |
+          git config --global core.autocrlf false
+      - name: "Fetch source code"
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Install Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: go.mod
+      - name: Go test
+        run: |
+          go test ./... -race
+
+  copyright:
+    name: "copyright headers"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Install Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: go.mod
+      - name: "copyright headers check"
+        run: |
+          make copyrightcheck
+
+  govet:
+    name: "go vet"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Install Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: go.mod
+      - name: "go vet"
+        run: |
+          make vetcheck
+
+  gofmt:
+    name: "gofmt"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Fetch source code"
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Install Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: go.mod
+      - name: "gofmt"
+        run: |
+          make fmtcheck

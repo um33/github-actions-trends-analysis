@@ -1,0 +1,53 @@
+# Files which shouldn't be changed manually are owned by @netdatabot.
+# This way we prevent modifications which will be overwriten by automation.
+
+# Global (default) code owner
+* @Ferroin
+
+# Ownership by directory structure
+.github/ @netdata/agent-sre
+src/aclk/ @stelfrag
+contrib/debian @netdata/agent-sre
+src/collectors/ @thiagoftsm
+src/collectors/ebpf.plugin/ @thiagoftsm
+src/collectors/charts.d.plugin/ @ilyam8 @Ferroin
+src/collectors/freebsd.plugin/ @thiagoftsm
+src/collectors/macos.plugin/ @thiagoftsm
+src/collectors/python.d.plugin/ @ilyam8
+src/collectors/cups.plugin/ @thiagoftsm
+src/exporting/ @thiagoftsm
+src/daemon/ @thiagoftsm @vkalintiris
+src/database/ @thiagoftsm @vkalintiris
+docs/ @Ancairon
+src/go/ @ilyam8
+src/health/ @thiagoftsm @vkalintiris
+src/health/health.d/ @thiagoftsm
+src/health/notifications/ @Ferroin @thiagoftsm
+src/ml/ @vkalintiris
+src/libnetdata/ @thiagoftsm @vkalintiris
+packaging/ @netdata/agent-sre
+packaging/cmake @Ferroin @vkalintiris
+src/registry/ @novykh
+src/streaming/ @thiagoftsm
+system/ @netdata/agent-sre
+tests/ @netdata/agent-sre @vkalintiris
+src/web/ @thiagoftsm @vkalintiris
+src/web/gui/ @novykh
+src/logsmanagement/ @thiagoftsm
+
+# Ownership by filetype (overwrites ownership by directory)
+*.md @Ancairon
+*.mdx @Ancairon
+Dockerfile* @netdata/agent-sre
+
+# Ownership of specific files
+.gitignore @netdata/agent-sre @vkalintiris
+.codacy.yml @netdata/agent-sre
+.yamllint.yml @netdata/agent-sre
+CMakeLists.txt @netdata/agent-sre @vkalintiris
+netdata.spec.in @netdata/agent-sre
+netdata-installer.sh @netdata/agent-sre
+packaging/version @netdatabot @netdata/agent-sre
+
+LICENSE.md @netdata/agent-sre @vkalintiris
+CHANGELOG.md @netdatabot @netdata/agent-sre

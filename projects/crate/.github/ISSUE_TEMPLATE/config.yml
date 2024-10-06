@@ -1,0 +1,6 @@
+---
+blank_issues_enabled: true
+contact_links:
+  - name: Community Support
+    url: https://community.crate.io/
+    about: Get help from the CrateDB community.

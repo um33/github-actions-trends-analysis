@@ -1,0 +1,58 @@
+name: release-docs
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build River
+        uses: ./.github/actions/install-env
+        with:
+          python-version: "3.12"
+
+      - name: Install extra Ubuntu dependencies
+        run: sudo apt-get install graphviz pandoc
+
+      - name: Install extra Python dependencies
+        run: |
+          poetry install --with docs --with compat
+          poetry run python -m spacy download en_core_web_sm
+
+      - name: Use Rich in notebooks
+        run: |
+          poetry run ipython profile create
+          echo "%load_ext rich" > ~/.ipython/profile_default/startup/00_rich.ipy
+
+      - name: Execute notebooks
+        run: |
+          source $VENV
+          make execute-notebooks
+
+      - name: Build docs
+        run: |
+          source $VENV
+          make doc
+
+      - name: Deploy docs
+        env:
+          GH_TOKEN: ${{ secrets.GitHubToken }}
+        run: |
+          source $VENV
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git config pull.rebase false
+          git add --all
+          git commit -m "Execute notebooks"
+          git fetch
+          git checkout gh-pages
+          git pull
+          git checkout main
+          RIVER_VERSION=$(python -c "import river; print(river.__version__)")
+          mike deploy ${RIVER_VERSION} latest --update-aliases --push --remote https://${GH_TOKEN}@github.com/online-ml/river.git

@@ -1,0 +1,16 @@
+name: HealthChecks Hangfire CD
+
+on:
+  push:
+    tags:
+      - release-hangfire-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.Hangfire/HealthChecks.Hangfire.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.Hangfire

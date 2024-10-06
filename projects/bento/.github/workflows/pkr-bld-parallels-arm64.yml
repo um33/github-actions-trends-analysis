@@ -1,0 +1,73 @@
+---
+on:
+  workflow_call:
+
+env:
+  PACKER_GITHUB_API_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+  PACKER_LOG: "1"
+
+jobs:
+  aarch64:
+    runs-on: [self-hosted, ARM64, parallels]
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - almalinux-8
+          - almalinux-9
+          - centos-7
+          - centos-stream-8
+          - centos-stream-9
+          - debian-11
+          - debian-12
+          - fedora-38
+          - fedora-39
+          - freebsd-13
+          - freebsd-14
+          - opensuse-leap-15
+          - oraclelinux-7
+          - oraclelinux-8
+          - oraclelinux-9
+          - rockylinux-8
+          - rockylinux-9
+          - ubuntu-20.04
+          - ubuntu-22.04
+          - ubuntu-23.10
+        provider:
+          - parallels-iso
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+#      - name: Setup Packer
+#        if: steps.verify-changed-files.outputs.files_changed == 'true'
+#        uses: hashicorp/setup-packer@main
+#        with:
+#          version: latest
+      - name: Bento build
+        run: |
+          eval "$(chef shell-init bash)"
+          bento build -o ${{ matrix.provider }}.vm os_pkrvars/$(echo ${{ matrix.os }} | cut -d "-" -f 1)/"${{ matrix.os }}-aarch64.pkrvars.hcl"
+          ls -alh builds/
+          cat builds/${{ matrix.os }}*-aarch64._metadata.json
+      - name: Remove VM in case of canceled job
+        if: cancelled()
+        run: |
+          VM="$(prlctl list -a | grep ${{ matrix.os }} | cut -d " " -f 1)"
+          echo Powering off and deleting any existing VMs named ${{ matrix.os }}*-aarch64
+          prlctl stop "$VM" --kill 2> /dev/null
+          sleep 1
+          prlctl delete "$VM" 2> /dev/null
+          sleep 2
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: "${{ matrix.os }}-parallels-aarch64"
+          path: |
+            builds/*.box
+            builds/*.json
+          retention-days: 10
+          compression-level: 0 # no compression
+      - name: Bento Test
+        run: |
+          eval "$(chef shell-init bash)"
+          bento test

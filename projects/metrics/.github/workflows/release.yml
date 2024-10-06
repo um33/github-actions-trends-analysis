@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    branches:
+    - release/4.2.x
+    - release/5.0.x
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: 'ubuntu-latest'
+    env:
+      JAVA_OPTS: "-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+    - name: Set up JDK
+      uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4
+      with:
+        java-version: 17
+        distribution: 'zulu'
+        cache: 'maven'
+        server-id: ossrh
+        server-username: CI_DEPLOY_USERNAME
+        server-password: CI_DEPLOY_PASSWORD
+    - name: Build and Deploy
+      run: ./mvnw -B -V -ntp -DperformRelease=true deploy
+      env:
+        CI_DEPLOY_USERNAME: ${{ secrets.CI_DEPLOY_USERNAME }}
+        CI_DEPLOY_PASSWORD: ${{ secrets.CI_DEPLOY_PASSWORD }}
+        MAVEN_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

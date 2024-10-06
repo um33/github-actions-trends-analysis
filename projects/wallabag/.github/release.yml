@@ -1,0 +1,7 @@
+changelog:
+  exclude:
+    labels:
+      - Dependencies
+    authors:
+      - dependabot
+      - weblate

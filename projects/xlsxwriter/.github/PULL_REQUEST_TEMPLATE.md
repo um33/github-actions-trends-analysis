@@ -1,0 +1,75 @@
+
+## Pull Requests and Contributing to XlsxWriter
+
+All patches and pull requests are welcome but must start with an issue tracker.
+
+
+### Getting Started
+
+1. Pull requests and new feature proposals must start with an [issue tracker](https://github.com/jmcnamara/XlsxWriter/issues). This serves as the focal point for the design discussion.
+2. Describe what you plan to do. If there are API changes or additions add some pseudo-code to demonstrate them.
+3. Fork the repository.
+4. Run all the tests to make sure the current code work on your system using `make test`.
+5. Create a feature branch for your new feature.
+
+
+### Writing Tests
+
+This is the most important step. XlsxWriter has over 1000 tests and a 2:1 test to code ratio. Patches and pull requests for anything other than minor fixes or typos will not be merged without tests.
+
+Use the existing tests in `XlsxWriter/xlsxwriter/test/` as examples.
+
+Ideally, new features should be accompanied by tests that compare XlsxWriter output against actual Excel 2007 files. See the `XlsxWriter/xlsxwriter/test/comparison` test files for examples. If you don't have access to Excel 2007 I can help you create input files for test cases.
+
+Tests should use the standard [unittest](http://docs.python.org/library/unittest.html) Python module.
+
+
+### Code Style
+
+Follow the general style of the surrounding code and format it to the [PEP8](http://www.python.org/dev/peps/pep-0008/) coding standards.
+
+Tests should conform to `PEP8` but can ignore `E501` for long lines to allow the inclusion of Excel XML in tests.
+
+There is a make target that will verify the source and test files using [flake8](https://flake8.pycqa.org):
+
+    make test_flake8
+
+
+### Running tests
+
+As a minimum, tests should be run using Python 3.6+.
+
+
+    make test
+    # or
+    pytest
+
+I use [pythonbrew](https://github.com/utahta/pythonbrew) and [Tox](https://tox.readthedocs.io/en/latest/) to test with a variety of Python versions. See the Makefile for example test targets. A `tox.ini` file is already configured.
+
+When you push your changes they will also be tested using GitHub Actions.
+
+
+### Documentation
+
+If your feature requires it then write some [RST](http://docutils.sourceforge.net/rst.html) documentation in [Sphinx](http://sphinx-doc.org) format or add to the existing documentation.
+
+The docs, in `dev/docs/source` can be built in Html format using:
+
+    make docs
+
+
+### Example programs
+
+If applicable add an example program to the `examples` directory.
+
+
+### Copyright and License
+
+Copyright remains with the original author. Do not include additional copyright claims or Licensing requirements. GitHub and the `git` repository will record your contribution an it will be acknowledged in the Changes file.
+
+
+### Submitting the Pull Request
+
+If your change involves several incremental `git` commits then `rebase` or `squash` them onto another branch so that the Pull Request is a single commit or a small number of logical commits.
+
+Push your changes to GitHub and submit the Pull Request with a hash link to the to the Issue tracker that was opened above.

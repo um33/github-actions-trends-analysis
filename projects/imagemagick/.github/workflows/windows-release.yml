@@ -1,0 +1,366 @@
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - main
+    paths:
+    - 'configure'
+    - 'm4/version.m4'
+    - '.github/workflows/windows-release.yml'
+  pull_request:
+    branches:
+    - main
+    paths:
+    - '.github/workflows/windows-release.yml'
+
+name: windows release
+jobs:
+  change_log:
+    name: 'Create ChangeLog.md'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: npm install -g auto-changelog
+
+    - name: Create ChangeLog.md
+      run: |
+        export NEXT_VERSION=$(grep -oP "PACKAGE_VERSION='\K[0-9\.-]*" configure)
+        git tag $NEXT_VERSION
+        auto-changelog --sort-commits date
+        mkdir artifacts
+        mv ChangeLog.md artifacts/ChangeLog.md
+
+    - name: Upload ChangeLog.md
+      uses: actions/upload-artifact@v4
+      with:
+        name: ChangeLog
+        path: artifacts
+
+  release_windows_installer:
+    name: 'Windows ${{matrix.quantum}}${{matrix.hdri_flag}}-${{matrix.platform}} (${{matrix.type}})'
+    needs:
+      - change_log
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ x64, arm64, x86 ]
+        type: [ dll, static ]
+        quantum: [ Q8, Q16 ]
+        hdri: [ HDRI, noHDRI ]
+        exclude:
+          - quantum: Q8
+            hdri: HDRI
+        include:
+          - platform: x64
+            bit: 64
+          - platform: arm64
+            bit: 64
+          - platform: x86
+            bit: 32
+          - type: dll
+            type_flag: dmt
+          - type: static
+            type_flag: smtd
+          - hdri: HDRI
+            hdri_flag: '-HDRI'
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Download ChangeLog.md
+      uses: actions/download-artifact@v4
+      with:
+        name: ChangeLog
+        path: ImageMagick-Windows\ImageMagick
+
+    - name: Install Strawberry Perl
+      if: ${{matrix.type == 'dll' && matrix.platform != 'arm64'}}
+      shell: cmd
+      run: |
+        powershell Invoke-WebRequest -Uri https://github.com/ImageMagick/ImageMagick-Windows/releases/download/20200615/strawberry-perl-5.30.2.1-${{matrix.bit}}bit.msi -OutFile strawberry-perl-5.30.2.1-${{matrix.bit}}bit.msi
+        msiexec /i strawberry-perl-5.30.2.1-${{matrix.bit}}bit.msi /qn INSTALLDIR="C:\Strawberry${{matrix.bit}}"
+        mv "C:\Strawberry" "C:\Strawberry64"
+
+    - name: Install Inno Setup
+      shell: cmd
+      run: |
+        powershell Invoke-WebRequest -Uri https://github.com/ImageMagick/ImageMagick-Windows/releases/download/20200615/innosetup-6.2.0.exe -OutFile innosetup-6.2.0.exe
+        innosetup-6.2.0.exe /SILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+
+    - name: Build configure
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+    - name: Configure ImageMagick
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /includeOptional /installedSupport /deprecated /${{matrix.hdri}} /${{matrix.quantum}} /${{matrix.platform}} /${{matrix.type_flag}}
+
+    - name: Build ImageMagick
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
+
+    - name: Build PerlMagick
+      if: ${{matrix.type == 'dll' && matrix.platform != 'arm64'}}
+      shell: cmd
+      run: |
+        set PATH=
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\ImageMagick\PerlMagick
+        set PATH=%PATH%;C:\Strawberry${{matrix.bit}}\c\bin;C:\Strawberry${{matrix.bit}}\perl\site\bin;C:\Strawberry${{matrix.bit}}\perl\bin;C:\WINDOWS\System32\WindowsPowerShell\v1.0
+        perl "Makefile.PL" "MAKE=nmake" "CC=g++"
+        nmake
+        nmake release
+
+    - name: Sign binaries
+      if: github.event_name != 'pull_request'
+      uses: azure/azure-code-signing-action@v0.3.1
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: https://eus.codesigning.azure.net/
+        code-signing-account-name: ImageMagick
+        certificate-profile-name: ImageMagick
+        files-folder: 'ImageMagick-Windows\Output\bin'
+        files-folder-filter: dll,exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        append-signature: true
+        timeout: 600
+
+    - name: Create installer
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        "C:\Program Files (x86)\Inno Setup 6\iscc.exe" ImageMagick-Windows\Installer\Inno\ImageMagick.iss
+
+    - name: Sign installer
+      if: github.event_name != 'pull_request'
+      uses: azure/azure-code-signing-action@v0.3.1
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: https://eus.codesigning.azure.net/
+        code-signing-account-name: ImageMagick
+        certificate-profile-name: ImageMagick
+        files-folder: 'ImageMagick-Windows\Installer\Inno\Output'
+        files-folder-filter: dll,exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        append-signature: true
+        timeout: 600
+
+    - name: Get version
+      id: version
+      shell: pwsh
+      run: |
+        $version = (cat "ImageMagick-Windows\Installer\Inno\config.isx" | Select-String "MagickPackageFullVersionText") | Out-String
+        $version = ($version | Select-String '".*"' -AllMatches |  Select -Expand Matches | Select -Expand Value | Out-String)
+        $version = $version -Replace "`n|`r|""",""
+        $version = $version -Replace " ","-"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: 'ImageMagick-${{steps.version.outputs.version}}-installer-${{matrix.quantum}}${{matrix.hdri_flag}}-${{matrix.type}}-${{matrix.platform}}'
+        path: 'ImageMagick-Windows\Installer\Inno\Output'
+
+  release_windows_source:
+    name: 'Windows source'
+    needs:
+      - change_log
+    runs-on: windows-latest
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Download ChangeLog.md
+      uses: actions/download-artifact@v4
+      with:
+        name: ChangeLog
+        path: ImageMagick-Windows\ImageMagick
+
+    - name: Create source archive
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows
+        mkdir Source
+        move Build Source
+        move Configure Source
+        move Dependencies Source
+        move ImageMagick Source
+        move OptionalDependencies Source
+        move Output Source
+        move Projects Source
+        7z a ImageMagick-Windows.7z .\Source\*
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ImageMagick-Windows
+        path: 'ImageMagick-Windows\ImageMagick-Windows.7z'
+
+  release_windows_portable:
+    name: 'Windows portable ${{matrix.quantum}}${{matrix.hdri_flag}}-${{matrix.platform}}'
+    needs:
+      - change_log
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ x64, arm64, x86 ]
+        quantum: [ Q8, Q16 ]
+        hdri: [ HDRI, noHDRI ]
+        exclude:
+          - quantum: Q8
+            hdri: HDRI
+        include:
+          - platform: x64
+            bit: 64
+          - platform: arm64
+            bit: 64
+          - platform: x86
+            bit: 32
+          - hdri: HDRI
+            hdri_flag: '-HDRI'
+
+    steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
+    - name: Clone ImageMagick-Windows
+      uses: actions/checkout@v4
+      with:
+        repository: ImageMagick/ImageMagick-Windows
+        path: ImageMagick-Windows
+        ref: refs/heads/main
+
+    - name: Clone repositories
+      shell: cmd
+      run: |
+        for /f "tokens=* USEBACKQ" %%F IN (`git -C ImageMagick rev-parse HEAD`) do set COMMIT_SHA=%%F
+        cd ImageMagick-Windows
+        CloneRepositories.IM7.cmd %COMMIT_SHA%
+
+    - name: Download ChangeLog.md
+      uses: actions/download-artifact@v4
+      with:
+        name: ChangeLog
+        path: ImageMagick-Windows\ImageMagick
+
+    - name: Build configure
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+
+    - name: Configure ImageMagick
+      shell: cmd
+      run: |
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /${{matrix.hdri}} /${{matrix.quantum}} /${{matrix.platform}} /smt
+
+    - name: Build ImageMagick
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
+
+    - name: Sign executables
+      if: github.event_name != 'pull_request'
+      uses: azure/azure-code-signing-action@v0.3.1
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: https://eus.codesigning.azure.net/
+        code-signing-account-name: ImageMagick
+        certificate-profile-name: ImageMagick
+        files-folder: 'ImageMagick-Windows\Output\bin'
+        files-folder-filter: exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        append-signature: true
+        timeout: 600
+
+    - name: Copy Files
+      id: package
+      shell: pwsh
+      run: |
+        [void](New-Item -Name "portable" -ItemType directory)
+        Copy-Item "ImageMagick-Windows\Output\bin\*.exe" "portable"
+        Copy-Item "ImageMagick-Windows\Output\bin\*.xml" "portable"
+        Copy-Item "ImageMagick-Windows\Output\bin\sRGB.icc" "portable"
+
+        Copy-Item "ImageMagick-Windows\Output\NOTICE.txt" "portable"
+        Copy-Item "ImageMagick-Windows\ImageMagick\ChangeLog.md" "portable"
+        Copy-Item "ImageMagick-Windows\ImageMagick\LICENSE" "portable\LICENSE.txt"
+
+        $version = (cat "ImageMagick-Windows\Installer\Inno\config.isx" | Select-String "MagickPackageFullVersionText") | Out-String
+        $version = ($version | Select-String '".*"' -AllMatches |  Select -Expand Matches | Select -Expand Value | Out-String)
+        $version = $version -Replace "`n|`r|""",""
+        $version = $version -Replace " ","-"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: 'ImageMagick-${{steps.package.outputs.version}}-portable-${{matrix.quantum}}${{matrix.hdri_flag}}-${{matrix.platform}}'
+        path: portable

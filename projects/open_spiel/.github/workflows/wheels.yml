@@ -1,0 +1,122 @@
+# Builds and tests the OpenSpiel wheels using cibuildwheel.
+#
+# Each wheel is built via the manylinux2014 pypa Docker image on Linux and
+# standard MacOS X on 10.15. Each binary wheel is built only for x86_64. Basic
+# API tests are run within the Docker environment that built the wheel. Full
+# tests (tests that use extra dependencies such as PyTorch, JAX, Tensorflow)
+# are tested in the Github Actions CI environment (Ubuntu 20.04 and Mac OS
+# 10.15).
+name: wheels
+
+on:
+  # Test the wheels for each PR to ensure the PR doesn't break them.
+  pull_request:
+    branches: [ master ]
+  # Workflow dispatch is a way to manually trigger workflows. This will be
+  # used to build and test the wheels manually for releases.
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Workflow dispatch (triggered manually)'
+        required: false
+        default: 'No name specified'
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+        - os: ubuntu-22.04
+          OS_TYPE: "Linux"
+          CI_PYBIN: python3
+          OS_PYTHON_VERSION: 3.10
+          CIBW_ENVIRONMENT: "CXX=$(which g++) OPEN_SPIEL_BUILDING_WHEEL='ON' OPEN_SPIEL_BUILD_WITH_ACPC='ON' OPEN_SPIEL_BUILD_WITH_HANABI='ON' OPEN_SPIEL_BUILD_WITH_ROSHAMBO='ON'"
+          CIBW_BUILD: cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64
+        - os: macOS-12
+          OS_TYPE: "Darwin"
+          CI_PYBIN: python3.9
+          OS_PYTHON_VERSION: 3.9
+          CIBW_ENVIRONMENT: "OPEN_SPIEL_BUILDING_WHEEL='ON' OPEN_SPIEL_BUILD_WITH_ACPC='ON' OPEN_SPIEL_BUILD_WITH_HANABI='ON' OPEN_SPIEL_BUILD_WITH_ROSHAMBO='ON'"
+          CIBW_BUILD: cp39-macosx_x86_64 cp310-macosx_x86_64 cp311-macosx_x86_64 cp312-macosx_x86_64
+        # Setting to the new M1 runners to build the _arm64 wheels
+        # https://github.blog/2023-10-02-introducing-the-new-apple-silicon-powered-m1-macos-larger-runner-for-github-actions/
+        # Disabling now that the OpenSpiel 1.4 wheels are on PyPI because these xlarge machines are
+        # quite costly... we don't want to run these on every PR.
+        # TODO(author5): Set this to macos-13 once these runners are no longer in beta
+        #- os: macos-13-xlarge
+        #  OS_TYPE: "Darwin"
+        #  CI_PYBIN: python3.11
+        #  OS_PYTHON_VERSION: 3.11
+        #  CIBW_ENVIRONMENT: "OPEN_SPIEL_BUILDING_WHEEL='ON' OPEN_SPIEL_BUILD_WITH_ACPC='ON' OPEN_SPIEL_BUILD_WITH_HANABI='ON' OPEN_SPIEL_BUILD_WITH_ROSHAMBO='ON'"
+        #  CIBW_BUILD: cp39-macosx_arm64 cp310-macosx_arm64 cp311-macosx_arm64 cp312-macosx_arm64
+    env:
+      OPEN_SPIEL_BUILDING_WHEEL: ON
+      OPEN_SPIEL_BUILD_WITH_ACPC: ON
+      OPEN_SPIEL_BUILD_WITH_HANABI: ON
+      OPEN_SPIEL_BUILD_WITH_ROSHAMBO: ON
+      OS_TYPE: ${{ matrix.OS_TYPE }}
+      OS_PYTHON_VERSION: ${{ matrix.OS_PYTHON_VERSION }}
+      CI_PYBIN: ${{ matrix.CI_PYBIN }}
+      CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+      CIBW_BUILD: ${{ matrix.CIBW_BUILD }}
+      CIBW_SKIP: pp*
+      CIBW_BEFORE_BUILD: python -m pip install --upgrade cmake
+      CIBW_BEFORE_TEST: python -m pip install --upgrade pip
+      CIBW_TEST_COMMAND: /bin/bash {project}/open_spiel/scripts/test_wheel.sh basic {project}
+      CIBW_ENVIRONMENT: ${{ matrix.CIBW_ENVIRONMENT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install
+        run: |
+          pwd
+          uname -a
+          [[ "${OS_TYPE}" = "Darwin" ]] && brew install python@${OS_PYTHON_VERSION}
+          [[ "${OS_TYPE}" = "Darwin" ]] && brew link --force python@${OS_PYTHON_VERSION}
+          which g++
+          g++ --version
+          chmod +x install.sh
+          # This is needed to grab OpenSpiel dependencies.
+          [[ "${OS_TYPE}" = "Darwin" ]] && ./install.sh `which python${OS_PYTHON_VERSION}`
+          [[ "${OS_TYPE}" = "Linux" ]] && ./install.sh `which python3`
+          # These are necessary to install what is necessary for the build and for the full tests below.
+          ${CI_PYBIN} -m pip install --upgrade pip
+          ${CI_PYBIN} -m pip --version
+          [[ "${OS_TYPE}" = "Darwin" ]] && ${CI_PYBIN} -m pip install pipx
+          ${CI_PYBIN} -m pip install --upgrade setuptools
+          ${CI_PYBIN} -m pip install --upgrade -r requirements.txt -q
+          source ./open_spiel/scripts/python_extra_deps.sh ${CI_PYBIN}
+          ${CI_PYBIN} -m pip install --no-cache-dir --upgrade $OPEN_SPIEL_PYTHON_JAX_DEPS
+          ${CI_PYBIN} -m pip install --no-cache-dir --upgrade $OPEN_SPIEL_PYTHON_PYTORCH_DEPS
+          ${CI_PYBIN} -m pip install --no-cache-dir --upgrade $OPEN_SPIEL_PYTHON_TENSORFLOW_DEPS
+          ${CI_PYBIN} -m pip install --no-cache-dir --upgrade $OPEN_SPIEL_PYTHON_MISC_DEPS
+          ${CI_PYBIN} -m pip install twine
+          ${CI_PYBIN} -m pip install cibuildwheel==2.16.2
+      - name: Build sdist
+        run: |
+          pipx run build --sdist
+          twine check dist/*.tar.gz
+
+      # Build all the wheels and run the basic tests (within the docker images)
+      # Basic tests are run via the CIBW_TEST_COMMAND environment variable.
+      - name: Build bdist_wheel and run tests
+        run: |
+          [[ "${OS_TYPE}" = "Darwin" ]] && xcodebuild -version
+          ${CI_PYBIN} -m cibuildwheel --output-dir wheelhouse
+          ls -l wheelhouse
+
+      # Install the built wheel and run the full tests on this host. The full
+      # tests include all the ones that use the machine learning libraries,
+      # such as Tensorflow, PyTorch, and JAX.
+      - name: Install bdist_wheel and full tests
+        run: ./open_spiel/scripts/test_wheel.sh full `pwd` ${CI_PYBIN}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ matrix.os }}
+          path: |
+            dist/*.tar.gz
+            ./wheelhouse/*.whl

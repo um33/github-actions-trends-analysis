@@ -1,0 +1,49 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Use this to provide a version, instead of deriving it from the changelog.
+        required: false
+        type: string
+      branch:
+        description: Use this to provide a branch, instead of the default main branch.
+        required: false
+        type: string
+        default: main
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      # action is at https://github.com/realm/ci-actions/tree/main/update-changelog
+      - name: Update Changelog
+        id: update-changelog
+        uses: realm/ci-actions/update-changelog@main
+        with:
+          version: ${{ inputs.version }}
+          changelog: ${{ github.workspace }}/CHANGELOG.md
+
+      - name: Update version
+        run: npm version ${{ steps.update-changelog.outputs.new-version }} --workspace realm
+
+      - name: Create Release PR
+        uses: peter-evans/create-pull-request@v5.0.0
+        id: create-pr
+        with:
+          branch: release/${{ steps.update-changelog.outputs.new-version }}
+          title: Prepare for ${{ steps.update-changelog.outputs.new-version }}
+          body: An automated PR for next release.
+          commit-message: "[${{ steps.update-changelog.outputs.new-version }}] Bump version"
+          token: ${{ secrets.REALM_CI_PAT }}
+          assignees: ${{ github.event.sender.login }}
+          labels: no-jira-ticket
+
+      - name: Update summary
+        run: echo "Created [PR for v${{ steps.update-changelog.outputs.new-version }}](${{ steps.create-pr.outputs.pull-request-url }})" >> $GITHUB_STEP_SUMMARY

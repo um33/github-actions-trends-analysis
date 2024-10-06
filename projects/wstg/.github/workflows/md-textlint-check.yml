@@ -1,0 +1,73 @@
+name: Markdown Terminology Lint Check
+
+on:
+  pull_request_target:
+    branches:
+    - master
+    paths:
+    - '**.md'
+    - '!.github/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  textlint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{github.event.pull_request.head.ref}}
+        repository: ${{github.event.pull_request.head.repo.full_name}}
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
+    - name: Install dependencies
+      run: |
+        npm install -g textlint
+        npm install -g textlint-rule-terminology
+    - name: Changed Files Exporter
+      id: files
+      # This uses the SHA for 4.0.1 - https://github.com/umani/changed-files/releases/tag/v4.0.1
+      uses: umani/changed-files@0239328a3a6268aad16af7c3e4efc78e32d6c0f0
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        pattern: '^.*\.(md)$'
+    - name: Run textlint Check
+      env:
+        FILES: '${{ steps.files.outputs.files_updated }} ${{ steps.files.outputs.files_created }}'
+      run: |
+        touch log.txt
+        # All markdown files, excluding .github
+        # Use fix flag so that it goes through all files
+        for FILE in $FILES; do echo $FILE | grep -v \.github && textlint --config .github/configs/.textlintrc --fix --rule terminology $FILE | tee -a log.txt; done
+        if grep -q  'Incorrect usage' log.txt ; then exit 1 ; else echo -e \"No terminology issues found.\"; fi
+    - name: Show Mistakes
+      if: failure()
+      run: |
+        cat log.txt
+        cat log.txt | grep -v '✔ Fixed' | tr '✔' '✖' >mistakes.txt
+    - name: Attach Mistakes
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: Terminology Mistakes
+        path: mistakes.txt
+    - name: Comment Mistakes
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          const fs = require("fs");
+          const mistakesPath = `${process.env.GITHUB_WORKSPACE}/mistakes.txt`;
+          const mistakesString = fs.readFileSync(mistakesPath).toString().trimEnd();
+          github.rest.issues.createComment({
+            issue_number: ${{ github.event.number }},
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `**The following mistakes were identified:** \n${mistakesString}`
+          })

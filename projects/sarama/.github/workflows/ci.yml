@@ -1,0 +1,63 @@
+name: CI
+on:
+  merge_group:
+  push:
+    branches:
+    - main
+    paths-ignore:
+    - '**/*.md'
+  pull_request:
+    branches:
+    - "**"
+    paths-ignore:
+    - '**/*.md'
+
+permissions:
+  contents: read  # for actions/checkout to fetch code
+
+jobs:
+  lint:
+    permissions:
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: read  # for golangci/golangci-lint-action to fetch pull requests
+    name: Linting with Go ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.22.x]
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        persist-credentials: false
+    - name: Setup Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+      with:
+        cache: false # golangci-lint-action has its own cache
+        go-version: ${{ matrix.go-version }}
+    - name: golangci-lint
+      env:
+        GOFLAGS: -tags=functional
+      uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4.0.0
+      with:
+        version: v1.56.1
+  test:
+    name: Unit Testing with Go ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.19.x, 1.21.x, 1.22.x]
+    env:
+      DEBUG: true
+      GOFLAGS: -trimpath
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        persist-credentials: false
+    - name: Setup Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Test (Unit)
+      run: make test

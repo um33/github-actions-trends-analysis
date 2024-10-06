@@ -1,0 +1,98 @@
+name: pgcli
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths-ignore:
+      - '**.rst'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    services:
+      postgres:
+        image: postgres:9.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+            - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pgbouncer
+        run: |
+            sudo apt install pgbouncer -y
+
+            sudo chmod 666 /etc/pgbouncer/*.*
+
+            cat <<EOF > /etc/pgbouncer/userlist.txt
+            "postgres" "postgres"
+            EOF
+
+            cat <<EOF > /etc/pgbouncer/pgbouncer.ini
+            [databases]
+            * = host=localhost port=5432
+            [pgbouncer]
+            listen_port = 6432
+            listen_addr = localhost
+            auth_type = trust
+            auth_file = /etc/pgbouncer/userlist.txt
+            logfile = pgbouncer.log
+            pidfile = pgbouncer.pid
+            admin_users = postgres
+            EOF
+
+            sudo systemctl stop pgbouncer
+
+            pgbouncer -d /etc/pgbouncer/pgbouncer.ini
+
+            psql -h localhost -U postgres -p 6432 pgbouncer -c 'show help'
+
+      - name: Install requirements
+        run: |
+          pip install -U pip setuptools
+          pip install --no-cache-dir ".[sshtunnel]"
+          pip install -r requirements-dev.txt
+          pip install keyrings.alt>=3.1
+
+      - name: Run unit tests
+        run: coverage run --source pgcli -m pytest
+
+      - name: Run integration tests
+        env:
+            PGUSER: postgres
+            PGPASSWORD: postgres
+
+        run: behave tests/features --no-capture
+
+      - name: Check changelog for ReST compliance
+        run: rst2html.py --halt=warning changelog.rst >/dev/null
+
+      - name: Run Black
+        run: black --check .
+        if: matrix.python-version == '3.8'
+
+      - name: Coverage
+        run: |
+          coverage combine
+          coverage report
+          codecov

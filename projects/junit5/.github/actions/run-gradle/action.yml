@@ -1,0 +1,30 @@
+name: Run Gradle
+description: Sets up Gradle JDKs and runs Gradle
+inputs:
+  arguments:
+    required: true
+    description: Gradle arguments
+    default: build
+  dependency-graph:
+    required: false
+    description: 'see https://github.com/gradle/gradle-build-action#enable-dependency-graph-generation-for-a-workflow'
+    default: disabled
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-java@v4
+      id: setup-gradle-jdk
+      with:
+        distribution: temurin
+        java-version: 21
+    - uses: gradle/gradle-build-action@v3
+      env:
+        JAVA_HOME: ${{ steps.setup-gradle-jdk.outputs.path }}
+      with:
+        dependency-graph: ${{ inputs.dependency-graph }}
+        arguments: |
+          -Porg.gradle.java.installations.auto-download=false
+          -Pjunit.develocity.predictiveTestSelection.enabled=${{ github.event_name == 'pull_request' }}
+          "-Dscan.value.GitHub job=${{ github.job }}"
+          javaToolchains
+          ${{ inputs.arguments }}

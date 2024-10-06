@@ -1,0 +1,44 @@
+name: e2e
+
+on:
+  schedule:
+    # run e2e test every 4 hours
+    - cron: 0 */4 * * *
+  workflow_dispatch:
+jobs:
+  build:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on
+    steps:
+
+      - name: Set up Go 1.19
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.2.0
+        with:
+          config: .github/workflows/kind/kind.yaml
+
+      - name: Deploy KubeSphere to Kind
+        run: KIND_CLUSTER_NAME=chart-testing hack/deploy-kubesphere.sh
+
+      - name: Run e2e testing
+        run: go test ./test/e2e
+
+      - name: slack
+        uses: 8398a7/action-slack@v3
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+        if: failure()
+

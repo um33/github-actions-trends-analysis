@@ -1,0 +1,31 @@
+name: release-build
+
+on:
+  push:
+    tags:
+      - 'acra-*'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4.2.1
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Checkout acra
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Publish
+        run: ./gradlew publish --no-daemon
+        env:
+          GITHUB_USER: github-action
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OSSRH_USER: ${{ secrets.OSSRH_USER }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}

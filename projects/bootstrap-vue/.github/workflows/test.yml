@@ -1,0 +1,143 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+  pull_request:
+    branches:
+      - dev
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [16]
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
+
+      - name: Set Node.js version
+        uses: actions/setup-node@v3.5.1
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache node_modules
+        uses: actions/cache@v3.2.2
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-
+            ${{ matrix.os }}-node-v${{ matrix.node }}-
+            ${{ matrix.os }}-
+
+      - name: Install dependencies
+        run: yarn install --check-files --frozen-lockfile --non-interactive
+
+      - name: Lint
+        run: yarn run test:lint
+
+  audit:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [16]
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
+
+      - name: Set Node.js version
+        uses: actions/setup-node@v3.5.1
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache node_modules
+        uses: actions/cache@v3.2.2
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-
+            ${{ matrix.os }}-node-v${{ matrix.node }}-
+            ${{ matrix.os }}-
+
+      - name: Install dependencies
+        run: yarn install --check-files --frozen-lockfile --non-interactive
+
+      - name: Audit
+        run: yarn run audit
+
+  test-unit:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [12, 14, 16]
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
+
+      - name: Set Node.js version
+        uses: actions/setup-node@v3.5.1
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache node_modules
+        uses: actions/cache@v3.2.2
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-node-v${{ matrix.node }}-yarn-
+            ${{ matrix.os }}-node-v${{ matrix.node }}-
+            ${{ matrix.os }}-
+
+      - name: Install dependencies
+        run: yarn install --check-files --frozen-lockfile --non-interactive
+
+      - name: Test unit
+        run: yarn run test:unit --coverage --maxWorkers=2
+
+      - name: Test unit (Vue 3)
+        run: yarn run test:unit --coverage --maxWorkers=2
+        env:
+          USE_VUE3: '1'
+
+      - name: Merge coverage
+        run:
+          npx istanbul-merge --out ./coverage-final.json coverage/coverage-final.json
+          coverage-vue3/coverage-final.json
+
+      - name: CodeCov
+        uses: codecov/codecov-action@v3.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unittests
+          files: ./coverage-final.json

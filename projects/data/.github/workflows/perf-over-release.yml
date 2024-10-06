@@ -1,0 +1,111 @@
+name: Performance Check Against Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - labeled
+      - synchronize
+      - ready_for_review
+
+env:
+  TURBO_API: http://127.0.0.1:9080
+  TURBO_TOKEN: this-is-not-a-secret
+  TURBO_TEAM: myself
+
+concurrency:
+  group: perf-release-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  release-performance-checks:
+    if: contains(github.event.pull_request.labels.*.name, 'ci-perf')
+    name: 'Performance Check Against Release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 3
+      - run: git fetch origin release --depth=1
+      - name: Check SHA
+        run: |
+          sha=$(git rev-parse --short=8 HEAD)
+          echo "HEAD sha=$sha"
+          echo "GITHUB_SHA sha=$GITHUB_SHA"
+          mkdir -p tmp
+          echo $sha > tmp/sha-for-check.txt
+          originSha=$(git rev-parse HEAD^2)
+          echo $originSha > tmp/sha-for-commit.txt
+          git show --format=short --no-patch $originSha
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 19.x
+          cache: 'pnpm'
+      - uses: tracerbench/tracerbench-compare-action@master
+        with:
+          experiment-build-command: pnpm install && pnpm --filter performance-test-app exec ember build -e production --output-path dist-experiment --suppress-sizes
+          experiment-serve-command: pnpm --filter performance-test-app exec ember s --path dist-experiment --port 4201
+          control-build-command: pnpm install && pnpm --filter performance-test-app exec ember build -e production --output-path dist-control --suppress-sizes
+          control-serve-command: pnpm --filter performance-test-app exec ember s --path dist-control
+          sample-timeout: 60
+          use-pnpm: true
+          scenarios: |
+            {
+              "basic-record-materialization": {
+                "control": "http://localhost:4200/basic-record-materialization",
+                "experiment": "http://localhost:4201/basic-record-materialization",
+                "markers": "start-data-generation,start-push-payload,start-peek-records,start-record-materialization,end-record-materialization"
+              },
+              "relationship-materialization-simple": {
+                "control": "http://localhost:4200/relationship-materialization-simple",
+                "experiment": "http://localhost:4201/relationship-materialization-simple",
+                "markers": "start-find-all,start-materialization,end-materialization"
+              },
+              "relationship-materialization-complex": {
+                "control": "http://localhost:4200/relationship-materialization-complex",
+                "experiment": "http://localhost:4201/relationship-materialization-complex",
+                "markers": "start-data-generation,start-push-payload,start-peek-records,start-record-materialization,start-relationship-materialization,end-relationship-materialization"
+              },
+              "unload": {
+                "control": "http://localhost:4200/unload",
+                "experiment": "http://localhost:4201/unload",
+                "markers": "start-push-payload,start-unload-records,end-unload-records"
+              },
+              "unload-all": {
+                "control": "http://localhost:4200/unload-all",
+                "experiment": "http://localhost:4201/unload-all",
+                "markers": "start-push-payload,start-materialization,start-unload-all,end-unload-all"
+              },
+              "destroy": {
+                "control": "http://localhost:4200/destroy",
+                "experiment": "http://localhost:4201/destroy",
+                "markers": "start-push-payload,start-destroy-records,end-destroy-records"
+              },
+              "add-children": {
+                "control": "http://localhost:4200/add-children",
+                "experiment": "http://localhost:4201/add-children",
+                "markers": "start-push-initial-payload,start-push-update-payload,end-push-update-payload"
+              },
+              "unused-relationships": {
+                "control": "http://localhost:4200/unused-relationships",
+                "experiment": "http://localhost:4201/unused-relationships",
+                "markers": "start-push-payload,end-push-payload"
+              }
+            }
+          fidelity: 60
+          control-sha: origin/release
+          upload-traces: true
+          upload-results: true
+      - name: Report TracerBench Results
+        if: failure() || success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_MARKER: 'Commit v Release Performance Report for '
+        run: |
+          COMMENT_MARKER="Commit v Release Performance Report for "
+          sha=$(cat tmp/sha-for-commit.txt)
+          node ./scripts/perf-tracking/create-comment.js $sha > tracerbench-results/comment.txt
+          COMMENT_TEXT="@./tracerbench-results/comment.txt"
+          source scripts/asset-size-tracking/src/post-comment.sh

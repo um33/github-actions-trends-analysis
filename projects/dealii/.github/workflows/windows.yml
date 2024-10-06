@@ -1,0 +1,83 @@
+name: github-windows
+
+on:
+  push:
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    - ready_for_review
+
+concurrency:
+  group: ${ {github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+
+permissions:
+  contents: read
+
+jobs:
+  windows-serial:
+    # Serial build on Windows
+    #
+    name: Windows Serial
+    runs-on: ${{ matrix.os }}
+
+    #
+    # The following condition only runs the workflow on 'push' or if the
+    # 'pull_request' is not a draft. This is only useful for hackathons or
+    # other situations when the CI is massively overburdened with pull
+    # requests.
+    #
+    # if: ${{ github.event_name == 'push' || !github.event.pull_request.draft }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, windows-2022]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: info
+      run: |
+        cmake --version
+        cmake -h
+        wmic logicaldisk get size, freespace, caption
+    - name: configure
+      shell: bash
+      run: |
+        mkdir build
+        mkdir c:/project
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=c:/project -DDEAL_II_WITH_ZLIB=off -DDEAL_II_CXX_FLAGS="-WX /D FE_EVAL_FACTORY_DEGREE_MAX=2" -T host=x64 -A x64 ..
+    - name: print detailed.log
+      run: type build/detailed.log
+    - name: build library
+      shell: bash
+      run: |
+        cmake --build build --parallel 2 --target install
+    - name: test library
+      shell: bash
+      run: |
+        cmake --build build --parallel 2 --target test
+    - name: archive library
+      # run only if a PR is merged into master
+      if: ${{ github.ref == 'refs/heads/master' && matrix.os == 'windows-2022' }}
+      shell: bash
+      run: |
+        cd c:/project
+        7z a dealii-windows.zip *
+    - name: upload library
+      # run only if a PR is merged into master
+      if: ${{ github.ref == 'refs/heads/master' && matrix.os == 'windows-2022' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: dealii-windows.zip
+        path: c:/project/dealii-windows.zip
+    - name: upload CMakeConfigureLog
+      uses: actions/upload-artifact@v4
+      if: always()
+      continue-on-error: true
+      with:
+        name: ${{ matrix.os }}-serial-CMakeConfigureLog.yaml
+        path: build/CMakeFiles/CMakeConfigureLog.yaml

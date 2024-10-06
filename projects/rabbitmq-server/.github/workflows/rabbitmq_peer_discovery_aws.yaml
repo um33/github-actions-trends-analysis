@@ -1,0 +1,60 @@
+name: Peer Discovery AWS Integration Test
+on:
+  push:
+    paths-ignore:
+      - '.github/workflows/secondary-umbrella.yaml'
+      - '.github/workflows/update-elixir-patches.yaml'
+      - '.github/workflows/update-otp-patches.yaml'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  peer-discovery-aws-integration-test:
+    name: Integration Test
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        otp_version_id:
+          - 26_2
+    timeout-minutes: 45
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - uses: docker/metadata-action@v5
+      id: metadata
+      with:
+        images: pivotalrabbitmq/rabbitmq
+        tags: |
+          type=sha,format=long
+    - uses: int128/wait-for-docker-image-action@v1
+      with:
+        tags: ${{ steps.metadata.outputs.tags }}
+        timeout-seconds: 3600
+        polling-seconds: 60
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --color=yes
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN INTEGRATION TESTS
+      run: |
+        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
+        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
+
+        branch_or_tag="${GITHUB_REF##*/}"
+        bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
+          --config=rbe-${{ matrix.otp_version_id }} \
+          --test_tag_filters=aws \
+          --build_tests_only \
+          --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
+          --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" \
+          --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
+          --verbose_failures

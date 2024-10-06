@@ -1,0 +1,30 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+      - next
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jaredpalmer/formik'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          cache: yarn
+          node-version-file: .nvmrc
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Create Release Pull Request or Publish to npm
+        uses: changesets/action@master
+        with:
+          publish: yarn release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

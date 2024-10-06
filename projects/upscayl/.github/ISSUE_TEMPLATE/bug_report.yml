@@ -1,0 +1,78 @@
+name: Bug Report
+description: Bugs in the software itself
+labels: [bug]
+body:
+- type: checkboxes
+  attributes:
+    label: Checklist
+    options:
+      - label: I have **tried ALL** of the steps mentioned in the [troubleshooting guide](https://github.com/upscayl/upscayl/wiki/Troubleshooting).
+        required: true
+      - label: I have **searched** for this in the [issues tab](https://github.com/upscayl/upscayl/issues?q=).
+        required: true
+      - label: My error involves vkEnumeratePhysicalDevices or vkCreateInstance, which means I should ignore the other issues and file this one despite the last checkbox.
+- type: textarea
+  attributes: 
+    label: Describe the Bug
+    description: 💥 Say it in words. Don't put the logs here.
+  validations:
+    required: true
+    
+- type: textarea
+  attributes: 
+    label: To Reproduce 
+    description: 🧙 How can we emulate the bug on our own machine? (Please write in steps)
+  validations:
+    required: true
+
+- type: input
+  attributes:
+    label: Upscayl Version (or commit hash)
+    description: ✍️ What version of Upscayl did you use?
+  validations:
+    required: true
+
+- type: dropdown
+  attributes:
+    label: Platform
+    description: 🧑‍💻 What operating system or distribution platform do you use? Select the last one that applies.
+    options:
+      - Linux
+      - Mac App Store
+      - Mac DMG / Homebrew
+      - Flatpak
+      - Windows
+  validations:
+    required: true
+
+- type: input
+  attributes:
+    label: OS Version
+    description: "✍️ For example: Ubuntu 22.04.03, macOS 12.7.3, Windows 11 23H2"
+  validations:
+    required: true
+
+- type: input
+  attributes:
+    label: GPU Name
+    description: 📝 What GPU do you have? If you do not know, please just write the name of your device. If the name is something like "Intel Graphics" or "AMD Vega" and you can't Upscayl images, [STOP and read the 3rd point in the FAQ](https://github.com/upscayl/upscayl?tab=readme-ov-file#-faq). 
+  validations:
+    required: true
+    
+- type: textarea
+  attributes:
+    label: Expected Behavior
+    description: 🤓 What should've happened?
+    
+- type: textarea
+  attributes:
+    label: Screenshots
+    description: 🤳 Share us your screen!
+
+- type: textarea
+  attributes: 
+    label: Logs
+    description: 💥 Paste the logs below. [Here's a Guide if you don't know how to do that](https://github.com/upscayl/upscayl/wiki/Guide#logs).
+    render: sh
+  validations:
+    required: true

@@ -1,0 +1,20 @@
+{
+  extends: [
+    'config:base',
+
+    // Make sure we get a single PR combining all updates
+    'group:all',
+  ],
+
+  // Disable dependency dashboard
+  dependencyDashboard: false,
+
+  // Use our labelling system
+  labels: ['dependencies'],
+
+  // We generally always want the major version
+  separateMajorMinor: false,
+
+  // We manually update digest dependencies (eg. hashes in Github actions)
+  digest: {enabled: false},
+}

@@ -1,0 +1,41 @@
+version: 2
+updates:
+- package-ecosystem: nuget
+  target-branch: main
+  directory: "/"
+  schedule:
+    interval: daily
+  groups:
+    roslyn:
+      patterns:
+      - "Microsoft.CodeAnalysis"
+      - "Microsoft.CodeAnalysis.*"
+    spectre:
+      patterns:
+      - "Spectre.Console"
+      - "Spectre.Console.*"
+    xunit:
+      patterns:
+      - "xunit"
+      - "xunit.*"
+      - "Verify.Xunit"
+
+- package-ecosystem: npm
+  target-branch: main
+  directory: "/templates"
+  schedule:
+    interval: daily
+  groups:
+    typescript-eslint:
+      patterns:
+      - "@typescript-eslint/*"
+  ignore:
+     # Ignore default template dependency update due to missing tests
+  - dependency-name: '@default/*'
+  - dependency-name: 'jquery'
+
+- package-ecosystem: "github-actions"
+  directory: "/"
+  schedule: 
+    interval: daily
+  target-branch: main

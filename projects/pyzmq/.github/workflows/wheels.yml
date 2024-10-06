@@ -1,0 +1,238 @@
+name: Release
+
+on:
+  push:
+    branches-ignore:
+      - "dependabot/**"
+      - "pre-commit-ci-update-config"
+    tags:
+      - "**"
+  pull_request:
+    paths:
+      - pyproject.toml
+      - CMakeLists.txt
+      - cmake/**
+      - buildutils/**
+      - .github/workflows/wheels.yml
+      - tools/install_libzmq.sh
+      - zmq/utils/*.h
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TWINE_NONINTERACTIVE: "1"
+#  CIBW_PRERELEASE_PYTHONS: "1"
+
+jobs:
+  sdist:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: install dependencies
+        run: |
+          pip install --upgrade pip build pytest
+          pip install -r tools/wheel-requirements.txt
+
+      - name: build sdist
+        run: |
+          python -m build --sdist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: "dist/*.tar.gz"
+          if-no-files-found: error
+
+      - name: verify sdist files
+        run:
+          pytest -v tools/test_sdist.py
+
+  wheel:
+    runs-on: ${{ matrix.os || 'ubuntu-22.04' }}
+    name: wheel-${{ matrix.name }}
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.9"
+      CIBW_BUILD: "${{ matrix.cibw.build || '*' }}"
+      CIBW_SKIP: "${{ matrix.cibw.skip || '' }}"
+      CIBW_ARCHS: "${{ matrix.cibw.arch || 'auto' }}"
+      CIBW_MANYLINUX_X86_64_IMAGE: "${{ matrix.cibw.manylinux_x86_64_image || '' }}"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-12
+            name: mac-cpython
+            cibw:
+              build: "cp*"
+
+          - os: macos-12
+            name: mac-pypy
+            cibw:
+              build: "pp*"
+
+          - os: macos-14
+            name: mac-arm
+            cibw:
+              arch: universal2
+              build: "cp*"
+
+          - name: manylinux-x86_64
+            cibw:
+              arch: x86_64
+              build: "*manylinux*"
+
+          - name: manylinux-i686
+            cibw:
+              arch: i686
+              build: "*manylinux*"
+
+          # additional manylinux variants, not specified in pyproject.toml:
+          # build with newer 2_28 for cpython >= 3.10, pypy 3.9
+          - name: manylinux-x86_64-2_28
+            cibw:
+              arch: x86_64
+              build: "cp31*-manylinux* pp39-manylinux*"
+              manylinux_x86_64_image: manylinux_2_28
+
+          - name: musllinux
+            cibw:
+              build: "*musllinux*"
+
+          - name: win32
+            os: windows-2019
+            architecture: x86
+            cibw:
+              build: "cp*win32"
+
+          - os: windows-2019
+            name: win-pypy
+            architecture: x64
+            cibw:
+              build: "pp*win_amd64"
+
+          - os: windows-2019
+            name: win_amd64
+            architecture: x64
+            cibw:
+              build: "cp*win_amd64"
+
+          - os: windows-2022
+            name: win_arm64
+            architecture: x64
+            cibw:
+              arch: ARM64
+              skip: "cp37*"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: ${{ matrix.architecture }}
+
+      - name: locate windows-arm vcredist
+        if: matrix.name == 'win_arm64'
+        run: |
+          python tools/find_vcredist.py
+
+      - name: customize mac-arm-64
+        if: contains(matrix.os, 'macos') && matrix.cibw.arch
+        run: |
+          echo 'MACOSX_DEPLOYMENT_TARGET=10.15' >> "$GITHUB_ENV"
+
+      - name: install dependencies
+        run: |
+          pip install --upgrade setuptools pip wheel
+          pip install -r tools/wheel-requirements.txt
+
+      - name: show environment
+        run: |
+          pip freeze
+
+      - name: list target wheels
+        run: |
+          python -m cibuildwheel . --print-build-identifiers
+
+      - name: build wheels
+        run: |
+          python -m cibuildwheel .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: "wheelhouse/*"
+          if-no-files-found: error
+
+  github-release:
+    permissions:
+      contents: write
+    environment: release
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - id: version
+        # strip leading `v` from tag, since it's not part of the version
+        # see https://github.com/orgs/community/discussions/26625 for substring feature request
+        run: |
+          echo "${{ github.ref_name }}" | sed s@^v@v=@ >> "${GITHUB_OUTPUT}"
+
+      - uses: ncipollo/release-action@v1
+        with:
+          # mark as prerelease if it looks like one
+          prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
+          # link to release notes, PyPI
+          body: |
+            See [release notes][], or [pyzmq on PyPI][].
+
+            Install with:
+
+            ```
+            pip install 'pyzmq==${{ steps.version.outputs.v }}'
+            ```
+
+            [release notes]: https://pyzmq.readthedocs.io/en/latest/changelog.html
+            [pyzmq on PyPI]: https://pypi.org/project/pyzmq/${{ steps.version.outputs.v }}/
+
+  list-wheels:
+    runs-on: ubuntu-22.04
+    needs:
+      - sdist
+      - wheel
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: list wheels
+        run: ls -l dist
+
+  upload-pypi:
+    permissions:
+      id-token: write
+    environment: release
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - sdist
+      - wheel
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

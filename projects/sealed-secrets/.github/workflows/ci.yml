@@ -1,0 +1,286 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  controller_registry: docker.io
+  controller_repository: bitnami/sealed-secrets-controller
+  controller_tag: latest
+
+jobs:
+  load-versions:
+    name: Load versions.env
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3.1.0
+      - id: load-versions
+        run: |
+          source $GITHUB_WORKSPACE/versions.env
+          # env vars
+          echo "GO_VERSION=$GO_VERSION" >> $GITHUB_ENV
+          echo "GO_VERSION_LIST=$GO_VERSION_LIST" >> $GITHUB_ENV
+          # outputs
+          echo "go_version=${GO_VERSION}" >> $GITHUB_OUTPUT
+          echo "go_version_list=${GO_VERSION_LIST}" >> $GITHUB_OUTPUT
+    outputs:
+      go_version: ${{ steps.load-versions.outputs.go_version }}
+      go_version_list: ${{ steps.load-versions.outputs.go_version_list }}
+  linter:
+    needs: load-versions
+    name: Run linters
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ${{ fromJSON(needs.load-versions.outputs.go_version_list) }}
+        os: [ubuntu-latest]
+        golangci-lint: ["1.56.1"]
+        gosec: ["2.19.0"]
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v3.3.1
+      with:
+        go-version: ${{ matrix.go }}
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v3.1.0
+
+    - name: Install dependencies
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@v${{ matrix.golangci-lint }}
+        go install github.com/securego/gosec/v2/cmd/gosec@v${{ matrix.gosec }}
+
+    - name: Run linter
+      run: make lint
+
+    - name: Run gosec
+      run: make lint-gosec
+
+  test:
+    needs: load-versions
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go: ${{ fromJSON(needs.load-versions.outputs.go_version_list) }}
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        gotestsum: ["1.8.1"]
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v3.3.1
+      with:
+        go-version: ${{ matrix.go }}
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v3.1.0
+
+    - name: Install dependencies
+      run: |
+        go install gotest.tools/gotestsum@v${{ matrix.gotestsum }}
+
+    - name: Test
+      run: make GO_FLAGS="--junitfile report.xml --format testname" test
+
+    - name: Test Summary
+      uses: test-summary/action@v2
+      with:
+        paths: |
+          report.xml
+
+  container:
+    needs: load-versions
+    name: Build Container
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Set environmental variables"
+      run: |
+        echo "CONTROLLER_IMAGE=$controller_registry/$controller_repository:$controller_tag" >> $GITHUB_ENV
+
+    - name: Check out code
+      uses: actions/checkout@v3.1.0
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3.4.0
+      with:
+        cosign-release: v2.2.3
+
+    - name: Distroless verify
+      run: |
+        diff <(grep FROM docker/kubeseal.Dockerfile | awk '{print $2}') \
+             <(grep FROM docker/controller.Dockerfile | awk '{print $2}')
+        cosign verify "$(grep FROM docker/controller.Dockerfile | awk '{print $2}')" --certificate-oidc-issuer https://accounts.google.com  --certificate-identity keyless@distroless.iam.gserviceaccount.com
+
+    - name: Setup kubecfg
+      run: |
+        mkdir -p ~/bin
+        curl -sLf https://github.com/kubecfg/kubecfg/releases/download/v0.26.0/kubecfg_Linux_X64 >~/bin/kubecfg
+        chmod +x ~/bin/kubecfg
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v3.3.1
+      with:
+        go-version: ${{ needs.load-versions.outputs.go_version }}
+      id: go
+
+    - name: Docker build
+      run: |
+        export PATH=~/bin:$PATH
+        make CONTROLLER_IMAGE=$CONTROLLER_IMAGE IMAGE_PULL_POLICY=Never controller.yaml
+        make CONTROLLER_IMAGE=$CONTROLLER_IMAGE controller.image.linux-amd64
+        docker tag $CONTROLLER_IMAGE-linux-amd64 $CONTROLLER_IMAGE
+        docker save $CONTROLLER_IMAGE -o /tmp/controller-image.tar
+
+    - name: Upload manifest artifact
+      uses: actions/upload-artifact@v3.1.0
+      with:
+        name: controller-manifest
+        path: controller.yaml
+
+    - name: Upload container image artifact
+      uses: actions/upload-artifact@v3.1.0
+      with:
+        name: controller-image
+        path: /tmp/controller-image.tar
+
+  integration-yaml:
+    needs: [ load-versions, container ]
+    name: Integration (controller.yaml)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        k8s: ["1.24.15","1.25.11","1.26.6","1.27.3"]
+    env:
+      MINIKUBE_WANTUPDATENOTIFICATION: "false"
+      MINIKUBE_WANTREPORTERRORPROMPT: "false"
+      CHANGE_MINIKUBE_NONE_USER: "true"
+    steps:
+    - name: "Set environmental variables"
+      run: |
+        echo "CONTROLLER_IMAGE=$controller_registry/$controller_repository:$controller_tag" >> $GITHUB_ENV
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v3.3.1
+      with:
+        go-version: ${{ needs.load-versions.outputs.go_version }}
+      id: go
+
+    - name: Set up Ginkgo
+      run: |
+        go install github.com/onsi/ginkgo/ginkgo@v1.16.4
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v3.1.0
+
+    - uses: medyagh/setup-minikube@v0.0.13
+      with:
+        minikube-version: 1.30.1
+        kubernetes-version: ${{ matrix.k8s }}
+
+    # need to delete old state of the cluster, see:
+    # https://github.com/kubernetes/minikube/issues/8765
+    - name: K8s setup
+      run: |
+        minikube delete
+        minikube config set kubernetes-version v${{ matrix.k8s }}
+        minikube start --vm-driver=docker
+        minikube update-context
+        kubectl cluster-info
+
+    - name: Download manifest artifact
+      uses: actions/download-artifact@v3.0.1
+      with:
+        name: controller-manifest
+
+    - name: Download container image artifact
+      uses: actions/download-artifact@v3.0.1
+      with:
+        name: controller-image
+
+    - name: Load docker image
+      run: |
+        eval $(minikube docker-env)
+        docker load -i controller-image.tar
+        docker inspect $CONTROLLER_IMAGE
+
+    - name: Testing environment setup
+      run: |
+        kubectl apply -f controller.yaml
+        kubectl rollout status deployment/sealed-secrets-controller -n kube-system -w --timeout=1m || kubectl -n kube-system describe pod -lname=sealed-secrets-controller
+
+    - name: Integration tests
+      run: make integrationtest CONTROLLER_IMAGE=$CONTROLLER_IMAGE GINKGO="ginkgo -v --randomizeSuites --failOnPending --trace --progress --compilers=2 --nodes=4"
+
+  integration-chart:
+    needs: [ load-versions, container ]
+    name: Integration (Helm Chart)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        k8s: ["1.24.15","1.25.11","1.26.6","1.27.3"]
+    env:
+      MINIKUBE_WANTUPDATENOTIFICATION: "false"
+      MINIKUBE_WANTREPORTERRORPROMPT: "false"
+      CHANGE_MINIKUBE_NONE_USER: "true"
+    steps:
+    - name: "Set environmental variables"
+      run: |
+        echo "CONTROLLER_IMAGE=$controller_registry/$controller_repository:$controller_tag" >> $GITHUB_ENV
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v3.3.1
+      with:
+        go-version: ${{ needs.load-versions.outputs.go_version }}
+      id: go
+
+    - name: Set up Ginkgo
+      run: |
+        go install github.com/onsi/ginkgo/ginkgo@v1.16.4
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v3.1.0
+
+    - uses: medyagh/setup-minikube@v0.0.13
+      with:
+        minikube-version: 1.30.1
+        kubernetes-version: ${{ matrix.k8s }}
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3.5
+      with:
+        version: v3.12.0
+
+    # need to delete old state of the cluster, see:
+    # https://github.com/kubernetes/minikube/issues/8765
+    - name: K8s setup
+      run: |
+        minikube delete
+        minikube config set kubernetes-version v${{ matrix.k8s }}
+        minikube start --vm-driver=docker
+        minikube update-context
+        kubectl cluster-info
+
+    - name: Download container image artifact
+      uses: actions/download-artifact@v3.0.1
+      with:
+        name: controller-image
+
+    - name: Load docker image
+      run: |
+        eval $(minikube docker-env)
+        docker load -i controller-image.tar
+        docker inspect $CONTROLLER_IMAGE
+
+    - name: Testing environment setup
+      run: |
+        helm install sealed-secrets -n kube-system --set fullnameOverride=sealed-secrets-controller --set image.registry=$controller_registry --set image.repository=$controller_repository --set image.tag=$controller_tag --set image.pullPolicy=Never helm/sealed-secrets
+        kubectl rollout status deployment/sealed-secrets-controller -n kube-system -w --timeout=1m || kubectl -n kube-system describe pod -lapp.kubernetes.io/name=sealed-secrets
+
+    - name: Integration tests
+      run: make integrationtest CONTROLLER_IMAGE=$CONTROLLER_IMAGE GINKGO="ginkgo -v --randomizeSuites --failOnPending --trace --progress --compilers=2 --nodes=4"

@@ -1,0 +1,81 @@
+name: test-cygwin
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+
+    env:
+      CHERE_INVOKING: "1"
+      CYGWIN_NOWINPATH: "1"
+
+    defaults:
+      run:
+        shell: C:\tools\cygwin\bin\bash.exe --login --norc -eo pipefail -o igncr "{0}"
+
+    steps:
+    - name: Force LF line endings
+      run: |
+        git config --global core.autocrlf false  # Affects the non-Cygwin git.
+      shell: bash  # Use Git Bash instead of Cygwin Bash for this step.
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Cygwin
+      uses: egor-tensin/setup-cygwin@v4
+      with:
+        packages: python39=3.9.16-1 python39-pip python39-virtualenv git
+
+    - name: Arrange for verbose output
+      run: |
+        # Arrange for verbose output but without shell environment setup details.
+        echo 'set -x' >~/.bash_profile
+
+    - name: Special configuration for Cygwin git
+      run: |
+        git config --global --add safe.directory "$(pwd)"
+        git config --global core.autocrlf false
+
+    - name: Prepare this repo for tests
+      run: |
+        ./init-tests-after-clone.sh
+
+    - name: Set git user identity and command aliases for the tests
+      run: |
+        git config --global user.email "travis@ci.com"
+        git config --global user.name "Travis Runner"
+        # If we rewrite the user's config by accident, we will mess it up
+        # and cause subsequent tests to fail
+        cat test/fixtures/.gitconfig >> ~/.gitconfig
+
+    - name: Ensure the "pip" command is available
+      run: |
+        # This is used unless, and before, an updated pip is installed.
+        ln -s pip3 /usr/bin/pip
+
+    - name: Update PyPA packages
+      run: |
+        # Get the latest pip, wheel, and prior to Python 3.12, setuptools.
+        python -m pip install -U pip $(pip freeze --all | grep -ow ^setuptools) wheel
+
+    - name: Install project and test dependencies
+      run: |
+        pip install ".[test]"
+
+    - name: Show version and platform information
+      run: |
+        uname -a
+        command -v git python
+        git version
+        python --version
+        python -c 'import os, sys; print(f"sys.platform={sys.platform!r}, os.name={os.name!r}")'
+
+    - name: Test with pytest
+      run: |
+        pytest --color=yes -p no:sugar --instafail -vv

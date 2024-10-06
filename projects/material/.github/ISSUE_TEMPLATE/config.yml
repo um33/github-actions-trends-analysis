@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: AngularJS Material on StackOverflow
+    url: https://stackoverflow.com/unanswered/tagged/angularjs-material
+    about: Please ask and answer questions about your app or usage here.

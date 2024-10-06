@@ -1,0 +1,15 @@
+tasks:
+  - name: add-label
+    on:
+      issues:
+        types: [labeled]
+    condition: 'payload.label.name == "needs reproduction"'
+    config:
+      label: 'needs reply'
+  - name: remove-label
+    on:
+      issue_comment:
+        types: [created]
+    config:
+      label: 'needs reply'
+      exclude-labeler: true

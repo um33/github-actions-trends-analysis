@@ -1,0 +1,31 @@
+name: FVT (PR)
+on:
+  pull_request:
+    branches:
+    - "**"
+    paths-ignore:
+    - '**/*.md'
+
+permissions:
+  contents: read  # for actions/checkout to fetch code
+
+jobs:
+  fvt:
+    name: Test with Kafka ${{ matrix.kafka-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.22.x]
+        kafka-version: [1.0.2, 2.6.2, 3.6.0]
+        include:
+        - kafka-version: 1.0.2
+          scala-version: 2.11
+        - kafka-version: 2.6.2
+          scala-version: 2.12
+        - kafka-version: 3.6.0
+          scala-version: 2.13
+    uses: ./.github/workflows/fvt.yml
+    with:
+      go-version: ${{ matrix.go-version }}
+      kafka-version: ${{ matrix.kafka-version }}
+      scala-version: ${{ matrix.scala-version }}

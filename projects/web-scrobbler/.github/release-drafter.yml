@@ -1,0 +1,31 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '🎁 New features'
+    label: 'new-feature'
+  - title: '🐛 Core fixes'
+    label: 'core-fix'
+  - title: '🚀 New connectors'
+    label: 'new-connector'
+  - title: '🐛 Fixed connectors'
+    label: 'fixed-connector'
+  - title: '⬆️ Updated'
+    label: 'updated'
+  - title: '🔧 Maintenance'
+    label: 'maintenance'
+exclude-labels:
+  - 'skip-changelog'
+  - 'chore'
+version-resolver:
+  major:
+    labels:
+      - 'major-change'
+  minor:
+    labels:
+      - 'minor-change'
+  patch:
+    labels:
+      - 'patch-change'
+  default: patch
+template: |
+  $CHANGES

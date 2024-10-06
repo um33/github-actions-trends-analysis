@@ -1,0 +1,202 @@
+name: Continuous Deployment
+on:
+  schedule:
+    - cron: '15 4 * * *'
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: false
+
+jobs:
+
+  # Windows
+  package-windows-editor:
+    name: Editor (Windows)
+    runs-on: "windows-2022"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        .\PackageEditor.bat -arch=x64 -platform=Windows -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Windows-Editor
+        path: Output/Editor.zip
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Windows-EditorDebugSymbols
+        path: Output/EditorDebugSymbols.zip
+  package-windows-game:
+    name: Game (Windows)
+    runs-on: "windows-2022"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        .\PackagePlatforms.bat -arch=x64 -platform=Windows -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Windows-Game
+        path: Output/Windows.zip
+
+  # Linux
+  package-linux-editor:
+    name: Editor (Linux)
+    runs-on: "ubuntu-20.04"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Install dependencies
+      run: |
+        sudo rm -f /etc/apt/sources.list.d/*
+        sudo cp -f .github/workflows/build_linux_sources.list /etc/apt/sources.list
+        sudo apt-get update
+        sudo apt-get install libx11-dev libxcursor-dev libxinerama-dev build-essential gettext libtool libtool-bin libpulse-dev libasound2-dev libjack-dev portaudio19-dev
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        ./PackageEditor.sh -arch=x64 -platform=Linux -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Linux-Editor
+        path: Output/FlaxEditorLinux.zip
+  package-linux-game:
+    name: Game (Linux)
+    runs-on: "ubuntu-20.04"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Install dependencies
+      run: |
+        sudo rm -f /etc/apt/sources.list.d/*
+        sudo cp -f .github/workflows/build_linux_sources.list /etc/apt/sources.list
+        sudo apt-get update
+        sudo apt-get install libx11-dev libxcursor-dev libxinerama-dev build-essential gettext libtool libtool-bin libpulse-dev libasound2-dev libjack-dev portaudio19-dev
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        ./PackagePlatforms.sh -arch=x64 -platform=Linux -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Linux-Game
+        path: Output/Linux.zip
+
+  # Mac
+  package-mac-editor:
+    name: Editor (Mac)
+    runs-on: "macos-latest"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        ./PackageEditor.command -arch=x64 -platform=Mac -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Mac-Editor
+        path: Output/FlaxEditorMac.zip
+  package-mac-game:
+    name: Game (Mac)
+    runs-on: "macos-latest"
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+    - name: Checkout LFS
+      run: |
+        git lfs version
+        git lfs pull
+    - name: Setup Vulkan
+      uses: ./.github/actions/vulkan
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+    - name: Print .NET info
+      run: |
+        dotnet --info
+        dotnet workload --info
+    - name: Build
+      run: |
+        ./PackagePlatforms.command -arch=x64 -platform=Mac -deployOutput=Output
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: Mac-Game
+        path: Output/Mac.zip

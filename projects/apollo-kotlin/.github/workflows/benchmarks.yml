@@ -1,0 +1,42 @@
+name: benchmarks
+
+on:
+#  pull_request:
+#     branches: [ '*' ]
+  schedule:
+    - cron: '0 3 * * *'
+env:
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+
+jobs:
+  benchmarks:
+    runs-on: macos-14
+    if: github.repository == 'apollographql/apollo-kotlin'
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 #v4.1.1
+      - uses: actions/setup-java@387ac29b308b003ca37ba93a6cab5eb57c8f5f93 #v4.0.0
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      - uses: gradle/gradle-build-action@42452daeb5b454a76f686a8e4de8234afd7b1f44 #v2.12.0
+        with:
+          gradle-home-cache-cleanup: true
+      - run: |
+          # Build the benchmark apks
+          ./gradlew -p benchmark :app:assembleRelease :microbenchmark:assembleIncubatingReleaseAndroidTest :microbenchmark:assembleStableReleaseAndroidTest
+      # Step can be removed if/when gcloud is added to the macos image - See https://github.com/actions/virtual-environments/issues/4639
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@98ddc00a17442e89a24bbf282954a3b65ce6d200 #v2.1.0
+      - run: ./scripts/run-benchmarks.main.kts
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: nativebenchmarks
+        run: |
+          # Run the native benchmarks
+          ./gradlew -p tests :native-benchmarks:allTests
+          # Upload the results to DataDog
+          ./scripts/upload-native-benchmarks.main.kts
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}

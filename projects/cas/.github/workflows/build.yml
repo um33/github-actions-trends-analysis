@@ -1,0 +1,128 @@
+name: Build
+
+env:
+  JAVA_OPTS: "-Xms512m -Xmx6048m -Xss128m -XX:ReservedCodeCacheSize=512m -server"
+  GRADLE_OPTS: "-Xms512m -Xmx6048m -Xss128m -XX:ReservedCodeCacheSize=512m -server"
+  GRADLE_BUILD_OPTIONS: "--no-daemon -x check -x test -x javadoc --configure-on-demand --max-workers=8 --no-configuration-cache"
+  TERM: xterm-256color
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GRADLE_BUILDCACHE_USER: ci
+  GRADLE_BUILDCACHE_PSW: ${{ secrets.GRADLE_BUILDCACHE_PSW }}
+  GH_PACKAGE_REGISTRY_USER: ${{ secrets.GH_PACKAGE_REGISTRY_USER }}
+  GH_PACKAGE_REGISTRY_TOKEN: ${{ secrets.GH_PACKAGE_REGISTRY_TOKEN }}
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+  JDK_CURRENT: 21
+  JDK_LATEST: 21
+  JDK_DISTRIBUTION: "oracle"
+
+##########################################################################
+
+concurrency:
+  group: "workflow = ${{ github.workflow }}, ref = ${{ github.event.ref }}, pr = ${{ github.event.pull_request.id }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.repository != 'apereo/cas' }}
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 23 * * *'
+#  push:
+#    branches: [ master ]
+  pull_request:
+    types: [ labeled ]
+#    branches: [ master ]
+
+##########################################################################
+
+jobs:
+  initialize:
+    if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Bot')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: ls ./ci && find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+
+  ##########################################################################
+
+  build:
+    needs: [initialize]
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_CURRENT }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+        shell: bash
+      - name: Build with Gradle
+        run: ./gradlew build ${{ env.GRADLE_BUILD_OPTIONS }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-artifacts
+          path: ./**/build/libs/*.*
+
+  ##########################################################################
+
+  build-latest-jdk:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JDK_LATEST }}
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Build with Gradle
+        run: ./gradlew build -DskipAot=true ${{ env.GRADLE_BUILD_OPTIONS }}
+
+  ##########################################################################
+
+  build-graalvm:
+    runs-on: ubuntu-latest
+    needs: [initialize]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: 'graalvm'
+          java-version: ${{ env.JDK_LATEST }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'gradle'
+          set-java-home: 'true'
+      - name: GraalVM Versions
+        run: |
+          echo "GRAALVM_HOME: $GRAALVM_HOME"
+          echo "JAVA_HOME: $JAVA_HOME"
+          java --version
+          native-image --version
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Initialize
+        run: find ./ci -type f -name "*.sh" -exec chmod +x "{}" \; && ./ci/init-build.sh
+      - name: Build with Gradle
+        timeout-minutes: 20
+        run: chmod +x ./ci/tests/native/build.sh && ./ci/tests/native/build.sh

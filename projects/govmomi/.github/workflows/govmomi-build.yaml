@@ -1,0 +1,110 @@
+#  Copyright (c) 2021 VMware, Inc. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+
+  pull_request:
+    branches: ["main"]
+
+  # also run every night
+  schedule:
+    - cron: "0 1 * * *"
+
+  workflow_dispatch:
+
+concurrency:
+  group: govmomi-build-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  artifacts:
+    name: Build Snapshot Release (no upload)
+    runs-on: ubuntu-20.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # for CHANGELOG
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.21
+
+      - name: Restore Go cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-1.21-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-1.21-
+
+      - name: Create CHANGELOG
+        env:
+          IMAGE: quay.io/git-chglog/git-chglog
+          # https://quay.io/repository/git-chglog/git-chglog from tag v0.14.2
+          IMAGE_SHA: 998e89dab8dd8284cfff5f8cfb9e9af41fe3fcd4671f2e86a180e453c20959e3
+        run: |
+          # use a pseudo tag to only include changes since last release
+          NEXT_TAG=$(git describe --abbrev=0 --tags)-next
+          docker run --rm -v $PWD:/workdir ${IMAGE}@sha256:${IMAGE_SHA} --next-tag ${NEXT_TAG} -o RELEASE_CHANGELOG.md --sort semver --tag-filter-pattern '^v[0-9]+' ${NEXT_TAG}
+
+      - name: Archive CHANGELOG
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHANGELOG
+          path: |
+            ./RELEASE_CHANGELOG.md
+          retention-days: 1
+
+      - name: Build Artifacts
+        uses: goreleaser/goreleaser-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: latest
+          # snapshot will disable push/release
+          args: release --clean --snapshot --release-notes RELEASE_CHANGELOG.md
+
+      - name: Verify git clean
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "${{ github.repository }} up to date."
+          else
+            echo "${{ github.repository }} is dirty."
+            echo "::error:: $(git status)"
+            exit 1
+          fi
+
+      # make artifacts available for inspection
+      # https://docs.github.com/en/actions/guides/storing-workflow-data-as-artifacts
+      - name: Archive run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          # upload only some artifacts for introspection to keep storage size small (delete after 1d)
+          path: |
+            dist/govc_*x86_64.tar.gz
+            dist/vcsim_*x86_64.tar.gz
+            dist/checksums.txt
+          retention-days: 1

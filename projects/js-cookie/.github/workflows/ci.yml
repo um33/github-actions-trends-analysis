@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.devcontainer/**'
+      - '.github/**'
+      - '!.github/workflows/ci.yml'
+      - '.vscode/**'
+      - 'examples/**'
+      - '**.md'
+      - .gitignore
+      - .release-it.json
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '.devcontainer/**'
+      - '.github/**'
+      - '!.github/workflows/ci.yml'
+      - '.vscode/**'
+      - 'examples/**'
+      - '**.md'
+      - .gitignore
+      - .release-it.json
+  schedule:
+    - cron: '0 0 1 * *' # Every month
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm i
+      - name: Check formatting
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint:check
+      - name: Run unit tests
+        run: npm test
+
+  e2e-test:
+    runs-on: ubuntu-latest
+    # Skip pull requests!
+    if: ${{ ! startsWith(github.event_name, 'pull_request') }}
+    needs:
+      - build
+    steps:
+      - name: Set up BrowserStack env
+        # Third-party action, pin to commit SHA!
+        # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
+        uses: browserstack/github-actions/setup-env@00ce173eae311a7838f80682a5fad5144c4219ad
+        with:
+          username: ${{ secrets.BROWSERSTACK_USERNAME }}
+          access-key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          build-name: BUILD_INFO
+          project-name: REPO_NAME
+      - name: Set up BrowserStack local tunnel
+        # Third-party action, pin to commit SHA!
+        # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
+        uses: browserstack/github-actions/setup-local@00ce173eae311a7838f80682a5fad5144c4219ad
+        with:
+          local-testing: start
+          local-identifier: random
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          check-latest: true
+      - name: Install dependencies
+        run: npm i
+      - name: Run BrowserStack E2E tests
+        run: grunt browserstack
+      - name: Stop BrowserStackLocal
+        # Third-party action, pin to commit SHA!
+        # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
+        uses: browserstack/github-actions/setup-local@00ce173eae311a7838f80682a5fad5144c4219ad
+        with:
+          local-testing: stop

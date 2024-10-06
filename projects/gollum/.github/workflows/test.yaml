@@ -1,0 +1,85 @@
+name: Ruby Build
+on:
+  push:
+    branches: master
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'contrib/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'contrib/**'
+jobs:
+  jruby_build:
+    name: JRuby (${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby: [jruby-9.4.4.0]
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run tests
+        run: bundle exec rake
+  mri_build:
+    name: Ruby (${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby: ['2.7', '3.1', '3.2.1']
+    steps:
+      - name: Install required system dependencies
+        run: |
+          sudo apt-get install -y libyaml-dev
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run tests
+        run: bundle exec rake
+  selenium:
+    name: Selenium on MRI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install required system dependencies
+        run: |
+          sudo apt-get install -y libyaml-dev
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install Chromedriver
+        uses: nanasess/setup-chromedriver@v2
+      - run: |
+          export DISPLAY=:99
+          chromedriver --url-base=/wd/hub &
+          sudo Xvfb -ac :99 -screen 0 1280x1024x24 > /dev/null 2>&1 & # optional
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+      - name: Run tests
+        run: bundle exec rake test:capybara

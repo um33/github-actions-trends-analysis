@@ -1,0 +1,139 @@
+
+# This workflow run when something is pushed on main and it does:
+  # - normal checks like in the normal PRs
+  # - expand the test suite to be run on multiple OS
+  # - runs the coverage and prints in the command line
+name: CI on main
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+
+jobs:
+  format:
+    name: Format Rust Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v3
+        with:
+          submodules: false
+      - name: Support longpaths
+        run: git config core.longpaths true
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          components: rustfmt
+      - name: Run rustfmt
+        run: cargo fmt --all --verbose -- --check
+
+  lint:
+    name: Lint Rust Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          components: clippy
+      - name: Run cargo check
+        run: cargo check --workspace --all-targets --release
+      - name: Run clippy
+        run: cargo lint
+
+  check-dependencies:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v3
+        with:
+          submodules: false
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          channel: nightly
+      - name: Install udeps
+        run: cargo install cargo-udeps --locked
+      - name: Run udeps
+        run: cargo +nightly udeps
+
+
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-latest
+
+    name: Test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          bins: cargo-nextest
+      - name: Run tests on ${{ matrix.os }}
+        run: cargo nextest run --workspace --verbose
+      - name: Clean cache
+        run: cargo cache --autoclean
+
+  documentation:
+    name: Documentation
+    environment: netlify-rustdocs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install netlify-cli
+        run: npm i -g netlify-cli
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+      - name: Run doc command
+        run: cargo documentation
+      - name: Write index.html
+        run: echo '<meta http-equiv="refresh" content="0; url=/rome/index.html">' >target/doc/index.html
+      - name: Write _redirects
+        run: echo '/ /rome/index.html' >target/doc/_redirects
+      - name: Deploy documentation
+        run: |
+          netlify deploy --dir=./target/doc --prod --site rustdocs-rometools --auth ${{ secrets.NETLIFY_AUTH_TOKEN }}
+
+  coverage:
+    name: Test262 Coverage
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      # ref: https://github.com/orgs/community/discussions/26952
+      - name: Support longpaths
+        if: matrix.os == 'windows-latest'
+        run: git config --system core.longpaths true
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        uses: moonrepo/setup-rust@v0
+      - name: Compile
+        run: cargo build --release --locked -p xtask_coverage
+      - name: Run Test262 suite
+        continue-on-error: true
+        run: cargo coverage
+      - name: Clean cache
+        run: cargo cache --autoclean

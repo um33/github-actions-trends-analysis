@@ -1,0 +1,62 @@
+# 打包发布Release
+
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号'
+        required: true
+
+permissions:
+  contents: write
+  discussions: write
+
+jobs:
+  build:
+    name: publish relesae
+    if: ${{ github.repository == 'RayWangQvQ/BiliBiliToolPro' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.version }}
+    
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 6.0.x
+        
+      - name: Publish and zip
+        run: |
+          pwd && ls
+          cd ./scripts
+          chmod +x ./publish.sh
+          . publish.sh --runtime all
+          
+      - name: Get release content
+        id: release_content
+        run: |
+          cd ${{ github.workspace }}
+          pwd && ls
+          content=$(tac ./CHANGELOG.md | grep -m1 "##" -B 1000 | tac)
+          echo "Release content: $content"
+          echo "release_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload release asset
+        id: upload-release-asset 
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./src/Ray.BiliBiliTool.Console/bin/Publish/*.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: BiliBiliToolPro-V${{ github.event.inputs.version }}
+          tag_name: ${{ github.event.inputs.version }}
+          body: ${{ steps.release_content.outputs.release_content }}
+          discussion_category_name: Announcements
+          generate_release_notes: true
+          fail_on_unmatched_files: true

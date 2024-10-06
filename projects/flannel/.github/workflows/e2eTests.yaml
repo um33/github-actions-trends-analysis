@@ -1,0 +1,24 @@
+name: e2e tests for flannel
+
+on: [push, pull_request]
+
+jobs:
+  e2e-test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v5
+      with:
+        go-version: ^1.21
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4
+    - name: Run tests
+      id: testing
+      continue-on-error: true
+      run: git fetch --unshallow --all --tags && make test 2>&1 > errors.txt
+    - name: Show additional logs
+      if: steps.testing.outcome != 'success'
+      run: |
+            cat errors.txt
+            exit 1

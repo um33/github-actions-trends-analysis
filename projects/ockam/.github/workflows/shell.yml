@@ -1,0 +1,74 @@
+# This workflow checks shell scripts
+name: Shell
+
+permissions:
+  contents: read
+
+on:
+  merge_group:
+  pull_request:
+    paths:
+      - ".github/workflows/shell.yml"
+      - "**.sh"
+      - "**.bash"
+  push:
+    paths:
+      - ".github/workflows/shell.yml"
+      - "**.sh"
+      - "**.bash"
+    branches:
+      - develop
+  schedule:
+    # We only save cache when a cron job is started, this is to ensure
+    # that we don't save cache on every push causing excessive caching
+    # and github deleting useful caches we use in our workflows, we now
+    # run a cron job every 2 hours so as to update the cache store with the
+    # latest data so that we don't have stale cache.
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Git commit sha, on which, to run this workflow
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # shellcheck gives warnings and suggestions for bash/sh shell scripts.
+  # https://github.com/koalaman/shellcheck
+  lint_shellcheck:
+    name: Shell - lint_shellcheck
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
+      - run: shellcheck -S error $(find . -not -path "./examples/command/*" -iname "*.sh" -o -name "*.bash")
+
+  # shfmt checks format of shell programs
+  # https://github.com/mvdan/sh#shfmt
+  lint_shfmt:
+    name: Shell - lint_shfmt
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
+
+      - name: Install Nix
+        uses: ./.github/actions/cache_nix
+        with:
+          cache-unique-id: shell
+        id: nix-installer
+
+      - name: Run Shfmt Check
+        run:  nix run ./tools/nix#shfmt-all
+
+      - name: Nix Upload Store
+        uses: ./.github/actions/nix_upload_store
+        if: ${{ steps.nix-installer.outputs.cache-hit != 'true' }}

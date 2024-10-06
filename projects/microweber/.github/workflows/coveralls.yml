@@ -1,0 +1,172 @@
+name: PHP Coverage Tests With Xdebug
+
+on:
+  push:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  main-coveralls:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        php-versions: ['8.2']
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: dev
+    - name: Npm install
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        cache: 'npm'
+        cache-dependency-path: ./package-lock.json
+    - run: npm install
+    - run: npm run build
+    - name: Setup PHP, with composer and extensions
+      uses: shivammathur/setup-php@v2 #https://github.com/shivammathur/setup-php
+      with:
+        php-version: ${{ matrix.php-versions }}
+        extensions: mbstring, dom, fileinfo, mysql, gd, curl, zip, sqlite, xml,
+        coverage: xdebug
+    - name: Get composer cache directory
+      id: composer-cache
+      run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+    - name: Cache composer dependencies
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        # Use composer.json for key, if composer.lock is not committed.
+        # key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+    - name: Install Composer dependencies
+      run: composer install --no-progress --prefer-dist --optimize-autoloader
+    - name: Run PHPUnit Coverage with Xdebug
+      run: composer test:coverage
+    - name: Coveralls
+      uses: coverallsapp/github-action@v2
+      with:
+        flag-name: run-${{ join(matrix.*, '-') }}
+        parallel: true
+        files: clover.xml
+#    - name: SonarQube Scan
+#      uses: sonarsource/sonarqube-scan-action@master
+#      env:
+#        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+#      with:
+#        args: >
+#          -Dproject.settings=./sonar-project.properties
+#          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+#          -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+  dusk-coveralls:
+    needs: main-coveralls
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        php-versions: ['8.2']
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: dev
+    - uses: ./.github/actions/setup-php
+      with:
+        php_version: ${{ matrix.php-versions }}
+    - name: Npm install
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        cache: 'npm'
+        cache-dependency-path: ./package-lock.json
+#    - name: Copy vite config stub
+#      run: |
+#        cp tests/vite.config.js.stub vite.config.js
+    - name: Replace requireEnv in vite.config.js
+      run: |
+        sed -i 's/requireEnv: true,/requireEnv: false,/' vite.config.js
+    - name: Remove screenshot layout test
+      run: |
+        rm -f userfiles/templates/big/src/tests/Browser/BigScreenshotLayoutsTest.php
+    - run: npm install -g istanbul
+    - run: npm install -g istanbul-combine
+    - run: npm install -g istanbul-merge
+    - run: npm install -g nyc
+    - run: npm install
+    - run: npm run build
+    - name: Run Laravel Server
+      run: APP_ENV=testing && php artisan serve-test-code-coverage --ansi --env=testing --no-interaction --quiet &
+    - name: Run Dusk Tests
+      run: |
+        chmod -R 0755 vendor/laravel/dusk/bin/
+        composer test:dusk
+    - name: Combine JS coverage
+      run: |
+        nyc merge tests/coverages/js tests/coverages/coverage.raw.json
+        istanbul report --dir tests/coverages/js-report --include tests/coverages/coverage.raw.json lcov
+    - name: Combine clover file
+      working-directory: ./tests
+      run: |
+        php combine_xdebug.php
+    - name: Coveralls Dusk Upload
+      uses: coverallsapp/github-action@v2
+      with:
+        flag-name: run-${{ join(matrix.*, '-') }}
+        parallel: true
+        files: tests/coverages/dusk-clover.xml tests/coverages/js-report/lcov.info
+#    - name: SonarQube Scan
+#      uses: sonarsource/sonarqube-scan-action@master
+#      env:
+#        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+#      with:
+#        args: >
+#          -Dproject.settings=./sonar-project.properties
+#          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+#          -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+
+    - name: Upload Screenshots
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: screenshots
+        path: tests/Browser/screenshots
+    - name: Upload Console Logs
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: console
+        path: tests/Browser/console
+    - name: Upload Laravel Storage Logs
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: storage-logs
+        path: storage/logs
+    - name: Upload Laravel config
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: config
+        path: config
+
+
+  finish:
+    needs: dusk-coveralls
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Coveralls Finished
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
+          carryforward: "true"

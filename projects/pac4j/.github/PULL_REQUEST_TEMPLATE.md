@@ -1,0 +1,1 @@
+Before submitting any pull request, please read the contribution guide: https://www.pac4j.org/docs/contribute.html

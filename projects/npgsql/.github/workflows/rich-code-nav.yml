@@ -1,0 +1,39 @@
+name: Rich Code Navigation
+
+on:
+  workflow_dispatch:
+
+env:
+  dotnet_sdk_version: '8.0.203'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: NuGet Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Build.targets') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v4.0.0
+        with:
+          dotnet-version: ${{ env.dotnet_sdk_version }}
+
+      - name: Build
+        run: dotnet build Npgsql.sln --configuration Debug
+        shell: bash
+
+      - name: Rich Navigation Indexing
+        uses: microsoft/RichCodeNavIndexer@v0
+        with:
+          languages: csharp
+          repo-token: ${{ github.token }}

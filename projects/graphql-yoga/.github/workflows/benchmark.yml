@@ -1,0 +1,41 @@
+name: test
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    paths-ignore:
+      - 'website/**'
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+
+      - name: Setup env
+        uses: the-guild-org/shared-config/setup@main
+        with:
+          nodeVersion: 20
+          packageManager: pnpm
+
+      - name: Build Packages
+        run: pnpm build
+
+      - name: Setup K6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v0.37.0/k6-v0.37.0-linux-amd64.deb
+          sudo apt-get update
+          sudo apt-get install ./k6-v0.37.0-linux-amd64.deb
+
+      - name: Start Yoga Server
+        working-directory: ./benchmark
+        run: |
+          pnpm test
+        env:
+          NODE_NO_WARNINGS: true
+          NODE_ENV: production
+          GITHUB_PR: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+        node: [18, 20]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --ignore-engines --frozen-lockfile
+
+      - name: Build packages
+        run: yarn build
+
+      - name: Test
+        run: yarn test
+
+  codeQuality:
+    name: Code quality
+    needs: [build]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --ignore-engines --frozen-lockfile
+
+      - name: Check format
+        run: yarn format
+
+      - name: Lint
+        run: yarn lint
+
+  nodeJsBaselineAptCompatibility:
+    name: NodeJS installed from stock Ubuntu-LTS packages (not external sources)
+    runs-on: ubuntu-22.04
+    container:
+      image: 'ubuntu:24.04'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt update --yes
+          apt upgrade --yes
+
+          # NOTE: do not change the below with an `actions/setup-node` step! or it
+          # would make this CI job entirely pointless
+          apt install --yes npm
+
+          npm install --global yarn
+          yarn install
+
+      - name: Build
+        run: yarn build
+
+      - name: Run Tests
+        run: yarn test

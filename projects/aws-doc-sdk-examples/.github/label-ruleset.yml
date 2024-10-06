@@ -1,0 +1,42 @@
+C++:
+  - cpp/**/*
+DotNet-v3:
+  - dotnetv3/**/*
+Go-v1:
+  - go/**/*
+Go-v2:
+  - gov2/**/*
+Java-v1:
+  - java/**/*
+Java-v2:
+  - javav2/**/*
+Javascript-v2:
+  - javascript/**/*
+Javascript-v3:
+  - javascriptv3/**/*
+Kotlin:
+  - kotlin/**/*
+PHP:
+  - php/**/*
+Python:
+  - python/**/*
+Ruby:
+  - ruby/**/*
+Rust:
+  - rustv1/**/*
+SAP ABAP:
+  - sap-abap/**/*
+Swift:
+  - swift/**/*
+Typescript:
+  - typescript/**/*
+CLI:
+  - aws-cli/**/*
+CDK:
+  - resources/cdk/**/*
+CloudFormation:
+  - cloudformation/**/*
+Tools:
+  - .tools/**/*
+GitHub settings:
+  - .github/**/*

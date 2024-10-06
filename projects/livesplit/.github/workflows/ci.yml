@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout LiveSplit
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch history
+        run: git fetch --prune --unshallow --no-recurse-submodules
+
+      - name: Checkout head_ref
+        if: ${{ github.head_ref != '' }}
+        run: git checkout -b ${{ github.head_ref }} || git checkout ${{ github.head_ref }}
+
+      - name: Set up .NET environment
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Build LiveSplit
+        run: >
+          dotnet build
+          -v m
+          -c Release
+          -p:PlatformTarget=x64
+          -p:GenerateDocumentationFile=false
+          -p:DebugType=None
+          .\LiveSplit.sln
+
+      - name: Run tests
+        run: >
+          dotnet test
+          -v m
+          -c Release
+          --no-restore --no-build
+          .\LiveSplit.sln
+
+      - name: Clean up build folder
+        run: |
+          mkdir .\bin\Release\Resources
+          cp .\res\SplitsFile.ico .\bin\Release\Resources
+          cp .\res\LayoutFile.ico .\bin\Release\Resources
+          rm .\bin\Release\Microsoft.WindowsAPICodePack.ExtendedLinguisticServices.dll
+          rm .\bin\Release\Microsoft.WindowsAPICodePack.Sensors.dll
+          rm .\bin\Release\Microsoft.WindowsAPICodePack.ShellExtensions.dll
+          rm .\bin\Release\Components\SpeedrunComSharp.dll
+          rm .\bin\Release\Components\CustomFontDialog.dll
+          rm .\bin\Release\Components\System.Buffers.dll
+          rm .\bin\Release\Components\System.Memory.dll
+          rm .\bin\Release\Components\System.Numerics.Vectors.dll
+          rm .\bin\Release\Components\System.Resources.Extensions.dll
+          rm .\bin\Release\Components\System.Runtime.CompilerServices.Unsafe.dll
+
+      - name: Upload build as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSplit_Build
+          path: .\bin\Release
+
+      - name: Upload build to LiveSplit.github.io
+        if: github.repository == 'LiveSplit/LiveSplit' && github.ref == 'refs/heads/master'
+        run: |
+          7z a LiveSplitDevBuild.zip .\bin\Release\*
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git clone -q --branch master --single-branch "https://github.com/LiveSplit/LiveSplit.github.io.git"
+          cd LiveSplit.github.io
+          git checkout -q --orphan artifacts
+          git reset
+          mv ../LiveSplitDevBuild.zip . -force
+          git add LiveSplitDevBuild.zip
+          git commit -m "Add Development Build"
+          git push -q --force https://action:${{ secrets.DEV_BUILD_UPLOAD }}@github.com/LiveSplit/LiveSplit.github.io.git

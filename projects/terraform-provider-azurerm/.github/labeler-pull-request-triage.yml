@@ -1,0 +1,606 @@
+# NOTE: this file is generated via 'make generate'
+dependencies:
+- changed-files:
+  - any-glob-to-any-file:
+    - go.mod
+    - go.sum
+    - vendor/**/*
+documentation:
+- changed-files:
+  - any-glob-to-any-file: 
+    - website/**/*
+tooling:
+- changed-files:
+  - any-glob-to-any-file: 
+    - internal/tools/**/*
+state-migration:
+- changed-files:
+  - any-glob-to-any-file: 
+    - internal/services/**/migration/**/*
+service/aadb2c:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/aadb2c/**/*
+
+service/advisor:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/advisor/**/*
+
+service/analysis:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/analysisservices/**/*
+
+service/api-management:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/apimanagement/**/*
+
+service/app-configuration:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/appconfiguration/**/*
+
+service/app-service:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/appservice/**/*
+
+service/application-insights:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/applicationinsights/**/*
+
+service/arc-resource-bridge:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/arcresourcebridge/**/*
+
+service/attestation:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/attestation/**/*
+
+service/authorization:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/authorization/**/*
+    - internal/services/managedidentity/**/*
+
+service/automanage:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/automanage/**/*
+
+service/automation:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/automation/**/*
+
+service/azure-stack-hci:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/azurestackhci/**/*
+
+service/batch:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/batch/**/*
+
+service/billing:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/billing/**/*
+
+service/blueprints:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/blueprints/**/*
+
+service/bots:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/bot/**/*
+
+service/cdn:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/cdn/**/*
+
+service/cognitive-services:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/cognitive/**/*
+
+service/communication:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/communication/**/*
+
+service/connections:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/connections/**/*
+
+service/consumption:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/consumption/**/*
+
+service/container-apps:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/containerapps/**/*
+
+service/cosmosdb:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/cosmos/**/*
+
+service/cost-management:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/costmanagement/**/*
+
+service/custom-resource-provider:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/customproviders/**/*
+
+service/dashboard:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/dashboard/**/*
+
+service/data-factory:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/datafactory/**/*
+
+service/data-protection:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/dataprotection/**/*
+
+service/data-share:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/datashare/**/*
+
+service/database-migration:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/databasemigration/**/*
+
+service/databox-edge:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/databoxedge/**/*
+
+service/databricks:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/databricks/**/*
+
+service/datadog:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/datadog/**/*
+
+service/dev-center:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/devcenter/**/*
+
+service/devtestlabs:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/devtestlabs/**/*
+
+service/digital-twins:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/digitaltwins/**/*
+
+service/disks:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/disks/**/*
+
+service/dns:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/dns/**/*
+    - internal/services/privatedns/**/*
+
+service/domain-services:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/domainservices/**/*
+
+service/elastic:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/elastic/**/*
+
+service/elasticsan:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/elasticsan/**/*
+
+service/event-grid:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/eventgrid/**/*
+
+service/event-hubs:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/eventhub/**/*
+
+service/firewall:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/firewall/**/*
+
+service/fluid-relay:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/fluidrelay/**/*
+
+service/frontdoor:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/frontdoor/**/*
+
+service/graph:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/graphservices/**/*
+
+service/hdinsight:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/hdinsight/**/*
+
+service/healthcare:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/healthcare/**/*
+
+service/hsm:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/hsm/**/*
+
+service/hybrid-compute:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/hybridcompute/**/*
+
+service/iot-central:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/iotcentral/**/*
+
+service/iot-hub:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/iothub/**/*
+
+service/iot-time-series:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/iottimeseriesinsights/**/*
+
+service/key-vault:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/keyvault/**/*
+
+service/kusto:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/kusto/**/*
+
+service/labservice:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/labservice/**/*
+
+service/lighthouse:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/lighthouse/**/*
+
+service/load-balancers:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/loadbalancer/**/*
+
+service/load-test:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/loadtestservice/**/*
+
+service/log-analytics:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/loganalytics/**/*
+
+service/logic:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/logic/**/*
+
+service/logz:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/logz/**/*
+
+service/machine-learning:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/machinelearning/**/*
+
+service/maintenance:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/maintenance/**/*
+
+service/managed-apps:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/managedapplications/**/*
+
+service/managed-hsm:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/managedhsm/**/*
+
+service/management-groups:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/managementgroup/**/*
+
+service/maps:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/maps/**/*
+
+service/maria-db:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mariadb/**/*
+
+service/media:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/media/**/*
+
+service/mixed-reality:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mixedreality/**/*
+
+service/mobile-network:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mobilenetwork/**/*
+
+service/monitor:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/monitor/**/*
+
+service/mssql:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mssql/**/*
+
+service/mssqlmanagedinstance:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mssqlmanagedinstance/**/*
+
+service/mysql:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/mysql/**/*
+
+service/netapp:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/netapp/**/*
+
+service/network:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/network/**/*
+
+service/network-function:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/networkfunction/**/*
+
+service/nginx:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/nginx/**/*
+
+service/notifications:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/notificationhub/**/*
+
+service/orbital:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/orbital/**/*
+
+service/paloalto:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/paloalto/**/*
+
+service/policy:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/policy/**/*
+
+service/portal:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/portal/**/*
+
+service/postgresql:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/postgres/**/*
+
+service/power-bi:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/powerbi/**/*
+
+service/private-dns-resolver:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/privatednsresolver/**/*
+
+service/purview:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/purview/**/*
+
+service/recovery-services:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/recoveryservices/**/*
+
+service/redhatopenshift:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/redhatopenshift/**/*
+
+service/redis:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/redis/**/*
+    - internal/services/redisenterprise/**/*
+
+service/relay:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/relay/**/*
+
+service/search:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/search/**/*
+
+service/security-center:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/securitycenter/**/*
+
+service/sentinel:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/sentinel/**/*
+
+service/service-bus:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/servicebus/**/*
+
+service/service-connector:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/serviceconnector/**/*
+
+service/service-fabric:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/servicefabric/**/*
+
+service/service-fabric-managed-cluster:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/servicefabricmanaged/**/*
+
+service/service-networking:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/servicenetworking/**/*
+
+service/signalr:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/signalr/**/*
+
+service/spring:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/springcloud/**/*
+
+service/sql:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/sql/**/*
+
+service/storage:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/storage/**/*
+
+service/storagemover:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/storagemover/**/*
+
+service/stream-analytics:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/streamanalytics/**/*
+
+service/subscription:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/subscription/**/*
+
+service/synapse:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/synapse/**/*
+
+service/systemcentervirtualmachinemanager:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/systemcentervirtualmachinemanager/**/*
+
+service/traffic-manager:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/trafficmanager/**/*
+
+service/video-analyzer:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/videoanalyzer/**/*
+
+service/virtual-desktops:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/desktopvirtualization/**/*
+
+service/vmware:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/vmware/**/*
+
+service/workloads:
+- changed-files:
+  - any-glob-to-any-file:
+    - internal/services/workloads/**/*

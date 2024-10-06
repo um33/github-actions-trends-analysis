@@ -1,0 +1,40 @@
+name: Deploy to production
+concurrency: production_environment
+on:
+  release:
+    types: [ created ]
+env:
+  fastly_vcl_service_id: 4E1GeTez3EFH3cnwfyMAog
+  fastly_compute_service_id: 3AfcolkTD4KUfkrKGIYZ4T
+  fastly_top_pops_config: 446GW5am9tyUvsz9qPQ1jW
+  fastly_compute_edge_config: 0YxAHTtZA6o2U7ZKVcbbL1
+  domain: cdn.polyfill.io
+jobs:
+  deploy-to-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@b113a30d27a8e59c969077c0a0168cc13dab5ffc # pin@v1
+      - name: Set cache-key
+        id: cache-key
+        run: echo "CACHE_KEY=compute-package-$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Restore compute-package from cache
+        uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # pin@v3
+        id: compute-package
+        with:
+          path: pkg/package.tar.gz
+          key: ${{ steps.cache-key.outputs.CACHE_KEY }}
+          fail-on-cache-miss: true
+      - uses: actions/upload-artifact@1eb3cb2b3e0f29609092a73eb033bb759a334595 # pin@v3
+        with:
+          name: ${{ steps.cache-key.outputs.CACHE_KEY }}
+          path: pkg/package.tar.gz
+      - uses: ./.github/actions/terraform
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          terraform_working_dir: fastly/terraform/production
+          fastly-api-token: ${{ secrets.FASTLY_API_KEY }}
+          fastly_vcl_service_id: ${{ env.fastly_vcl_service_id }}
+          fastly_compute_service_id: ${{ env.fastly_compute_service_id }}
+          fastly_top_pops_config: ${{ env.fastly_top_pops_config }}
+          fastly_compute_edge_config: "${{ env.fastly_compute_edge_config }}"

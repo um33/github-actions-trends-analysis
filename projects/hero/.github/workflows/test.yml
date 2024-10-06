@@ -1,0 +1,66 @@
+# test.yml
+# Unit Test
+name: Unit Test
+'on':
+  pull_request:
+    paths:
+      - '**.swift'
+      - '**.xcodeproj'
+      - '**.m'
+      - '**.h'
+      - '**.podspec'
+      - Podfile
+      - Podfile.lock
+      - '**/test.yml'
+jobs:
+  swiftpm:
+    name: Test iOS (swiftpm)
+    runs-on: macOS-latest
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_14.2.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: iOS - Swift PM
+        run: |
+          pod install
+          set -o pipefail && swift test --parallel
+  XCode:
+    name: Test iOS
+    runs-on: macOS-latest
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_14.2.app/Contents/Developer
+    strategy:
+      matrix:
+        run-config:
+          - scheme: Hero
+            platform: iOS
+            action: test
+            code-coverage: true
+          - scheme: Hero (tvOS)
+            platform: tvOS
+            action: build
+            code-coverage: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: CocoaPods - ${{ matrix.run-config.destination }}
+        run: |
+          pod install
+
+      - name: Test - ${{ matrix.run-config.platform }}
+        uses: mxcl/xcodebuild@v2.0
+        with:
+          platform: ${{ matrix.run-config.platform }}
+          action: ${{ matrix.run-config.action }}
+          code-coverage:  ${{ matrix.run-config.code-coverage }}
+          configuration: Debug
+          scheme: ${{ matrix.run-config.scheme }}
+          workspace: Hero.xcworkspace
+
+      - name: Upload Code Coverage
+        uses: codecov/codecov-action@v3
+        if: ${{ matrix.run-config.code-coverage }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

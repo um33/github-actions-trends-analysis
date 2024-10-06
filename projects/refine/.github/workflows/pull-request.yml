@@ -1,0 +1,72 @@
+name: PR Checks
+on: [pull_request]
+
+jobs:
+  commit-lint:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-commit-lint
+      cancel-in-progress: true
+    name: Commitlint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: wagoid/commitlint-github-action@v5
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: lint
+        run: |
+          npm ci
+          npm run lint:ci
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref }}-pr-build
+      cancel-in-progress: true
+    strategy:
+      matrix:
+        node-version: [18.x]
+    name: Bootstrap and Test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache node_modules
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install & Bootstrap
+        run: |
+          npm ci
+          npm run bootstrap:all
+          npm run build:all
+      - name: Test
+        run: |
+          npm run test:all -- --skip-nx-cache
+      - name: Publint
+        run: |
+          npm run publint:all
+
+  tsdoc-check:
+    runs-on: ubuntu-latest
+    name: Check TSDoc Links
+    concurrency:
+      group: ${{ github.ref }}-tsdoc-check
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+      - name: Check TSDoc Links
+        run: npx tsdoc-link-check --patterns packages/**

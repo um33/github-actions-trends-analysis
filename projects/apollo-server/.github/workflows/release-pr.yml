@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.repository == 'apollographql/apollo-server'
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+        with:
+          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          # setup-node knows how to read the `volta.node` field.
+          node-version-file: package.json
+      - name: Install Dependencies
+        run: npm i
+
+      - name: Create Release Pull Request / NPM Publish
+        uses: changesets/action@v1
+        with:
+          publish: npm run changeset-publish
+          version: npm run changeset-version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

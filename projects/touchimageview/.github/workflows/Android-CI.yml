@@ -1,0 +1,98 @@
+name: PullRequest
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  buildTest:
+    name: Build & Test JDK ${{ matrix.java_version }}
+    runs-on: macOS-latest
+    strategy:
+      matrix:
+        java_version: [ 17 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: prepare
+        run: brew install exiftool imagemagick
+      - name: Install JDK ${{ matrix.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: ${{ matrix.java_version }}
+      - name: Install Android SDK
+        uses: malinskiy/action-android/install-sdk@release/0.1.4
+      - name: Build project
+        run: ./gradlew assembleDebug
+      - name: Run tests
+        run: ./gradlew test
+      - name: Run instrumentation tests
+        uses: malinskiy/action-android/emulator-run-cmd@release/0.1.4
+        with:
+          cmd: ./gradlew :app:cAT
+          api: 28
+          tag: default
+          abi: x86
+          cmdOptions: -noaudio -no-boot-anim -no-window
+          bootTimeout: 720
+      - name: Archive Espresso results
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: Touch-Espresso-report
+          path: app/build/reports/androidTests/connected
+          if-no-files-found: error
+      - name: Archive screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Touch-Screenshots
+          path: |
+            app/build/outputs/connected_android_test_additional_output/debugAndroidTest/connected
+            app/build/outputs/androidTest-results/connected
+      - name: Compare screenshots
+        run: |
+          ls -ls app/build/outputs/connected_android_test_additional_output/debugAndroidTest/connected
+          cp app/build/outputs/connected_android_test_additional_output/debugAndroidTest/connected/emulator\(AVD\)\ -\ 9/* screenshotsToCompare
+          ./screenShotCompare.sh
+      - name: Archive screenshots diffs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Touch-Screenshots-diffs
+          path: |
+            screenshotDiffs
+  Check:
+    name: Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java_version: [ 17 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install JDK ${{ matrix.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: ${{ matrix.java_version }}
+      - name: Install Android SDK
+        uses: malinskiy/action-android/install-sdk@release/0.1.4
+      - name: Code checks
+        run: ./gradlew check
+      - name: Archive Lint report
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: TouchImage-Lint-report
+          path: app/build/reports/lint-results*.html

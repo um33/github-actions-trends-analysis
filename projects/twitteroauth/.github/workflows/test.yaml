@@ -1,0 +1,19 @@
+name: Test
+on: push
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-versions: ['8.0', '8.1', '8.2']
+    name: PHP ${{ matrix.php-versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: soap
+      - run: composer validate --no-interaction --strict
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm test

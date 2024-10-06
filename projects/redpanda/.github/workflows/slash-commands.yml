@@ -1,0 +1,28 @@
+name: Slash Command Dispatch
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  slashCommandDispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slash Command Dispatch
+        uses: peter-evans/slash-command-dispatch@v2
+        with:
+          token: ${{ secrets.ACTIONS_BOT_TOKEN }}
+          permission: read
+          issue-type: both
+          commands: |
+            backport
+            ci-repeat
+            test-codecov
+            cdt
+            test-release-pipeline
+            test-arm64
+            dt
+            microbench
+            publish-to-install-pack
+          static-args: |
+            org=redpanda-data
+            repo=redpanda
+            milestone=auto

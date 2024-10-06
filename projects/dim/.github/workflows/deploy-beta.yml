@@ -1,0 +1,101 @@
+name: Deploy Beta
+
+on:
+  push:
+    branches:
+      - master
+
+# Ensures that only one deploy task per branch/environment will run at a time.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: beta
+      url: https://beta.dim.gg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # So sentry can get the previous commit
+
+      - uses: pnpm/action-setup@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: pnpm
+
+      - name: Install SSH key
+        uses: benoitchantre/setup-ssh-authentication-action@1.0.1
+        with:
+          private-key: ${{ secrets.SSH_KEY }}
+          private-key-name: dim.rsa
+          known-hosts: ${{ secrets.REMOTE_HOST }}
+
+      - name: get-npm-version
+        id: package-version
+        uses: martinbeentjes/npm-get-version-action@v1.3.1
+
+      - name: set beta
+        run: |
+          echo "build_level='beta'" >> $GITHUB_ENV
+
+      - name: Bump release version (beta)
+        env:
+          RUN_NUM: ${{ github.run_number }}
+        run: |
+          echo "VERSION=${{ steps.package-version.outputs.current-version }}.$(($RUN_NUM))" >> $GITHUB_ENV
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build
+        run: pnpm build:beta
+        env:
+          NODE_OPTIONS: "--max_old_space_size=8192"
+          WEB_API_KEY: ${{ secrets.BUNGIE_API_KEY }}
+          WEB_OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          WEB_OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_SECRET }}
+          DIM_API_KEY: ${{ secrets.DIM_API_KEY }}
+
+      # Send webpack stats and build information to RelativeCI
+      - name: Send webpack stats to RelativeCI
+        uses: relative-ci/agent-action@v2
+        with:
+          webpackStatsFile: ./webpack-stats.json
+          key: ${{ secrets.RELATIVE_CI_KEY }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Syntax
+        run: pnpm syntax
+
+      - name: Rsync to Server
+        run: ./build/rsync-deploy.sh
+        env:
+            SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+            SOURCE: "dist/"
+            REMOTE_USER: ${{ secrets.REMOTE_USER }}
+            REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+            REMOTE_PATH: beta.destinyitemmanager.com
+
+      - name: Purge CloudFlare cache
+        run: ./build/purge-cloudflare.sh
+        env:
+          CLOUDFLARE_KEY: ${{ secrets.CLOUDFLARE_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          APP_DOMAIN: beta.destinyitemmanager.com
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: destiny-item-manager
+          SENTRY_PROJECT: dim
+        with:
+          environment: beta
+          version: ${{ env.VERSION }}
+          ignore_missing: true

@@ -1,0 +1,56 @@
+name: indent
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${ {github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+
+permissions:
+  contents: read
+
+jobs:
+  indent:
+    # run the indent checks
+
+    name: indent
+    runs-on: [ubuntu-20.04]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 100
+    - uses: ssciwr/doxygen-install@v1
+      with:
+        version: "1.9.6"
+    - name: setup
+      run: |
+        ./contrib/utilities/download_clang_format
+        sudo apt update && sudo apt install graphviz perl texlive-bibtex-extra
+        doxygen --version
+    - name: indent
+      run: |
+        ./contrib/utilities/check_indentation.sh
+    - name: documentation
+      run: |
+        mkdir build
+        cd build
+        cmake -DDEAL_II_COMPONENT_DOCUMENTATION=ON -DDEAL_II_DOXYGEN_USE_MATHJAX=ON ..
+        make -j 2 documentation
+        cat doxygen.log
+        # Suppress:
+        # warning: Inheritance graph for 'SmartPointer' not generated, too many nodes (138), threshold is 50. Consider increasing DOT_GRAPH_MAX_NODES.
+        # warning: Inheritance graph for 'Subscriptor' not generated, too many nodes (209), threshold is 50. Consider increasing DOT_GRAPH_MAX_NODES.
+        sed -i '/Inheritance graph/d' doxygen.log
+        # Suppress:
+        # warning: explicit link request to '<function>' could not be resolved
+        sed -i '/explicit link request to/d' doxygen.log
+        # Remove empty lines
+        sed -i '/^$/d' doxygen.log
+        ! [ -s doxygen.log ] || exit 1
+        tar -czf doxygen_documentation.tar.gz doc/doxygen
+    - name: archive documentation
+      uses: actions/upload-artifact@v4
+      with:
+        name: doxygen_documentation.tar.gz
+        path: build/doxygen_documentation.tar.gz

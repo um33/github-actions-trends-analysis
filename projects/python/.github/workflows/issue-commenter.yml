@@ -1,0 +1,24 @@
+name: "Issue Commenter"
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  comment-on-new-issue:
+    runs-on: ubuntu-22.04
+    name: Comments for every NEW issue.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+
+      - name: Read issue-comment.md
+        id: issue-comment
+        uses: juliangruber/read-file-action@b549046febe0fe86f8cb4f93c24e284433f9ab58
+        with:
+          path: .github/issue-comment.md
+
+      - name: Base comment
+        uses: jd-0001/gh-action-comment-on-new-issue@c443e1151cc69b146fd6918cc983ec1bd27ab254
+        with:
+          message: "${{ steps.issue-comment.outputs.content }}"
+          ignore-label: ":anger: prickle"

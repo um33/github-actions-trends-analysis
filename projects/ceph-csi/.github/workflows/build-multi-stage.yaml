@@ -1,0 +1,27 @@
+---
+name: multi-arch-build
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+    branches:
+      - '*'
+permissions:
+  contents: read
+
+jobs:
+  codespell:
+    name: multi-arch-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: multi-arch-build
+        # yamllint disable-line rule:line-length
+        if: ${{ ! contains(github.event.pull_request.labels.*.name, 'ci/skip/multi-arch-build') }}
+        # podman cannot pull images with both tag and digest
+        # https://github.com/containers/buildah/issues/1407
+        # use docker to build images
+        run: CONTAINER_CMD=docker ./scripts/build-multi-arch-image.sh
+      - name: single-arch-build
+        # yamllint disable-line rule:line-length
+        if: ${{ contains(github.event.pull_request.labels.*.name, 'ci/skip/multi-arch-build') }}
+        run: make containerized-build

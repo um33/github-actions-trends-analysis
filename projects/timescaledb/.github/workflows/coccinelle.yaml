@@ -1,0 +1,35 @@
+# Check our codebase for defective programming patterns
+name: Coccinelle
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+      - prerelease_test
+jobs:
+  coccinelle:
+    name: Coccinelle
+    # coccinelle version in ubuntu-latest (20.04) is too old so we run
+    # this in jammy (22.04)
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install coccinelle
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+
+    - name: Run coccinelle
+      run: |
+        ./scripts/coccinelle.sh
+
+    - name: Save coccinelle.diff
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coccinelle.diff
+        path: coccinelle.diff
+

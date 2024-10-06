@@ -1,0 +1,17 @@
+---
+name: Deploy Main Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Documentation/**'
+
+jobs:
+  deploy-documentation:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/documentation

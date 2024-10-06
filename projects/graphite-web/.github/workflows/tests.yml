@@ -1,0 +1,104 @@
+name: Run tests
+
+on:
+  push:
+    branches: [ master, 1.0.x, 1.1.x ]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ master, 1.0.x, 1.1.x ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379/tcp
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      mariadb:
+        image: mariadb:latest
+        ports:
+          - 3306/tcp
+        env:
+          MARIADB_USER: graphite
+          MARIADB_PASSWORD: graphite
+          MARIADB_DATABASE: test_graphite
+          MARIADB_ROOT_PASSWORD: root
+        options: --health-cmd="/usr/local/bin/healthcheck.sh --su-mysql --connect --innodb_initialized" --health-interval=5s --health-timeout=2s --health-retries=3
+      postgres:
+        image: postgres
+        ports:
+          - 5432/tcp
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install global dependencies
+        run: |
+          sudo apt-get -y install libcairo2-dev librrd-dev libboost-python-dev redis-tools
+      - name: Verify Redis connection
+        env:
+          REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+        run: |
+          redis-cli -h "127.0.0.1" -p "${REDIS_PORT}" ping
+      - name: Verify MariaDB connection
+        env:
+          MYSQL_PORT: ${{ job.services.mariadb.ports[3306] }}
+        run: |
+          mysql -h"127.0.0.1" -P"${MYSQL_PORT}" -uroot -proot -e "GRANT ALL ON test_graphite.* TO 'graphite'@'localhost' IDENTIFIED BY 'graphite';"
+      - name: Verify PostgreSQL connection
+        env:
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          PGPASSWORD=postgres psql -h"127.0.0.1" -p"${POSTGRES_PORT}" -U postgres -c "CREATE USER graphite WITH CREATEDB PASSWORD 'graphite';"
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip 'setuptools<58' --force-reinstall
+          pip install 'tox<4' tox-gh-actions flake8 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Test with tox
+        env:
+          TEST_REDIS_HOST: localhost
+          TEST_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+          TEST_MYSQL_HOST: localhost
+          TEST_MYSQL_PORT: ${{ job.services.mariadb.ports[3306] }}
+          TEST_MYSQL_PASSWORD: graphite
+          TEST_POSTGRES_HOST: localhost
+          TEST_POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          TEST_POSTGRESQL_PASSWORD: graphite
+        run: |
+          tox
+      - name: Linting
+        if: ${{ matrix.python-version==3.10 }}
+        env:
+          TOXENV: lint
+        run: |
+          tox
+      - name: Testing documentation
+        if: ${{ matrix.python-version==3.10 }}
+        env:
+          TOXENV: docs
+        run: |
+          tox
+      - name: Run Codecov
+        if: ${{ matrix.python-version==3.10 }}
+        env:
+          TOXENV: lint
+        run: |
+          pip install codecov
+          codecov
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.python-version==3.10 }}
+        uses: codecov/codecov-action@v3

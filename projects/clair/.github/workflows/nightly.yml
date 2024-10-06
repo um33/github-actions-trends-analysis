@@ -1,0 +1,99 @@
+---
+name: Nightly
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Claircore branch to reference'
+        required: false
+      go_version:
+        description: 'Go version to be used throughout'
+        required: false
+      tag:
+        description: 'Tag to push resulting image to'
+        required: false
+  schedule:
+    - cron: '30 5 * * *'
+
+jobs:
+  build:
+    name: Build and Push container
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: Setup
+        id: setup
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_API_TOKEN: ${{ secrets.QUAY_API_TOKEN }}
+        # This step uses defaults written in the shell script instead of the
+        # nicer workflow inputs so that the cron trigger works.
+        run: |
+          br=$(test -n "${{github.event.inputs.branch}}" && echo "${{github.event.inputs.branch}}" || echo main)
+          gv=$(test -n "${{github.event.inputs.go_version}}" && echo "${{github.event.inputs.go_version}}" || echo 1.20)
+          : "${repo:=$GITHUB_REPOSITORY}"
+          test "${repo%%/*}" = quay && repo="projectquay/${repo##*/}" ||:
+          cat <<. >>$GITHUB_OUTPUT
+          push=${{ env.QUAY_TOKEN != '' }}
+          api=${{ env.QUAY_API_TOKEN != '' }}
+          date=$(date -u '+%Y-%m-%d')
+          tag=$(test -n "${{github.event.inputs.tag}}" && echo "${{github.event.inputs.tag}}" || echo nightly)
+          claircore_branch=${br}
+          go_version=${gv}
+          repo=${repo}
+          .
+          # Environment variables
+          printf 'CLAIRCORE_BRANCH=%s\n' "${br}" >> $GITHUB_ENV
+          printf 'GO_VERSION=%s\n' "$gv" >> $GITHUB_ENV
+          printf '%s/.local/go/bin\n' "$HOME" >> $GITHUB_PATH
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.setup.outputs.go_version }}
+          check-latest: true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/go-cache
+        with:
+          go: ${{ steps.setup.outputs.go_version }}
+      - id: mod
+        run: ./.github/script/nightly-module.sh
+      - id: novelty
+        uses: actions/cache@v4
+        with:
+          path: go.sum
+          key: novelty-${{ github.sha }}-${{ hashFiles('./go.*') }}
+      - uses: docker/login-action@v3
+        if: steps.setup.outputs.push && steps.novelty.outputs.cache-hit != 'true'
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - name: Export
+        # This exports the current state of the main branch, and appends our modified go module files.
+        run: |
+          mkdir "${{ runner.temp }}/build"
+          git archive --add-file=go.mod --add-file=go.sum origin/main |
+            tar -x -C "${{ runner.temp }}/build"
+      - uses: docker/build-push-action@v5
+        with:
+          build-args: |
+            GO_VERSION=${{ env.GO_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: ${{ runner.temp }}/build
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          push: ${{ steps.setup.outputs.push && steps.novelty.outputs.cache-hit != 'true' }}
+          tags: |
+            quay.io/${{ steps.setup.outputs.repo }}:${{ steps.setup.outputs.tag }}
+            quay.io/${{ steps.setup.outputs.repo }}:${{ steps.setup.outputs.tag }}-${{ steps.setup.outputs.date }}
+      - uses: ./.github/actions/set-image-expiration
+        if: steps.setup.outputs.push && steps.setup.outputs.api && steps.novelty.outputs.cache-hit != 'true'
+        with:
+          repo: ${{ steps.setup.outputs.repo }}
+          tag: ${{ steps.setup.outputs.tag }}-${{ steps.setup.outputs.date }}
+          token: ${{ secrets.QUAY_API_TOKEN }}

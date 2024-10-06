@@ -1,0 +1,203 @@
+name: Gate
+on:
+  merge_group:
+    branches: [ 'master' ]
+  push:
+    branches: ['*', '!stabilization*', '!stable*', '!master' ]
+  pull_request:
+    branches: [ 'master', 'stabilization*' ]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  validate-centos7:
+    name: Build, Test on CentOS 7 (Container)
+    runs-on: ubuntu-latest
+    container:
+      image: centos:7
+    steps:
+      - name: Install Deps
+        run: yum install -y cmake make openscap-utils PyYAML libxslt xml-common python-jinja2 python-setuptools
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build
+        run: |-
+          ./build_product rhel7 rhel8 rhel9 --derivatives
+        env:
+          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+      - name: Test
+        run: ctest -j2 --output-on-failure -E unique-stigids
+        working-directory: ./build
+
+  validate-sle:
+    name: Build, Test on SLE 15 (Container)
+    runs-on: ubuntu-latest
+    container:
+      image: registry.suse.com/bci/bci-base:latest
+    steps:
+      - name: Update CA certificates
+        run: update-ca-certificates
+      - name: Zypper add factory repo - to install bats and ShellCheck
+        run: zypper --non-interactive ar  https://download.opensuse.org/repositories/openSUSE:/Backports:/SLE-15-SP5/standard/openSUSE:Backports:SLE-15-SP5.repo
+      - name: Zypper auto import keys
+        run: zypper  --gpg-auto-import-keys --non-interactive ref
+      - name: Zypper refs
+        run: zypper refs
+      - name: Zypper refresh
+        run: zypper refresh
+      - name: Install Deps
+        run: zypper install -y git cmake make bats openscap-utils python3 python3-rpm python3-pip python3-devel python3-PyYAML python3-Jinja2 python3-setuptools libxslt-tools libxml2-tools ShellCheck
+      - name: Upgrade pip python
+        run: pip install pip --upgrade
+      - name: Install deps python
+        run: pip install pytest pytest-cov
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: ./build_product alinux2 alinux3 chromium fedora firefox rhcos4 rhel7 rhel8 rhel9 sle12 sle15 ubuntu2004 ubuntu2204 uos20
+      - name: Test
+        run: ctest -j2 --output-on-failure -E unique-stigids
+        working-directory: ./build
+
+  validate-suse:
+    name: Build, Test on OpenSUSE Leap 15 (Container)
+    runs-on: ubuntu-latest
+    container:
+      image: opensuse/leap:15
+    steps:
+      - name: Install Deps
+        run: zypper install -y git cmake make openscap-utils python3-PyYAML bats python3-pytest python3-pytest-cov python3-Jinja2 python3-setuptools libxslt-tools libxml2-tools ShellCheck
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: ./build_product sle12 sle15
+        env:
+          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+      - name: Test
+        run: ctest -j2 --output-on-failure -E unique-stigids
+        working-directory: ./build
+
+  validate-debian:
+    name: Build, Test on Debian 10 (Container)
+    runs-on: ubuntu-latest
+    container:
+      image: debian:buster
+    steps:
+      - name: Update the package repository
+        run: apt-get update
+      - name: Install Deps
+        run: apt-get install -y ansible-lint bats check cmake libopenscap8 libxml2-utils ninja-build python3-github python3-pip xsltproc libxslt1-dev libxml2-dev zlib1g-dev
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Upgrade pip python
+        run: pip3 install --upgrade pip
+      - name: Install deps python
+        run: pip3 install -r requirements.txt -r test-requirements.txt --ignore-installed PyYAML
+      - name: Build
+        env:
+          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_ANSIBLE_PLAYBOOKS_PER_RULE_ENABLED=ON -DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+        run: |-
+          ./build_product debian10 debian11
+      - name: Test
+        working-directory: ./build
+        run: ctest -j2 --output-on-failure -E unique-stigids
+
+  validate-ubuntu:
+    name: Build, Test on Ubuntu 20.04
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install Deps
+        run: sudo apt-get update && sudo apt-get install cmake ninja-build libopenscap8 libxml2-utils xsltproc ansible-lint bats python3-github python3-jinja2 python3-pip python3-pytest python3-pytest-cov python3-setuptools python3-yaml shellcheck
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install deps python
+        run: pip3 install -r requirements.txt -r test-requirements.txt
+      - name: Build
+        env:
+          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_SCE_ENABLED:BOOL=ON -DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+        run: |-
+          ./build_product ubuntu2004 ubuntu2204
+      - name: Test
+        run: ctest -j2 --output-on-failure -E unique-stigids
+        working-directory: ./build
+
+  validate-ubuntu-22-04:
+    name: Build, Test on Ubuntu 22.04
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install Deps
+        run: sudo apt-get update && sudo apt-get install cmake ninja-build libopenscap8 libxml2-utils xsltproc ansible-lint bats python3-github python3-jinja2 python3-pip python3-pytest python3-pytest-cov python3-setuptools python3-yaml shellcheck
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install deps python
+        run: pip3 install -r requirements.txt -r test-requirements.txt
+      - name: Build
+        env:
+          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_SCE_ENABLED:BOOL=ON -DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+        run: |-
+          ./build_product ubuntu2004 ubuntu2204
+      - name: Test
+        run: ctest -j2 --output-on-failure -E unique-stigids
+        working-directory: ./build
+
+  validate-fedora-rawhide:
+    name: Build, Test on Fedora Rawhide (Container)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:rawhide
+    steps:
+      -   name: Run Updates
+          run: dnf update -y
+      -   name: Install Deps
+          run: dnf install -y cmake make openscap-utils bats ansible python3-pip ShellCheck git python3-devel gcc-c++
+      -   name: Checkout
+          uses: actions/checkout@v4
+      -   name: Install deps python
+          run: pip install -r requirements-base.txt -r test-requirements.txt
+      -   name: Build
+          run: |-
+            ./build_product \
+                alinux2 \
+                alinux3 \
+                anolis23 \
+                anolis8 \
+                chromium \
+                fedora \
+                firefox \
+                rhcos4 \
+                rhel7 \
+                rhel8 \
+                rhel9 \
+                uos20 \
+                ocp4
+          env:
+            ADDITIONAL_CMAKE_OPTIONS: "-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+      -   name: Test
+          run: ctest -j2 --output-on-failure -E unique-stigids
+          working-directory: ./build
+
+  validate-windows:
+    name: Build on Windows
+    runs-on: windows-latest
+    env:
+      OPENSCAP_VERSION: "1.4.0"
+      OPENSCAP_ROOT_DIR: "C:\\Program Files\\OpenSCAP 1.4.0"
+    steps:
+        - name: Install Deps
+          run: choco install xsltproc
+        - name: Get Latest OpenSCAP
+          shell: powershell
+          run: "Invoke-WebRequest -Uri https://nightly.link/OpenSCAP/openscap/workflows/build/main/openscap-win64.zip -OutFile ${{ github.workspace }}\\openscap-win.zip"
+        - name: Extract Latest OpenSCAP
+          shell: powershell
+          run: "Expand-Archive -LiteralPath ${{ github.workspace }}\\openscap-win.zip -DestinationPath ${{ github.workspace }}\\openscap-win -Verbose:$true"
+        - name: Install OpenSCAP
+          shell: powershell
+          run: "msiexec.exe /norestart /q /i ${{ github.workspace }}\\openscap-win\\OpenSCAP-${env:OPENSCAP_VERSION}-win64.msi"
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Install Python Deps
+          run: pip install -r requirements.txt -r test-requirements.txt
+        - name: Build
+          shell: bash
+          run: ./build_product -j2 fedora

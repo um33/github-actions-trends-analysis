@@ -1,0 +1,30 @@
+name: uncrustify_test
+on: [push, pull_request]
+
+# Cancel any in-progress CI runs for a PR if it is updated
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  uncrustify:
+    name: ${{ matrix.build_type }} - ${{ matrix.generator }}
+    strategy:
+      matrix:
+        include:
+          - build_type: Debug
+            generator: Ninja
+          - build_type: Release
+            generator: Unix Makefiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: cmake-part-and-tests
+        env:
+          BADGE: linux
+        run: |
+          cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake --build build
+          cd build
+          ../scripts/run_ctest.py

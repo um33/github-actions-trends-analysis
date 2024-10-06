@@ -1,0 +1,31 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master ]
+    tags-ignore:
+    - 'v*'
+  pull_request:
+    branches: [ master ]
+
+permissions: read-all
+
+jobs:
+  build:
+
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+    - name: apt
+      run: sudo apt-get install gcc autoconf bison gettext autopoint help2man lzip texinfo texlive
+    - name: autogen
+      run: ./autogen.sh
+    - name: configure
+      run: ./configure
+    - name: make
+      run: make
+    - name: make check
+      run: make check
+    - name: make distcheck
+      run: make distcheck

@@ -1,0 +1,84 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Format Code in fork repo
+
+on:
+  push:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.sql'
+
+concurrency:
+  group: backend-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  format:
+    if: github.repository != 'DataLinkDC/dinky' && vars.FORMAT == 'true'
+    name: Format Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.TOKEN }}
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+         filters: |
+           frontend:
+             - 'dinky-web/**'
+           backend:
+             - '!dinky-web/**'           
+
+      - name: Run spotless apply
+        if:  steps.filter.outputs.backend == 'true'
+        run : ./mvnw -T 4C -B --no-snapshot-updates clean spotless:apply -P flink-all
+      - uses: actions/setup-node@v3
+        if: steps.filter.outputs.frontend == 'true'
+        with:
+          node-version: 16
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        if: steps.filter.outputs.frontend == 'true'
+        run: |
+          echo "::set-output name=dir::$(npm config get cache)"
+      - uses: actions/cache@v3
+        id: npm-cache # use this to check for `cache-hit` ==> if: steps.npm-cache.outputs.cache-hit != 'true'
+        if: steps.filter.outputs.frontend == 'true'
+        with:
+          path: |
+            ${{ steps.npm-cache-dir.outputs.dir }}
+            dinky-web/dist
+          key: ${{ runner.os }}-node-${{ hashFiles('dinky-web/**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install Dependencies
+        if: steps.filter.outputs.frontend == 'true'
+        run: cd dinky-web && npm install --only=dev --prefer-offline --no-audit --progress=false --legacy-peer-deps
+      - name: Run frontend format
+        if:  steps.filter.outputs.frontend == 'true'
+        run: cd dinky-web && npm run lint:prettier
+
+      - name: Check for modified files
+        id: git-check
+        run: |
+          echo "modified=$(if git diff-index --quiet HEAD --; then echo "false"; else echo "true"; fi)" >> $GITHUB_OUTPUT
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        if: steps.git-check.outputs.modified == 'true'
+        with:
+          commit_message: Spotless Apply

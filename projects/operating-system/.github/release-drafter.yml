@@ -1,0 +1,36 @@
+name-template: Home Assistant OS $RESOLVED_VERSION
+tag-template: $RESOLVED_VERSION
+version-template: "$MAJOR.$MINOR"
+categories:
+  - title: 'Home Assistant Operating System'
+    label: 'os'
+  - title: 'Build System'
+    label: 'build'
+  - title: 'Raspberry Pi'
+    label: 'board/raspberrypi'
+  - title: 'Home Assistant Yellow'
+    label: 'board/yellow'
+  - title: 'Home Assistant Green'
+    label: 'board/green'
+  - title: 'Open Virtual Appliance'
+    label: 'board/ova'
+  - title: 'Generic x86-64'
+    label: 'board/generic-x86-64'
+  - title: 'Hardkernel ODROID'
+    label: 'board/odroid'
+  - title: 'ASUS Tinker'
+    label: 'board/tinker'
+  - title: 'Khadas VIM Series'
+    label: 'board/khadas'
+  - title: 'Generic aarch64'
+    label: 'board/generic-aarch64'
+filter-by-commitish: true
+template: |
+  ## Changes
+
+  $CHANGES
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  default: minor

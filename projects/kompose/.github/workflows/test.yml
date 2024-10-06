@@ -1,0 +1,49 @@
+name: Kompose CI
+on:
+  push:
+    branches:
+      - main 
+  pull_request:
+env:
+  # Avoid noisy outputs like "tput: No value for $TERM and no -T specified"
+  TERM: dumb
+jobs:
+  test:
+    name: Test with ${{ matrix.go }} and CROSS_COMPILE=${{ matrix.cross_compile }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [1.18, 1.19]
+        cross_compile: [true, false]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Install dyff
+        run: go install github.com/homeport/dyff/cmd/dyff@v1.5.8
+      - name: Run tests
+        run: make test
+      - name: Perform cross compile
+        if: ${{ matrix.cross_compile }}
+        run: make cross
+  docs:
+    name: Build docs and Coveralls integration
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.19
+      - name: Install dyff
+        run: go install github.com/homeport/dyff/cmd/dyff@v1.5.8
+      - name: Create .coverprofile for each targeted directory by re:running tests
+        run: make test
+      - name: Collect all .coverprofile files and save it to one file gover.coverprofile
+        run: gover
+      - name: Send coverage
+        run: goveralls -coverprofile=gover.coverprofile -service=github
+        env:
+          # As per https://github.com/mattn/goveralls#github-actions
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}

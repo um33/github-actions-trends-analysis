@@ -1,0 +1,43 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node: [18, 19, 20]
+
+    name: Node ${{ matrix.node }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure apt-get is updated
+        run: sudo apt-get update
+
+      - name: Install Canvas and XML dependencies
+        run: sudo apt-get install -y libxml2-utils
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Node dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Run tests
+        run: yarn test:no-lint
+
+      - name: Lint
+        run: yarn lint

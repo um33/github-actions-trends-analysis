@@ -1,0 +1,36 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/{{cookiecutter.app_name}}"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "github-actions"
+    directory: "/{{cookiecutter.app_name}}/.github"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "pip"
+    directory: "/{{cookiecutter.app_name}}/requirements"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "pip"
+    directory: "/{{cookiecutter.app_name}}"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"

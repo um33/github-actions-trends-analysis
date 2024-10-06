@@ -1,0 +1,8 @@
+# Default to requesting pull request reviews from the Heroku Languages team.
+* @heroku/languages
+
+# However, request review from the language owners instead for files that are updated
+# by Dependabot or inventory/release automation, to reduce team review request noise.
+CHANGELOG.md @joshwlewis @colincasey
+Gemfile.lock @joshwlewis @colincasey
+inventory/ @joshwlewis @colincasey

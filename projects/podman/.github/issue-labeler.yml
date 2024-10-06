@@ -1,0 +1,13 @@
+# List of labels which should be assigned to issues based on a regex
+windows:
+  # info prints OsArch: ...
+  # version prints OS/Arch: ...
+  - 'O[Ss]\/?Arch:\s*windows'
+macos:
+  # info prints OsArch: ...
+  # version prints OS/Arch: ...
+  - 'O[Ss]\/?Arch:\s*darwin'
+
+remote:
+  # we cannot use multiline regex so we check for serviceIsRemote in podman info
+  - 'serviceIsRemote:\strue'

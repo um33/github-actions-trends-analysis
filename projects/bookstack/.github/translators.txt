@@ -1,0 +1,412 @@
+Name :: Languages
+@robertlandes :: German
+@SergioMendolia :: French
+@NakaharaL :: Portuguese, Brazilian
+@ReeseSebastian :: German
+@arietimmerman :: Dutch
+@diegoseso :: Spanish
+@S64 :: Japanese
+@JachuPL :: Polish
+@Joorem :: French
+@timoschwarzer :: German
+@sanderdw :: Dutch
+@lbguilherme :: Portuguese, Brazilian
+@marcusforsberg :: Swedish
+@artur-trzesiok :: Polish
+@Alwaysin :: French
+@msaus :: Japanese
+@moucho :: Spanish
+@vriic :: German
+@DeehSlash :: Portuguese, Brazilian
+@alex2702 :: German
+@nicobubulle :: French
+@kmoj86 :: Arabic
+@houbaron :: Chinese Traditional; Chinese Simplified
+@mullinsmikey :: Russian
+@limkukhyun :: Korean
+@CliffyPrime :: German
+@kejjang :: Chinese Traditional
+@TheLastOperator :: French
+@qianmengnet :: Simplified Chinese
+@ezzra :: German; German Informal
+@vasiliev123 :: Polish
+@Mant1kor :: Ukrainian
+@Xiphoseer :: German; German Informal
+@maantje :: Dutch
+@cima :: Czech
+@agvol :: Russian
+@Hambern :: Swedish
+@NootoNooto :: Dutch
+@kostefun :: Russian
+@lucaguindani :: French
+@miles75 :: Hungarian
+@danielroehrig-mm :: German
+@oykenfurkan :: Turkish
+@qligier :: French
+@johnroyer :: Traditional Chinese
+@artskoczylas :: Polish
+@dellamina :: Italian
+@jzoy :: Simplified Chinese
+@ististudio :: Korean
+@leomartinez :: Spanish Argentina
+@geins :: German
+@Ereza :: Catalan
+@benediktvolke :: German
+@Baptistou :: French
+@arcoai :: Spanish
+@Jokuna :: Korean
+@smartshogu :: German; German Informal
+@samadha56 :: Persian
+@mrmuminov :: Uzbek
+cipi1965 :: Italian
+Mykola Ronik (Mantikor) :: Ukrainian
+furkanoyk :: Turkish
+m0uch0 :: Spanish
+Maxim Zalata (zlatin) :: Russian; Ukrainian
+nutsflag :: French
+Leonardo Mario Martinez (leonardo.m.martinez) :: Spanish, Argentina
+Rodrigo Saczuk Niz (rodrigoniz) :: Portuguese, Brazilian
+叫钦叔就好 (254351722) :: Chinese Traditional; Chinese Simplified
+aekramer :: Dutch
+JachuPL :: Polish
+milesteg :: Hungarian
+Beenbag :: German; German Informal
+Lett3rs :: Danish
+Julian (julian.henneberg) :: German; German Informal
+3GNWn :: Danish
+dbguichu :: Chinese Simplified
+Randy Kim (hyunjun) :: Korean
+Francesco M. Taurino (ftaurino) :: Italian
+DanielFrederiksen :: Danish
+Finn Wessel (19finnwessel6) :: German Informal; German
+Gustav Kånåhols (Kurbitz) :: Swedish
+Vuong Trung Hieu (fpooon) :: Vietnamese
+Emil Petersen (emoyly) :: Danish
+mrjaboozy :: Slovenian
+Statium :: Russian
+Mikkel Struntze (MStruntze) :: Danish
+kostefun :: Russian
+Tuyen.NG (tuyendev) :: Vietnamese
+Ghost_chu (dbguichu) :: Chinese Simplified
+Ziipen :: Danish
+Samuel Schwarz (Guiph7quan) :: Czech
+Aleph (toishoki) :: Turkish
+Julio Alberto García (Yllelder) :: Spanish
+Rafael (raribeir) :: Portuguese, Brazilian
+Hiroyuki Odake (dakesan) :: Japanese
+Alex Lee (qianmengnet) :: Chinese Simplified
+swinn37 :: French
+Hasan Özbey (the-turk) :: Turkish
+rcy :: Swedish
+Ali Yasir Yılmaz (ayyilmaz) :: Turkish
+scureza :: Italian
+Biepa :: German Informal; German
+syecu :: Chinese Simplified
+Lap1t0r :: French
+Thinkverse (thinkverse) :: Swedish
+alef (toishoki) :: Turkish
+Robbert Feunekes (Muukuro) :: Dutch
+seohyeon.joo :: Korean
+Orenda (OREDNA) :: Bulgarian
+Marek Pavelka (marapavelka) :: Czech
+Venkinovec :: Czech
+Tommy Ku (tommyku) :: Chinese Traditional; Japanese
+Michał Bielejewski  (bielej) :: Polish
+jozefrebjak :: Slovak
+Ikhwan Koo (Ikhwan.Koo) :: Korean
+Whay (remkovdhoef) :: Dutch
+jc7115 :: Chinese Traditional
+주서현 (seohyeon.joo) :: Korean
+ReadySystems :: Arabic
+HFinch :: German; German Informal
+brechtgijsens :: Dutch
+Lowkey (v587ygq) :: Chinese Simplified
+sdl-blue :: German Informal
+sqlik :: Polish
+Roy van Schaijk (royvanschaijk) :: Dutch
+Simsimpicpic :: French
+Zenahr Barzani (Zenahr) :: German; Japanese; Dutch; German Informal
+tatsuya.info :: Japanese
+fadiapp :: Arabic
+Jakub Bouček (jakubboucek) :: Czech
+Marco (cdrfun) :: German; German Informal
+10935336 :: Chinese Simplified
+孟繁阳 (FanyangMeng) :: Chinese Simplified
+Andrej Močan (andrejm) :: Slovenian
+gilane9_ :: Arabic
+Raed alnahdi (raednahdi) :: Arabic
+Xiphoseer :: German
+MerlinSVK (merlinsvk) :: Slovak
+Kauê Sena (kaue.sena.ks) :: Portuguese, Brazilian
+MatthieuParis :: French
+Douradinho :: Portuguese, Brazilian; Portuguese
+Gaku Yaguchi (tama11) :: Japanese
+johnroyer :: Chinese Traditional
+jackaaa :: Chinese Traditional
+Irfan Hukama Arsyad (IrfanArsyad) :: Indonesian
+Jeff Huang (s8321414) :: Chinese Traditional
+Luís Tiago Favas (starkyller) :: Portuguese
+semirte :: Bosnian
+aarchijs :: Latvian
+Martins Pilsetnieks (pilsetnieks) :: Latvian
+Yonatan Magier (yonatanmgr) :: Hebrew
+FastHogi :: German Informal; German
+Ole Anders (Swoy) :: Norwegian Bokmal
+Atlochowski (atlochowski) :: Polish
+Simon (DefaultSimon) :: Slovenian
+Reinis Mednis (Mednis) :: Latvian
+toisho (toishoki) :: Turkish
+nikservik :: Ukrainian; Russian; Polish
+HenrijsS :: Latvian
+Pascal R-B (pborgner) :: German
+Boris (Ginfred) :: Russian
+Jonas Anker Rasmussen (jonasanker) :: Danish
+Gerwin de Keijzer (gdekeijzer) :: Dutch; German Informal; German
+kometchtech :: Japanese
+Auri (Atalonica) :: Catalan
+Francesco Franchina (ffranchina) :: Italian
+Aimrane Kds (aimrane.kds) :: Arabic
+whenwesober :: Indonesian
+Rem (remkovdhoef) :: Dutch
+syn7ax69 :: Bulgarian; Turkish; German
+Blaade :: French
+Behzad HosseinPoor (behzad.hp) :: Persian
+Ole Aldric (Swoy) :: Norwegian Bokmal
+fharis arabia (raednahdi) :: Arabic
+Alexander Predl (Harveyhase68) :: German
+Rem (Rem9000) :: Dutch
+Michał Stelmach (stelmach-web) :: Polish
+arniom :: French
+REMOVED_USER :: French; Dutch; Portuguese, Brazilian; Portuguese; Turkish; 
+林祖年 (contagion) :: Chinese Traditional
+Siamak Guodarzi (siamakgoudarzi88) :: Persian
+Lis Maestrelo (lismtrl) :: Portuguese, Brazilian
+Nathanaël (nathanaelhoun) :: French
+A Ibnu Hibban (abd.ibnuhibban) :: Indonesian
+Frost-ZX :: Chinese Simplified
+Kuzma Simonov (ovmach) :: Russian
+Vojtěch Krystek (acantophis) :: Czech
+Michał Lipok (mLipok) :: Polish
+Nicolas Pawlak (Mikolajek) :: French; Polish; German
+Thomas Hansen (thomasdk81) :: Danish
+Hl2run :: Slovak
+Ngo Tri Hoai (trihoai) :: Vietnamese
+Atalonica :: Catalan
+慕容潭谈 (591442386) :: Chinese Simplified
+Radim Pesek (ramess18) :: Czech
+anastasiia.motylko :: Ukrainian
+Indrek Haav (IndrekHaav) :: Estonian
+na3shkw :: Japanese
+Giancarlo Di Massa (digitall-it) :: Italian
+M Nafis Al Mukhdi (mnafisalmukhdi1) :: Indonesian
+sulfo :: Danish
+Raukze :: German
+zygimantus :: Lithuanian
+marinkaberg :: Russian
+Vitaliy (gviabcua) :: Ukrainian
+mannycarreiro :: Portuguese
+Thiago Rafael Pereira de Carvalho (thiago.rafael) :: Portuguese, Brazilian
+Ken Roger Bolgnes (kenbo124) :: Norwegian Bokmal
+Nguyen Hung Phuong (hnwolf) :: Vietnamese
+Umut ERGENE (umutergene67) :: Turkish
+Tomáš Batelka (Vofy) :: Czech
+Mundo Racional (ismael.mesquita) :: Portuguese, Brazilian
+Zarik (3apuk) :: Russian
+Ali Shaatani (a.shaatani) :: Arabic
+ChacMaster :: Portuguese, Brazilian
+Saeed (saeed205) :: Persian
+Julesdevops :: French
+peter cerny (posli.to.semka) :: Slovak
+Pavel Karlin (pavelkarlin) :: Russian
+SmokingCrop :: Dutch
+Maciej Lebiest (Szwendacz) :: Polish
+DiscordDigital :: German; German Informal
+Gábor Marton (dodver) :: Hungarian
+Jasell :: Swedish
+Ghost_chu (ghostchu) :: Chinese Simplified
+Ravid Shachar (ravidshachar) :: Hebrew
+Helga Guchshenskaya (guchshenskaya) :: Russian
+daniel chou (chou0214) :: Chinese Traditional
+Manolis PATRIARCHE (m.patriarche) :: French
+Mohammed Haboubi (haboubi92) :: Arabic
+roncallyt :: Portuguese, Brazilian
+goegol :: Dutch
+msevgen :: Turkish
+Khroners :: French
+MASOUD HOSSEINY (masoudme) :: Persian
+Thomerson Roncally (roncallyt) :: Portuguese, Brazilian
+metaarch :: Bulgarian
+Xabi (xabikip) :: Basque
+pedromcsousa :: Portuguese
+Nir Louk (looknear) :: Hebrew
+Alex (qianmengnet) :: Chinese Simplified
+stothew :: German
+sgenc :: Turkish
+Shukrullo (vodiylik) :: Uzbek
+William W. (Nevnt) :: Chinese Traditional
+eamaro :: Portuguese
+Ypsilon-dev :: Arabic
+Hieu Vuong Trung (vuongtrunghieu) :: Vietnamese
+David Clubb (davidoclubb) :: Welsh
+welles freire (wellesximenes) :: Portuguese, Brazilian
+Magnus Jensen (MagnusHJensen) :: Danish
+Hesley Magno (hesleymagno) :: Portuguese, Brazilian
+Éric Gaspar (erga) :: French
+Fr3shlama :: German
+DSR :: Spanish, Argentina
+Andrii Bodnar (andrii-bodnar) :: Ukrainian
+Younes el Anjri (younesea28) :: Dutch
+Guclu Ozturk (gucluoz) :: Turkish
+Atmis :: French
+redjack666 :: Chinese Traditional
+Ashita007 :: Russian
+lihaorr :: Chinese Simplified
+Marcus Silber (marcus.silber82) :: German
+PellNet :: Croatian
+Winetradr :: German
+Sebastian Klaus (sebklaus) :: German
+Filip Antala (AntalaFilip) :: Slovak
+mcgong (GongMingCai) :: Chinese Simplified; Chinese Traditional
+Nanang Setia Budi (sefidananang) :: Indonesian
+Андрей Павлов (andrei.pavlov) :: Russian
+Alex Navarro (alex.n.navarro) :: Portuguese, Brazilian
+Jihyeon Gim (PotatoGim) :: Korean
+Mihai Ochian (soulstorm19) :: Romanian
+HeartCore :: German Informal; German
+simon.pct :: French
+okaeiz :: Persian
+Naoto Ishikawa (na3shkw) :: Japanese
+sdhadi :: Persian
+DerLinkman (derlinkman) :: German; German Informal
+TurnArabic :: Arabic
+Martin Sebek (sebekmartin) :: Czech
+Kuchinashi Hoshikawa (kuchinashi) :: Chinese Simplified
+digilady :: Greek
+Linus (LinusOP) :: Swedish
+Felipe Cardoso (felipecardosoruff) :: Portuguese, Brazilian
+RandomUser0815 :: German Informal; German
+Ismael Mesquita (mesquitoliveira) :: Portuguese, Brazilian
+구인회 (laskdjlaskdj12) :: Korean
+LiZerui (CNLiZerui) :: Chinese Traditional
+Fabrice Boyer (FabriceBoyer) :: French
+mikael (bitcanon) :: Swedish
+Matthias Mai (schnapsidee) :: German Informal; German
+Ufuk Ayyıldız (ufukayyildiz) :: Turkish
+Jan Mitrof (jan.kachlik) :: Czech
+edwardsmirnov :: Russian
+Mr_OSS117 :: French
+shotu :: French
+Cesar_Lopez_Aguillon :: Spanish
+bdewoop :: German
+dina davoudi (dina.davoudi) :: Persian
+Angelos Chouvardas (achouvardas) :: Greek
+rndrss :: Portuguese, Brazilian
+rirac294 :: Russian
+David Furman (thefourCraft) :: Hebrew
+Pafzedog :: French
+Yllelder :: Spanish
+Adrian Ocneanu (aocneanu) :: Romanian
+Eduardo Castanho (EduardoCastanho) :: Portuguese
+VIET NAM VPS (vietnamvps) :: Vietnamese
+m4tthi4s :: French
+toras9000 :: Japanese
+pathab :: German
+MichelSchoon85 :: Dutch
+Jøran Haugli (haugli92) :: Norwegian Bokmal
+Vasileios Kouvelis (VasilisKouvelis) :: Greek
+Dremski :: Bulgarian
+Frédéric SENE (nothingfr) :: French
+bendem :: French
+kostasdizas :: Greek
+Ricardo Schroeder (brownstone666) :: Portuguese, Brazilian
+Eitan MG (EitanMG) :: Hebrew
+Robin Flikkema (RobinFlikkema) :: Dutch
+Michal Gurcik (mgurcik) :: Slovak
+Pooyan Arab (pooyanarab) :: Persian
+Ochi Darma Putra (troke12) :: Indonesian
+Hsin-Hsiang Peng (Hsins) :: Chinese Traditional
+Mosi  Wang (mosiwang) :: Chinese Traditional
+骆言 (LawssssCat) :: Chinese Simplified
+Stickers Gaming Shøw (StickerSGSHOW) :: French
+Le Van Chinh (Chino) (lvanchinh86) :: Vietnamese
+Rubens nagios (rubenix) :: Catalan
+Patrick Dantas (pa-tiq) :: Portuguese, Brazilian
+Michal (michalgurcik) :: Slovak
+Nepomacs :: German
+Rubens (rubenix) :: Catalan
+m4z :: German; German Informal
+TheRazvy :: Romanian
+Yossi Zilber (lortens) :: Hebrew; Uzbek
+desdinova :: French
+Ingus Rūķis (ingus.rukis) :: Latvian
+Eugene Pershin (SilentEugene) :: Russian
+周盛道 (zhoushengdao) :: Chinese Simplified
+hamidreza amini (hamidrezaamini2022) :: Persian
+Tomislav Kraljević (tomislav.kraljevic) :: Croatian
+Taygun Yıldırım (yildirimtaygun) :: Turkish
+robing29 :: German
+Bruno Eduardo de Jesus Barroso (brunoejb) :: Portuguese, Brazilian
+Igor V Belousov (biv) :: Russian
+David Bauer (davbauer) :: German
+Guttorm Hveem (guttormhveem) :: Norwegian Nynorsk; Norwegian Bokmal
+Minh Giang Truong (minhgiang1204) :: Vietnamese
+Ioannis Ioannides (i.ioannides) :: Greek
+Vadim (vadrozh) :: Russian
+Flip333 :: German Informal; German
+Paulo Henrique (paulohsantos114) :: Portuguese, Brazilian
+Dženan (Dzenan) :: Swedish
+Péter Péli (peter.peli) :: Hungarian
+TWME :: Chinese Traditional
+Sascha (Man-in-Black) :: German; German Informal
+Mohammadreza Madadi (madadi.efl) :: Persian
+Konstantin (kkovacheli) :: Ukrainian; Russian
+link1183 :: French
+Renan (rfpe) :: Portuguese, Brazilian
+Lowkey (bbsweb) :: Chinese Simplified
+ZZnOB (zznobzz) :: Russian
+rupus :: Swedish
+developernecsys :: Norwegian Nynorsk
+xuan LI (xuanli233) :: Chinese Simplified
+LameeQS :: Latvian
+Sorin T. (trimbitassorin) :: Romanian
+poesty :: Chinese Simplified
+balmag :: Hungarian
+Antti-Jussi Nygård (ajnyga) :: Finnish
+Eduard Ereza Martínez (Ereza) :: Catalan
+Jabir Lang (amar.almrad) :: Arabic
+Jaroslav Kobližek (foretix) :: Czech; French
+Wiktor Adamczyk (adamczyk.wiktor) :: Polish
+Abdulmajeed Alshuaibi (4Majeed) :: Arabic
+NotSmartZakk :: Czech
+HyoungMin Lee (ddokkaebi) :: Korean
+Dasferco :: Chinese Simplified
+Marcus Teräs (mteras) :: Finnish
+Serkan Yardim (serkanzz) :: Turkish
+Y (cnsr) :: Ukrainian
+ZY ZV (vy0b0x) :: Chinese Simplified
+diegobenitez :: Spanish
+Marc Hagen (MarcHagen) :: Dutch
+Kasper Alsøe (zeonos) :: Danish
+sultani :: Persian
+renge :: Korean
+TheGatesDev (thegatesdev) :: Dutch
+Irdi (irdiOL) :: Albanian
+KateBarber :: Welsh
+Twister (theuncles75) :: Hebrew
+algernon19 :: Hungarian
+Ivan Krstic (ikrstic) :: Serbian (Cyrillic)
+Show :: Russian
+xBahamut :: Portuguese, Brazilian
+Pavle Knežević (pavleknezzevic) :: Serbian (Cyrillic)
+Vanja Cvelbar (b100w11) :: Slovenian
+simonpct :: French
+Honza Nagy (honza.nagy) :: Czech
+asd20752 :: Norwegian Bokmal
+Jan Picka (polipones) :: Czech
+diogoalex991 :: Portuguese
+Ehsan Sadeghi (ehsansadeghi) :: Persian
+ka_picit :: Danish
+cracrayol :: French
+CapuaSC :: Dutch
+Guardian75 :: German Informal
+mr-kanister :: German

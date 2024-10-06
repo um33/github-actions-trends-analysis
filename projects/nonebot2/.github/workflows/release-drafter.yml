@@ -1,0 +1,133 @@
+name: Release Drafter
+
+on:
+  push:
+    tags:
+      - v*
+  pull_request_target:
+    branches:
+      - master
+    types:
+      - closed
+
+jobs:
+  update-release-draft:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pull-request-changelog
+      cancel-in-progress: true
+    steps:
+      - name: Generate token
+        id: generate-token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Setup Node Environment
+        uses: ./.github/actions/setup-node
+
+      - uses: release-drafter/release-drafter@v6
+        id: release-drafter
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Update Changelog
+        uses: docker://ghcr.io/nonebot/auto-changelog:master
+        with:
+          changelog_file: website/src/pages/changelog.md
+          latest_changes_position: '# 更新日志\n\n'
+          latest_changes_title: "## 最近更新"
+          replace_regex: '(?<=## 最近更新\n)[\s\S]*?(?=\n## )'
+          changelog_body: ${{ steps.release-drafter.outputs.body }}
+          commit_and_push: false
+
+      - name: Commit and Push
+        run: |
+          yarn prettier
+          git config user.name noneflow[bot]
+          git config user.email 129742071+noneflow[bot]@users.noreply.github.com
+          git add .
+          git diff-index --quiet HEAD || git commit -m ":memo: Update changelog"
+          git push
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Generate token
+        id: generate-token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_KEY }}
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        uses: ./.github/actions/setup-python
+
+      - name: Setup Node Environment
+        uses: ./.github/actions/setup-node
+
+      - name: Build API Doc
+        uses: ./.github/actions/build-api-doc
+
+      - name: Get Version
+        id: version
+        run: |
+          echo "VERSION=$(poetry version -s)" >> $GITHUB_OUTPUT
+          echo "TAG_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Check Version
+        if: steps.version.outputs.VERSION != steps.version.outputs.TAG_VERSION
+        run: exit 1
+
+      - uses: release-drafter/release-drafter@v6
+        with:
+          name: Release ${{ steps.version.outputs.TAG_NAME }} 🌈
+          tag: ${{ steps.version.outputs.TAG_NAME }}
+          publish: true
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Build Package
+        run: |
+          poetry build
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish package to GitHub
+        run: |
+          gh release upload --clobber ${{ steps.version.outputs.TAG_NAME }} dist/*.tar.gz dist/*.whl
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Build and Publish Doc Package
+        run: |
+          yarn build:plugin --out-dir ../packages/nonebot-plugin-docs/nonebot_plugin_docs/dist
+          cd packages/nonebot-plugin-docs/
+          poetry version ${{ steps.version.outputs.VERSION }}
+          poetry build
+
+      - name: Publish Doc Package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/nonebot-plugin-docs/dist/
+
+      - name: Publish Doc Package to GitHub
+        run: |
+          cd packages/nonebot-plugin-docs/
+          gh release upload --clobber ${{ steps.version.outputs.TAG_NAME }} dist/*.tar.gz dist/*.whl
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}

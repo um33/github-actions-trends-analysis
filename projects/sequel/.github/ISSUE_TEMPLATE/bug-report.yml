@@ -1,0 +1,48 @@
+name: Submit a Bug Report
+description: Use this only if you are sure what you are reporting is a bug in Sequel.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## This is a Bug Report Form
+        If you:
+          - have a question
+          - need help
+          - want to request a feature
+          - want do anything else other than submit a bug report
+        then please use [GitHub Discussions](https://github.com/jeremyevans/sequel/discussions)
+
+        ## Check Before Submission
+        Before you submit a bug report, please check our existing resources to see if it has already been discussed/reported:
+        - [Reported bugs](https://github.com/jeremyevans/sequel/issues?q=is%3Aissue+is%3Aclosed)
+        - [GitHub Discussions](https://github.com/jeremyevans/sequel/discussions/)
+        - [Archived sequel-talk](https://www.mail-archive.com/sequel-talk@googlegroups.com/)
+           
+  - type: textarea
+    attributes:
+      label: Complete Description of Issue
+  - type: textarea
+    attributes:
+      label: Simplest Possible Self-Contained Example Showing the Bug
+      description: Preferably, this should be a ruby file you can run with `bin/sequel $database_connection_string $filename` to reproduce this bug.
+  - type: textarea
+    attributes:
+      label: Full Backtrace of Exception (if any)
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: SQL Log (if any)
+    validations:
+      required: false
+  - type: input
+    attributes:
+      label: Ruby Version
+    validations:
+      required: false
+  - type: input
+    attributes:
+      label: Sequel Version
+      description: If not the latest release, confirm this is still a bug in the latest release or the master branch before submitting the bug report.
+    validations:
+      required: false

@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    name: Build
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        id: go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ^1.22
+
+      - name: Build
+        run: make build
+      - name: Install dependency
+        run: if [ $(uname) == "Darwin" ]; then brew install gnu-sed ;fi
+      - name: Run unit tests
+        run: go install github.com/go-delve/delve/cmd/dlv@latest && go test ./... -v -covermode=count -coverprofile=coverage.txt
+      - name: Upload Coverage report to CodeCov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.txt
+          verbose: true
+
+  push_to_docker_latest:
+    name: Push master code to docker latest image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: cosmtrek/air:latest
+      - name: Show image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}

@@ -1,0 +1,333 @@
+on: [push, pull_request]
+
+jobs:
+  configured-deps:
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: true
+      matrix:
+        php: ['8.3']
+    steps:
+      - name: Checkout PhpRedis
+        uses: actions/checkout@v4
+
+      - name: Install liblzf
+        run: |
+          git clone --depth=1 https://github.com/nemequ/liblzf.git
+          cd liblzf
+          autoreconf -vi
+          CFLAGS=-fPIC ./configure --prefix="$GITHUB_WORKSPACE/liblzf"
+          make install
+
+      - name: Install liblz4
+        run: |
+          git clone -b v1.9.4 --depth=1 https://github.com/lz4/lz4
+          cd lz4/lib
+          PREFIX="$GITHUB_WORKSPACE/liblz4" make install
+
+      - name: Install libzstd
+        run: |
+          git clone -b v1.5.5 --depth=1 https://github.com/facebook/zstd
+          cd zstd
+          PREFIX="$GITHUB_WORKSPACE/libzstd" make install
+
+      - name: Install PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json, igbinary, msgpack, :redis
+          coverage: none
+          tools: none
+
+      - name: Configure and build PhpRedis with distinct dep paths
+        run: |
+          phpize
+          ./configure \
+            --enable-redis-lz4 \
+            --with-liblz4="$GITHUB_WORKSPACE/liblz4" \
+            --enable-redis-lzf \
+            --with-liblzf="$GITHUB_WORKSPACE/liblzf" \
+            --enable-redis-zstd \
+            --with-libzstd="$GITHUB_WORKSPACE/libzstd"
+          sudo make -j"$(nproc)"
+
+      - name: Make sure we're linking against specific liblz4
+        run: |
+          grep "INCLUDES.*$GITHUB_WORKSPACE/liblz4" Makefile
+          grep "REDIS_SHARED_LIBADD.*-L$GITHUB_WORKSPACE/liblz4" Makefile
+
+      - name: Make sure we're linking against specific liblzf
+        run: |
+          grep "INCLUDES.*$GITHUB_WORKSPACE/liblzf" Makefile
+          grep "REDIS_SHARED_LIBADD.*-L$GITHUB_WORKSPACE/liblzf" Makefile
+
+      - name: Make sure we're linking against specific libzstd
+        run: |
+          grep "INCLUDES.*$GITHUB_WORKSPACE/libzstd" Makefile
+          grep "REDIS_SHARED_LIBADD.*-L$GITHUB_WORKSPACE/libzstd" Makefile
+
+  ubuntu:
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+        server: ['redis', 'keydb', 'valkey']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json, igbinary, msgpack, :redis
+          coverage: none
+          tools: none
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install valgrind libzstd-dev liblz4-dev libssl-dev
+
+      - name: Install Redis
+        if: matrix.server == 'redis'
+        env:
+          REDIS_PPA_URI: "packages.redis.io/deb"
+          REDIS_PPA_KEY: "packages.redis.io/gpg"
+        run: |
+          echo "deb https://$REDIS_PPA_URI $(lsb_release -cs) main" | \
+               sudo tee /etc/apt/sources.list.d/redis.list
+          curl -fsSL "https://$REDIS_PPA_KEY" | \
+               sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/redis.gpg
+          sudo apt-get update
+          sudo apt-get install redis
+
+      - name: Install KeyDB
+        if: matrix.server == 'keydb'
+        env:
+          KEYDB_PPA_URI: "download.keydb.dev/open-source-dist"
+          KEYDB_PPA_KEY: "download.keydb.dev/open-source-dist/keyring.gpg"
+        run: |
+          echo "deb https://$KEYDB_PPA_URI $(lsb_release -sc) main" | \
+               sudo tee /etc/apt/sources.list.d/keydb.list
+          sudo wget -O /etc/apt/trusted.gpg.d/keydb.gpg "https://$KEYDB_PPA_KEY"
+          sudo apt-get update
+          sudo apt-get install keydb
+
+      - name: Install ValKey
+        if: matrix.server == 'valkey'
+        run: |
+          git clone https://github.com/valkey-io/valkey.git
+          cd valkey && BUILD_TLS=yes sudo make install
+
+      - name: Build phpredis
+        run: |
+          phpize
+          ./configure \
+            --enable-redis-lzf \
+            --enable-redis-zstd \
+            --enable-redis-igbinary \
+            --enable-redis-msgpack \
+            --enable-redis-lz4 \
+            --with-liblz4
+          sudo make -j"$(nproc)" install
+
+          echo 'extension = redis.so' | sudo tee -a "$(php --ini | grep 'Scan for additional .ini files' | awk '{print $7}')"/90-redis.ini
+
+      - name: Attempt to shutdown default server
+        run: ${{ matrix.server }}-cli SHUTDOWN NOSAVE || true
+
+      - name: Start ${{ matrix.server }}-server
+        run: |
+          for PORT in {6379..6382} {32767..32769}; do
+            ${{ matrix.server }}-server \
+              --port "$PORT" \
+              --daemonize yes \
+              --aclfile tests/users.acl \
+              --acl-pubsub-default allchannels
+          done
+          ${{ matrix.server }}-server \
+            --port 0 \
+            --unixsocket /tmp/redis.sock \
+            --daemonize yes \
+            --aclfile tests/users.acl \
+            --acl-pubsub-default allchannels
+
+      - name: Start ${{ matrix.server }} cluster
+        run: |
+          mkdir -p tests/nodes
+          echo -n > tests/nodes/nodemap
+          for PORT in {7000..7005}; do
+            ${{ matrix.server }}-server \
+              --port "$PORT" \
+              --cluster-enabled yes \
+              --cluster-config-file "$PORT".conf \
+              --daemonize yes \
+              --aclfile tests/users.acl \
+              --acl-pubsub-default allchannels
+            echo 127.0.0.1:"$PORT" >> tests/nodes/nodemap
+          done
+
+      - name: Start ${{ matrix.server }} sentinel
+        continue-on-error: ${{ matrix.server == 'valkey' }}
+        run: |
+          wget raw.githubusercontent.com/redis/redis/7.0/sentinel.conf
+          for PORT in {26379..26380}; do
+            cp sentinel.conf "$PORT.conf"
+            sed -i '/^sentinel/Id' "$PORT.conf"
+            ${{ matrix.server }}-server "$PORT.conf" \
+              --port "$PORT" \
+              --daemonize yes \
+              --sentinel monitor mymaster 127.0.0.1 6379 1 \
+              --sentinel auth-pass mymaster phpredis
+          done
+
+      - name: Wait for ${{ matrix.server }} instances
+        run: |
+          for PORT in {6379..6382} {7000..7005} {32767..32768} {26379..26380}; do
+            until echo PING | ${{ matrix.server }}-cli -p "$PORT" 2>&1 | grep -qE 'PONG|NOAUTH'; do
+              echo "Still waiting for ${{ matrix.server }} on port $PORT"
+              sleep .05
+            done
+          done
+          until echo PING | ${{ matrix.server }}-cli -s /tmp/redis.sock 2>&1 | grep -qE 'PONG|NOAUTH'; do
+            echo "Still waiting for ${{ matrix.server }} at /tmp/redis.sock"
+            sleep .05
+          done
+
+      - name: Initialize ${{ matrix.server }} cluster
+        run: |
+          echo yes | ${{ matrix.server }}-cli --cluster create 127.0.0.1:{7000..7005} \
+                                              --cluster-replicas 1 --user phpredis -a phpredis
+
+      - name: Run tests
+        continue-on-error: ${{ matrix.server == 'valkey' }}
+        run: |
+          php tests/TestRedis.php --class Redis --user phpredis --auth phpredis
+          php tests/TestRedis.php --class RedisArray --user phpredis --auth phpredis
+          php tests/TestRedis.php --class RedisCluster --user phpredis --auth phpredis
+          php tests/TestRedis.php --class RedisSentinel --auth phpredis
+        env:
+          TEST_PHP_ARGS: -e
+      - name: Run tests using valgrind
+        continue-on-error: true
+        run: |
+          valgrind --suppressions=tests/vg.supp --error-exitcode=1 \
+              php tests/TestRedis.php --class Redis --user phpredis --auth phpredis
+          valgrind --suppressions=tests/vg.supp --error-exitcode=1 \
+              php tests/TestRedis.php --class RedisArray --user phpredis --auth phpredis
+          valgrind --suppressions=tests/vg.supp --error-exitcode=1 \
+              php tests/TestRedis.php --class RedisCluster --user phpredis --auth phpredis
+          valgrind --suppressions=tests/vg.supp --error-exitcode=1 \
+              php tests/TestRedis.php --class RedisSentinel --auth phpredis
+        env:
+          TEST_PHP_ARGS: -e
+          USE_ZEND_ALLOC: 0
+
+  macos:
+    runs-on: macos-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json, :redis
+          coverage: none
+          tools: none
+      - name: Install dependencies
+        run: |
+          pecl install igbinary
+          pecl install msgpack
+      - name: Build phpredis
+        run: |
+          phpize
+          ./configure --enable-redis-lzf --enable-redis-zstd --enable-redis-igbinary --enable-redis-msgpack --enable-redis-lz4 --with-liblz4
+          sudo make install
+          echo 'extension = redis.so' | sudo tee -a "$(php --ini | grep 'Scan for additional .ini files' | awk '{print $7}')/90-redis.ini"
+
+  windows:
+    runs-on: windows-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.3', '7.4', '8.0', '8.1', '8.2', '8.3']
+        ts: [nts, ts]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install PHP ${{ matrix.php }}
+        uses: php/setup-php-sdk@v0.8
+        id: setup-php-sdk
+        with:
+          version: ${{ matrix.php }}
+          arch: x64
+          ts: ${{matrix.ts}}
+      - name: Install dependencies
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          toolset: ${{steps.setup-php-sdk.outputs.toolset}}
+      - name: Build phpredis
+        run: |
+          phpize
+          ./configure --enable-redis --with-prefix=${{steps.setup-php-sdk.outputs.prefix}}
+          nmake
+      - name: package
+        run: |
+          md binaries
+          copy LICENSE binaries
+          Get-ChildItem -Recurse -Filter "php_redis.dll" | ForEach-Object {Copy-Item -Path $_.FullName -Destination "binaries"}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: redis-${{matrix.php}}-x64-${{matrix.ts}}
+          path: binaries
+
+  pecl:
+    runs-on: ubuntu-latest
+    container: php:8.3-cli-alpine
+    steps:
+      - name: Install required system packages
+        run: apk add --update $PHPIZE_DEPS zstd-libs zstd-dev git
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Create temporary directory
+        id: temp-dir
+        run: printf "path=%s\n" "$(mktemp -d)" >>"$GITHUB_OUTPUT"
+      - name: Create package
+        run: |
+          cd "${{ steps.temp-dir.outputs.path }}"
+          pecl package "$GITHUB_WORKSPACE/package.xml"
+      - name: Compile package
+        run: printf '' | pecl install ${{ steps.temp-dir.outputs.path }}/redis-*.tgz
+      - name: Enable extension
+        run: docker-php-ext-enable redis
+      - name: Check for PHP startup warnings
+        run: |
+          php -d display_errors=stderr -d display_startup_errors=1 -d error_reporting=-1 -r ';' 2>/tmp/php-startup-warnings
+          if [ -s /tmp/php-startup-warnings ]; then
+            echo 'The PHP extension was successfully installed, but PHP raised these warnings:' >&2
+            cat /tmp/php-startup-warnings >&2
+            exit 1
+          fi
+          echo "PHP didn't raise any warnings at startup."
+      - name: Inspect extension
+        run: php --ri redis

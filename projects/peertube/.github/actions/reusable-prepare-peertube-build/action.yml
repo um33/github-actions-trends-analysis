@@ -1,0 +1,43 @@
+name: "Reusable prepare PeerTube build"
+
+description: "Reusable prepare PeerTube build"
+
+inputs:
+  node-version:
+    required: true
+    description: 'NodeJS version'
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Cache Node.js modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          **/node_modules
+        key: ${{ runner.OS }}-node-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.OS }}-node-
+          ${{ runner.OS }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: yarn install --frozen-lockfile
+
+    - name: Install peertube runner dependencies
+      shell: bash
+      run: cd apps/peertube-runner && yarn install --frozen-lockfile
+
+    - name: Install peertube CLI dependencies
+      shell: bash
+      run: cd apps/peertube-cli && yarn install --frozen-lockfile
+
+    - name: Display PeerTube dependencies
+      shell: bash
+      run: ls -l node_modules/@peertube

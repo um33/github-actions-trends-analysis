@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+jobs:
+  test:
+    name: 'Tests on ${{matrix.platform}}'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{matrix.platform}}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: Run Tests
+        run: yarn test:ci --color
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        if: ${{ matrix.platform == 'ubuntu-latest' && always() }}
+
+  flow:
+    name: Flow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: Check Types
+        run: yarn flow:check
+
+  test_react18:
+    name: Test React 18
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: Run Tests with React 18
+        run: yarn test:react18:ci
+
+  test_dist:
+    name: Test Dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: Dist Tests
+        run: yarn test:prod
+
+  linting:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: ESLint
+        run: yarn lint:check
+
+  typescript:
+    name: dtslint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/ci-setup
+
+      - name: dtslint
+        run: yarn test:typescript

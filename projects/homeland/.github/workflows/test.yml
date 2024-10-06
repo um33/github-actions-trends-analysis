@@ -1,0 +1,68 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+jobs:
+  lint:
+    name: AutoCorrect Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: huacnlee.autocorrect
+        uses: huacnlee/autocorrect-action@main
+  assets_compile:
+    name: Assets Compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2.0
+          bundler-cache: true
+      - name: Install dependencies
+        run: |
+          yarn
+      - name: Assets Precompile
+        run: bundle exec rails assets:precompile RAILS_PRECOMPILE=1 RAILS_ENV=production SECRET_KEY_BASE=fake_secure_for_compile
+
+  test:
+    name: CI Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: homeland-test
+          POSTGRES_USER: "admin"
+          POSTGRES_PASSWORD: "123456"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RAILS_ENV: test
+      REDIS_URL: redis://localhost:6379/1
+      DATABASE_URL: postgres://admin:123456@localhost:5432/homeland-test
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2.0
+          bundler-cache: true
+      - name: Before tests
+        run: bundle exec rails db:migrate
+      - name: Run tests
+        run: bundle exec rails test

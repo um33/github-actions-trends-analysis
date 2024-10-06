@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_OPTIONS: --max_old_space_size=6144
+
+# Set default workflow permissions
+# All scopes not mentioned here are set to no access
+# https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token
+permissions:
+  actions: none
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to upload release assets
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4.1.2
+
+      - name: Verify version
+        uses: home-assistant/actions/helpers/verify-version@master
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4.0.2
+        with:
+          node-version-file: ".nvmrc"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Download Translations
+        run: ./script/translations_download
+        env:
+          LOKALISE_TOKEN: ${{ secrets.LOKALISE_TOKEN }}
+      - name: Build and release package
+        run: |
+          python3 -m pip install twine build
+          export TWINE_USERNAME="__token__"
+          export TWINE_PASSWORD="${{ secrets.TWINE_TOKEN }}"
+          export SKIP_FETCH_NIGHTLY_TRANSLATIONS=1
+          script/release
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2.0.4
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+
+  wheels-init:
+    name: Init wheels build
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate requirements.txt
+        run: |
+          # Sleep to give pypi time to populate the new version across mirrors
+          sleep 240
+          version=$(echo "${{ github.ref }}" | awk -F"/" '{print $NF}' )
+          echo "home-assistant-frontend==$version" > ./requirements.txt
+
+      - name: Build wheels
+        uses: home-assistant/wheels@2024.01.0
+        with:
+          abi: cp311
+          tag: musllinux_1_2
+          arch: amd64
+          wheels-key: ${{ secrets.WHEELS_KEY }}
+          requirements: "requirements.txt"

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  typos-check:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions Repository
+        uses: actions/checkout@v3
+      - name: Check spelling with custom config file
+        uses: crate-ci/typos@v1.14.8
+        with:
+          config: ./typos.toml
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v1
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Restore Dependencies and VS Code test instance
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+            packages/foam-vscode/.vscode-test
+          key: ${{ runner.os }}-${{ hashFiles('**/yarn.lock', 'packages/foam-vscode/src/test/run-tests.ts') }}-${{ secrets.CACHE_VERSION }}
+      - name: Install Dependencies
+        run: yarn
+      - name: Check Lint Rules
+        run: yarn lint
+
+  test:
+    name: Build and Test
+    # strategy:
+    #   matrix:
+    #     os: [macos-12, ubuntu-22.04, windows-2022]
+    # runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
+    # env:
+    #   OS: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v1
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Restore Dependencies and VS Code test instance
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+            packages/foam-vscode/.vscode-test
+          key: ${{ runner.os }}-${{ hashFiles('**/yarn.lock', 'packages/foam-vscode/src/test/run-tests.ts') }}-${{ secrets.CACHE_VERSION }}
+      - name: Install Dependencies
+        run: yarn
+      - name: Build Packages
+        run: yarn build
+      - name: Run Tests
+        uses: GabrielBB/xvfb-action@v1.4
+        with:
+          run: yarn test --stream

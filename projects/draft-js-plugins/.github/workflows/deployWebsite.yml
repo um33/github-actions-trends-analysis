@@ -1,0 +1,45 @@
+name: deployWebsite
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  deployWebsite:
+    permissions:
+      contents: write # for JamesIves/github-pages-deploy-action to push changes in repo
+    name: Deploy Website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@master
+        with:
+          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
+          fetch-depth: 0
+
+      - name: Setup Node.js 16.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 16.x
+
+      - name: Install Dependencies
+        run: yarn
+
+      - name: Install Dependencies
+        run: yarn
+
+      - name: Build plugins
+        run: yarn build
+
+      - name: Tests
+        run: yarn test
+
+      - name: Build Website
+        run: ./scripts/publishGithubPages.sh
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4.5.0
+        with:
+          branch: gh-pages
+          folder: packages/docs/out

@@ -1,0 +1,44 @@
+name: win-build
+
+on: 
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-2019, windows-2022]
+        arch: [x64] #, arm64]
+
+    concurrency:
+        group: ${{ github.ref }}-${{ github.base_ref }}-${{ github.head_ref }}-Windows-${{ matrix.os }}-${{ matrix.arch }}
+        cancel-in-progress: true    
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: xmake-io/github-action-setup-xmake@v1
+      with:
+        xmake-version: branch@master
+
+    - name: configure
+      shell: cmd
+      run: |
+        xmake f -c --feedback=n -k shared -y -vD
+
+    - name: build
+      shell: cmd
+      run: |
+        xmake -b small-test
+
+    - name: test
+      shell: cmd
+      run: |
+        xmake r small-test

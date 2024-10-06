@@ -1,0 +1,94 @@
+name: "tests"
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - beta
+
+jobs:
+
+  Test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node_version: ['lts/*', '*']
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Install Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node_version }}
+          check-latest: true
+      - name: Install Dependencies
+        run: yarn
+      - name: Run Tests 👩🏽‍💻
+        run: yarn run test
+
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Install Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 'lts/*'
+          check-latest: true
+      - name: Install Dependencies
+        run: yarn
+      - name: Build 🧱
+        run: yarn run build
+
+  Lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Install Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 'lts/*'
+          check-latest: true
+      - name: Install Dependencies
+        run: yarn
+      - name: Lint ✨
+        run: yarn run lint
+
+  Release:
+    needs: [Test, Build, Lint]
+    if: |
+      (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/beta') &&
+      github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Install Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 'lts/*'
+          check-latest: true
+      - name: Install Dependencies
+        run: yarn
+      - name: Build 🗜️
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          export SEMANTIC_RELEASE_NEXT_VERSION=$(npx semantic-release --no-ci --dry-run | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
+          echo "Next Version: $SEMANTIC_RELEASE_NEXT_VERSION"
+          yarn run build
+          if ! git diff --quiet; then
+            git config --global user.email "<>"
+            git config --global user.name "GitHub Actions"
+            git commit -am "📚 docs [skip ci]"
+          else
+            echo "Nothing to commit"
+          fi
+      - name: Release 🎉
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release

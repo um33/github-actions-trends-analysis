@@ -1,0 +1,28 @@
+{
+  "extends": [
+    "config:base",
+    "schedule:weekly",
+    ":disableDependencyDashboard"
+  ],
+  "semanticCommits": false,
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "commitMessagePrefix": "chore(all): ",
+  "commitMessageAction": "update",
+  "groupName": "all",
+  "ignoreDeps": [
+    "google.golang.org/appengine"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["^github.com/google/go-github/v"],
+      "enabled": false
+    }
+  ],
+  "force": {
+    "constraints": {
+      "go": "1.19"
+    }
+  }
+}

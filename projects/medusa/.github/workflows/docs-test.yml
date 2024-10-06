@@ -1,0 +1,182 @@
+name: Documentation Tests
+on: 
+  pull_request:
+    paths:
+      - www/**
+
+jobs:
+  docs-test:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "yarn"
+
+      - name: Install dependencies
+        uses: ./.github/actions/cache-deps
+        with:
+          extension: docs
+
+      - name: Install Workspace dependencies
+        working-directory: www
+        run: yarn install
+
+      - name: Build Docusaurus website
+        working-directory: www
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+          API_URL: "https://docs.medusajs.com"
+        run: yarn build:docs
+        
+  vale-docs:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get Directories to Scan
+        working-directory: www/vale
+        run: ./get-files.sh docs content references
+        id: directories
+
+      - name: Vale Linter
+        uses: errata-ai/vale-action@reviewdog
+        with:
+          files: ${{ steps.directories.outputs.LIST }}
+          fail_on_error: true
+          vale_flags: '--minAlertLevel=error'
+          reporter: github-pr-check
+          token: ${{ github.token }}
+          filter_mode: nofilter
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        
+  vale-ui:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get Directories to Scan
+        working-directory: www/vale
+        run: ./get-files.sh ui src/content/docs
+        id: directories
+
+      - name: Vale Linter
+        uses: errata-ai/vale-action@reviewdog
+        with:
+          files: ${{ steps.directories.outputs.LIST }}
+          fail_on_error: true
+          vale_flags: '--minAlertLevel=error'
+          reporter: github-pr-check
+          token: ${{ github.token }}
+          filter_mode: nofilter
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        
+  vale-api:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get Directories to Scan
+        working-directory: www/vale
+        run: ./get-files.sh api-reference app/_mdx
+        id: directories
+
+      - name: Vale Linter
+        uses: errata-ai/vale-action@reviewdog
+        with:
+          files: ${{ steps.directories.outputs.LIST }}
+          fail_on_error: true
+          vale_flags: '--minAlertLevel=error'
+          reporter: github-pr-check
+          token: ${{ github.token }}
+          filter_mode: nofilter
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        
+  content-eslint:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        working-directory: www
+        run: yarn install
+
+      - name: Run Eslint
+        working-directory: www
+        run: yarn lint:content
+  
+  code-docs-eslint:
+    if: ${{ startsWith(github.head_ref, 'docs/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Monorepo dependencies
+        run: yarn install
+
+      - name: Install dependencies
+        working-directory: www
+        run: yarn install
+
+      - name: Run Eslint
+        working-directory: www
+        run: yarn lint

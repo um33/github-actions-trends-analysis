@@ -1,0 +1,108 @@
+#
+# Copyright (C) 2020-2024 Lin Song <linsongui@gmail.com>
+#
+# This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
+# Unported License: http://creativecommons.org/licenses/by-sa/3.0/
+#
+# Attribution required: please include my name in any derivative and let me
+# know how you have improved it!
+
+name: check_urls
+
+on: workflow_call
+
+jobs:
+  check_urls:
+    runs-on: ubuntu-20.04
+    if: github.repository_owner == 'hwdsl2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          mkdir workdir
+          cd workdir
+          set -ex
+
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get -yqq update
+          sudo apt-get -yqq install wget
+
+          wg="wget -t 3 -T 30 -nv -O"
+          sl="sleep 1"
+          gi="https://raw.githubusercontent.com/hwdsl2/setup-ipsec-vpn/master"
+          gh="https://github.com/hwdsl2/setup-ipsec-vpn/raw/master"
+
+          $wg vpnsetup.sh          "$gi/vpnsetup.sh"; $sl
+          $wg vpnsetup_centos.sh   "$gi/vpnsetup_centos.sh"; $sl
+          $wg vpnsetup_amzn.sh     "$gi/vpnsetup_amzn.sh"; $sl
+          $wg vpnsetup_ubuntu.sh   "$gi/vpnsetup_ubuntu.sh"; $sl
+          $wg vpnsetup_alpine.sh   "$gi/vpnsetup_alpine.sh"; $sl
+          $wg ikev2setup.sh        "$gi/extras/ikev2setup.sh"; $sl
+          $wg vpnupgrade.sh        "$gi/extras/vpnupgrade.sh"; $sl
+          $wg vpnupgrade_centos.sh "$gi/extras/vpnupgrade_centos.sh"; $sl
+          $wg vpnupgrade_amzn.sh   "$gi/extras/vpnupgrade_amzn.sh"; $sl
+          $wg vpnupgrade_ubuntu.sh "$gi/extras/vpnupgrade_ubuntu.sh"; $sl
+          $wg vpnupgrade_alpine.sh "$gi/extras/vpnupgrade_alpine.sh"; $sl
+          $wg vpnuninstall.sh      "$gi/extras/vpnuninstall.sh"; $sl
+          $wg add_vpn_user.sh      "$gi/extras/add_vpn_user.sh"; $sl
+          $wg del_vpn_user.sh      "$gi/extras/del_vpn_user.sh"; $sl
+          $wg update_vpn_users.sh  "$gi/extras/update_vpn_users.sh"; $sl
+          $wg ikev2changeaddr.sh   "$gi/extras/ikev2changeaddr.sh"; $sl
+          $wg ikev2onlymode.sh     "$gi/extras/ikev2onlymode.sh"; $sl
+
+          $wg vpnsetup2.sh          "$gh/vpnsetup.sh"; $sl
+          $wg vpnsetup_centos2.sh   "$gh/vpnsetup_centos.sh"; $sl
+          $wg vpnsetup_amzn2.sh     "$gh/vpnsetup_amzn.sh"; $sl
+          $wg vpnsetup_ubuntu2.sh   "$gh/vpnsetup_ubuntu.sh"; $sl
+          $wg vpnsetup_alpine2.sh   "$gh/vpnsetup_alpine.sh"; $sl
+          $wg ikev2setup2.sh        "$gh/extras/ikev2setup.sh"; $sl
+          $wg vpnupgrade2.sh        "$gh/extras/vpnupgrade.sh"; $sl
+          $wg vpnupgrade_centos2.sh "$gh/extras/vpnupgrade_centos.sh"; $sl
+          $wg vpnupgrade_amzn2.sh   "$gh/extras/vpnupgrade_amzn.sh"; $sl
+          $wg vpnupgrade_ubuntu2.sh "$gh/extras/vpnupgrade_ubuntu.sh"; $sl
+          $wg vpnupgrade_alpine2.sh "$gh/extras/vpnupgrade_alpine.sh"; $sl
+          $wg vpnuninstall2.sh      "$gh/extras/vpnuninstall.sh"; $sl
+          $wg add_vpn_user2.sh      "$gh/extras/add_vpn_user.sh"; $sl
+          $wg del_vpn_user2.sh      "$gh/extras/del_vpn_user.sh"; $sl
+          $wg update_vpn_users2.sh  "$gh/extras/update_vpn_users.sh"; $sl
+          $wg ikev2changeaddr2.sh   "$gh/extras/ikev2changeaddr.sh"; $sl
+          $wg ikev2onlymode2.sh     "$gh/extras/ikev2onlymode.sh"
+
+          diff vpnsetup.sh          ../vpnsetup.sh
+          diff vpnsetup_centos.sh   ../vpnsetup_centos.sh
+          diff vpnsetup_amzn.sh     ../vpnsetup_amzn.sh
+          diff vpnsetup_ubuntu.sh   ../vpnsetup_ubuntu.sh
+          diff vpnsetup_alpine.sh   ../vpnsetup_alpine.sh
+          diff ikev2setup.sh        ../extras/ikev2setup.sh
+          diff vpnupgrade.sh        ../extras/vpnupgrade.sh
+          diff vpnupgrade_centos.sh ../extras/vpnupgrade_centos.sh
+          diff vpnupgrade_amzn.sh   ../extras/vpnupgrade_amzn.sh
+          diff vpnupgrade_ubuntu.sh ../extras/vpnupgrade_ubuntu.sh
+          diff vpnupgrade_alpine.sh ../extras/vpnupgrade_alpine.sh
+          diff vpnuninstall.sh      ../extras/vpnuninstall.sh
+          diff add_vpn_user.sh      ../extras/add_vpn_user.sh
+          diff del_vpn_user.sh      ../extras/del_vpn_user.sh
+          diff update_vpn_users.sh  ../extras/update_vpn_users.sh
+          diff ikev2changeaddr.sh   ../extras/ikev2changeaddr.sh
+          diff ikev2onlymode.sh     ../extras/ikev2onlymode.sh
+
+          diff vpnsetup2.sh          ../vpnsetup.sh
+          diff vpnsetup_centos2.sh   ../vpnsetup_centos.sh
+          diff vpnsetup_amzn2.sh     ../vpnsetup_amzn.sh
+          diff vpnsetup_ubuntu2.sh   ../vpnsetup_ubuntu.sh
+          diff vpnsetup_alpine2.sh   ../vpnsetup_alpine.sh
+          diff ikev2setup2.sh        ../extras/ikev2setup.sh
+          diff vpnupgrade2.sh        ../extras/vpnupgrade.sh
+          diff vpnupgrade_centos2.sh ../extras/vpnupgrade_centos.sh
+          diff vpnupgrade_amzn2.sh   ../extras/vpnupgrade_amzn.sh
+          diff vpnupgrade_ubuntu2.sh ../extras/vpnupgrade_ubuntu.sh
+          diff vpnupgrade_alpine2.sh ../extras/vpnupgrade_alpine.sh
+          diff vpnuninstall2.sh      ../extras/vpnuninstall.sh
+          diff add_vpn_user2.sh      ../extras/add_vpn_user.sh
+          diff del_vpn_user2.sh      ../extras/del_vpn_user.sh
+          diff update_vpn_users2.sh  ../extras/update_vpn_users.sh
+          diff ikev2changeaddr2.sh   ../extras/ikev2changeaddr.sh
+          diff ikev2onlymode2.sh     ../extras/ikev2onlymode.sh

@@ -1,0 +1,123 @@
+name: gha-workflow-pt-test
+on: [push, pull_request]
+permissions:
+  contents: read
+
+jobs:
+
+  # Linting is a separate job, primary because it only needs to be done once,
+  # and secondarily because jobs are performed concurrently.
+  gha-job-pt-lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+      - name: Setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          # See "Lowest supported ruby version" in CONTRIBUTING.md
+          ruby-version: '3.0'
+      - name: Bundle
+        run: |
+          gem install bundler
+          bundle install --jobs 4 --retry 3
+      - name: Lint
+        run: bundle exec rubocop
+
+  # The test job is a matrix of ruby/rails versions.
+  gha-job-pt-test:
+    name: Ruby ${{ matrix.ruby }}, ${{ matrix.gemfile }}.gemfile
+    runs-on: ubuntu-latest
+    services:
+      gha-service-pt-mysql:
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: paper_trail_test
+        image: mysql:8.0
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+      gha-service-pt-postgres:
+        env:
+          POSTGRES_PASSWORD: asdfasdf
+        image: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    strategy:
+      # Unlike TravisCI, the database will not be part of the matrix. Each
+      # sub-job in the matrix tests all three databases. Alternatively, we could
+      # have set this up with each database as a separate job, but then we'd be
+      # duplicating the matrix configuration three times.
+      matrix:
+        gemfile: [ 'rails_6.1', 'rails_7.0', 'rails_7.1' ]
+
+        # To keep matrix size down, only test highest and lowest rubies.
+        # See "Lowest supported ruby version" in CONTRIBUTING.md
+        ruby: [ '3.0', '3.2' ]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v2
+      - name: Setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true # 'bundle install' and cache
+        env:
+          BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+
+      # MySQL db was created above, sqlite will be created during test suite,
+      # when migrations occur, so we only need to create the postgres db. I
+      # tried something like `cd .....dummy_app && ....db:create`, but couldn't
+      # get that to work.
+      - name: Create postgres database
+        run: |
+          createdb \
+            --host=$POSTGRES_HOST \
+            --port=$POSTGRES_PORT \
+            --username=postgres \
+            paper_trail_test
+        env:
+          PGPASSWORD: asdfasdf
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+
+      # The following three steps finally run the tests. We use `rake
+      # install_database_yml spec` instead of `rake` (default) because the
+      # default includes rubocop, which we run (once) as a separate job. See
+      # above.
+      - name: Test, sqlite
+        run: bundle exec rake install_database_yml spec
+        env:
+          BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+          DB: sqlite
+      - name: Test, mysql
+        run: bundle exec rake install_database_yml spec
+        env:
+          BACKTRACE: 1
+          BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+          DB: mysql
+          PT_CI_DATABASE: paper_trail
+          PT_CI_DB_USER: root
+          PT_CI_DB_HOST: 127.0.0.1
+          PT_CI_DB_PORT: 3306
+      - name: Test, postgres
+        run: bundle exec rake install_database_yml spec
+        env:
+          BACKTRACE: 1
+          BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+          DB: postgres
+          PT_CI_DATABASE: paper_trail
+          PT_CI_DB_USER: postgres
+          PT_CI_DB_PASSWORD: asdfasdf
+          PT_CI_DB_HOST: 127.0.0.1
+          PT_CI_DB_PORT: 5432

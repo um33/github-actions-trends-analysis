@@ -1,0 +1,21 @@
+examples:
+- examples/**
+documentation:
+- docs/**
+promptflow-tracing:
+- src/promptflow-tracing/**
+promptflow-core:
+- src/promptflow-core/**
+promptflow-devkit:
+- src/promptflow-devkit/**
+promptflow-azure:
+- src/promptflow-azure/**
+promptflow-evals:
+- src/promptflow-evals/**
+promptflow:
+- src/promptflow/**
+promptflow-tools:
+- src/promptflow-tools/**
+fundamental:
+- scripts/**
+- .github/**

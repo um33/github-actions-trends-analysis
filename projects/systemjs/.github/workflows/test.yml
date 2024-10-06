@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        chrome: [
+          'latest'
+        ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Chomp
+        uses: guybedford/chomp-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+      - name: Setup Chrome ${{ matrix.chrome }}
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: ${{ matrix.chrome }}
+      - name: npm install
+        run: npm install
+      - name: Chomp Test
+        run: chomp test
+        env:
+          CI_BROWSER: C:\hostedtoolcache\windows\chromium\${{ matrix.chrome }}\x64\chrome.exe
+          CI_BROWSER_FLAGS:

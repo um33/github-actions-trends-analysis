@@ -1,0 +1,175 @@
+name: Continuous
+
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "**.ipynb"
+      - "**.json"
+      - "**.html"
+      - "**.js"
+      - "**.css"
+      - "android/**"
+  push:
+    paths-ignore:
+      - "**.md"
+      - "**.ipynb"
+      - "**.json"
+      - "**.html"
+      - "**.js"
+      - "**.css"
+      - "android/**"
+
+jobs:
+  build:
+    if: github.repository == 'deepjavalibrary/djl'
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      matrix:
+        operating-system: [ ubuntu-latest, macos-13 ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: 17
+      # Enable gradle cache: https://github.com/actions/cache/blob/master/examples.md#java---gradle
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: check disk space
+        run: df -h
+      - uses: dorny/paths-filter@v2
+        id: sentencepiece_changes
+        with:
+          filters: |
+            src:
+              - 'extensions/sentencepiece/**'
+      - name: install libomp on macos
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install libomp
+      - name: Compile Sentencepiece JNI
+        if: steps.sentencepiece_changes.outputs.src == 'true'
+        run: ./gradlew :extensions:sentencepiece:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: fasttext_changes
+        with:
+          filters: |
+            src:
+              - 'extensions/fasttext/**'
+      - name: Compile fastText JNI
+        if: steps.fasttext_changes.outputs.src == 'true'
+        run: ./gradlew :extensions:fasttext:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: tokenizers_changes
+        with:
+          filters: |
+            src:
+              - 'extensions/tokenizers/**'
+      - name: Compile tokenizers JNI
+        if: steps.tokenizers_changes.outputs.src == 'true'
+        run: ./gradlew :extensions:tokenizers:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: pytorch_changes
+        with:
+          filters: |
+            src:
+              - 'engines/pytorch/pytorch-native/**'
+      - name: Compile PyTorch JNI
+        if: steps.pytorch_changes.outputs.src == 'true'
+        run: ./gradlew :engines:pytorch:pytorch-native:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: paddlepaddle_changes
+        with:
+          filters: |
+            src:
+              - 'engines/paddlepaddle/paddlepaddle-native/**'
+      - name: Compile PaddlePaddle JNI
+        if: steps.paddlepaddle_changes.outputs.src == 'true'
+        run: ./gradlew :engines:paddlepaddle:paddlepaddle-native:compileJNI
+      - name: Test ONNX Runtime
+        run: |
+          ./gradlew -Dai.djl.default_engine=OnnxRuntime :integration:test
+          ./gradlew :integration:clean
+      - name: Build with Gradle
+        run: ./gradlew build :jacoco:testCodeCoverageReport
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: reports
+          path: |
+            ${{ github.workspace }}/**/build/reports/**/*
+            !${{ github.workspace }}/**/build/reports/jacoco/*
+      - name: upload to codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./jacoco/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml
+          fail_ci_if_error: false
+          path_to_write_report: ./codecov_report.txt
+
+  # Windows platform for testing hybrid engines
+  build-windows:
+    if: github.repository == 'deepjavalibrary/djl'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: 17
+      # Enable gradle cache: https://github.com/actions/cache/blob/master/examples.md#java---gradle
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - uses: dorny/paths-filter@v2
+        id: sentencepiece_changes
+        with:
+          filters: |
+            src:
+              - 'extensions/sentencepiece/**'
+      - name: Compile Sentencepiece JNI
+        if: steps.sentencepiece_changes.outputs.src == 'true'
+        run: ./gradlew :extensions:sentencepiece:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: pytorch_changes
+        with:
+          filters: |
+            src:
+              - 'engines/pytorch/pytorch-native/**'
+      - name: Compile PyTorch JNI
+        if: steps.pytorch_changes.outputs.src == 'true'
+        run: ./gradlew :engines:pytorch:pytorch-native:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: paddlepaddle_changes
+        with:
+          filters: |
+            src:
+              - 'engines/paddlepaddle/paddlepaddle-native/**'
+      - name: Compile PaddlePaddle JNI
+        if: steps.paddlepaddle_changes.outputs.src == 'true'
+        run: ./gradlew :engines:paddlepaddle:paddlepaddle-native:compileJNI
+      - uses: dorny/paths-filter@v2
+        id: tokenizers_changes
+        with:
+          filters: |
+            src:
+              - 'extensions/tokenizers/**'
+      - name: Compile tokenizers JNI
+        if: steps.tokenizers_changes.outputs.src == 'true'
+        run: ./gradlew :extensions:tokenizers:compileJNI
+      - name: Integration tests
+        # MXNet integration test on Github Action fail due to memory limitation on Windows
+        run: |
+          ./gradlew -Pjni "-Dai.djl.default_engine=PyTorch" test -x examples:test
+          ./gradlew -Pjni --rerun-tasks "-Dai.djl.default_engine=TensorFlow" test -x examples:test
+          ./gradlew --rerun-tasks "-Dai.djl.default_engine=OnnxRuntime" :integration:test

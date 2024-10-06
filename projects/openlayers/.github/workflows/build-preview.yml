@@ -1,0 +1,32 @@
+name: Build Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: ./tasks/build-website.sh -v dev -l dev
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: build/site
+      - name: Store pull request number for later use
+        run: |
+          mkdir -p build/pr
+          echo ${{github.event.number}} > build/pr/number
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr
+          path: build/pr

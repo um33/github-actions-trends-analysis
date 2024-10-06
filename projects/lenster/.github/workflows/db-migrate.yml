@@ -1,0 +1,43 @@
+name: DB Migrate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  mainnet:
+    name: Mainnet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🚪
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js, pnpm, dependencies and run migrations 🌸
+        uses: ./.github/actions/db-migration
+        with:
+          database_url: ${{ secrets.MAINNET_DATABASE_URL }}
+
+  testnet:
+    name: Testnet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🚪
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js, pnpm, dependencies and run migrations 🌸
+        uses: ./.github/actions/db-migration
+        with:
+          database_url: ${{ secrets.TESTNET_DATABASE_URL }}
+
+  staging:
+    name: Staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🚪
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js, pnpm, dependencies and run migrations 🌸
+        uses: ./.github/actions/db-migration
+        with:
+          database_url: ${{ secrets.STAGING_DATABASE_URL }}

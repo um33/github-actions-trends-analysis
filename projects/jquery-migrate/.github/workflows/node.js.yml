@@ -1,0 +1,78 @@
+name: Node
+
+on:
+  pull_request:
+  push:
+    branches-ignore: "dependabot/**"
+
+env:
+  NODE_VERSION: 20.x
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.MIGRATE_VERSION }} - jQuery ${{ matrix.JQUERY_VERSION }} (Chrome/Firefox)
+    strategy:
+      fail-fast: false
+      matrix:
+        MIGRATE_VERSION: ["min"]
+        JQUERY_VERSION: ["git.min", "git.slim.min", "3.x-git.min", "3.x-git.slim.min"]
+        include:
+          - MIGRATE_VERSION: "esmodules"
+            JQUERY_VERSION: "3.x-git.slim.min"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:browser -- --jquery-migrate=${{ matrix.MIGRATE_VERSION }} --jquery=${{ matrix.JQUERY_VERSION }}
+
+  safari:
+    runs-on: macos-latest
+    name: ${{ matrix.MIGRATE_VERSION }} - jQuery ${{ matrix.JQUERY_VERSION }} (Safari)
+    strategy:
+      fail-fast: false
+      matrix:
+        MIGRATE_VERSION: ["min"]
+        JQUERY_VERSION: ["git.min", "git.slim.min", "3.x-git.min", "3.x-git.slim.min"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-npm-lock-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: |
+          npm run test:safari -- \
+          --jquery-migrate=${{ matrix.MIGRATE_VERSION }} \
+          --jquery=${{ matrix.JQUERY_VERSION }}

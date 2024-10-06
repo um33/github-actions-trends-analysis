@@ -1,0 +1,69 @@
+name: Tests
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+permissions:
+  contents: read
+
+jobs:
+  # This is umbrella job for all tests needed to pass to make it simpler
+  # to maintain GitHub Actions status required checks since job names and
+  # amount change over the time and it is easier to maintian having just
+  # this umbrella check set as required.
+  status_check:
+    name: All required tests passing check
+    needs: [rails]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - run: /bin/${{ (needs.rails.result == 'success' || needs.rails.result == 'skipped') }}
+
+  rails:
+    strategy:
+      fail-fast: false
+      matrix:
+        rubygems:
+          - name: locked
+            version: "3.5.7"
+          - name: latest
+            version: latest
+        ruby_version: ["3.3.0"]
+        tests:
+          - name: general
+            command: test
+          - name: system
+            command: test:system
+    name: Rails tests ${{ matrix.tests.name }} (RubyGems ${{ matrix.rubygems.name }}, Ruby ${{ matrix.ruby_version }})
+    runs-on: ubuntu-22.04
+    env:
+      RUBYGEMS_VERSION: ${{ matrix.rubygems.version }}
+      # Fail hard when Toxiproxy is not running to ensure all tests (even Toxiproxy optional ones) are passing
+      REQUIRE_TOXIPROXY: true
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup rubygems.org
+        uses: ./.github/actions/setup-rubygems.org
+        with:
+          ruby-version: ${{ matrix.ruby_version }}
+          rubygems-version: ${{ matrix.rubygems.version }}
+
+      - name: Tests ${{ matrix.tests.name }}
+        id: test-all
+        run: bin/rails ${{ matrix.tests.command }}
+
+      - name: Save capybara screenshots
+        if: ${{ failure() && steps.test-all.outcome == 'failure' }}
+        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: capybara-screenshots-${{ matrix.tests.name }}-${{ matrix.rubygems.name }}
+          path: tmp/capybara
+          if-no-files-found: ignore
+
+      - name: Upload coverage to Codecov
+        if: matrix.rubygems.name == 'locked' && (success() || failure())
+        uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

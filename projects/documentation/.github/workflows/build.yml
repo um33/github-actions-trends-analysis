@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log current branches and repositories
+        run: |
+          echo "Current ref: $GITHUB_REF"
+          echo "Base ref: $GITHUB_BASE_REF"
+          echo "Head ref: $GITHUB_HEAD_REF"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Head repository: ${{ github.event.pull_request.head.repo.full_name }}"
+      - name: Only allow pull requests based on master from the develop branch of the current repository
+        if: ${{ github.base_ref == 'master' && !(github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          echo "Pull requests based on master can only come from the develop branch of this repository"
+          echo "Please check your base branch as it should be develop by default"
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+      - name: Install Python dependencies
+        uses: py-actions/py-dependency-install@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2
+          bundler-cache: true
+      - uses: seanmiddleditch/gha-setup-ninja@v4
+        with:
+          version: 1.10.2
+      - name: Install arm-none-eabi-gcc GNU Arm Embedded Toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1.8.1
+      - name: Install Doxygen
+        run: |
+          wget https://www.doxygen.nl/files/doxygen-1.9.6.linux.bin.tar.gz
+          tar xf doxygen-1.9.6.linux.bin.tar.gz -C "$HOME"
+          echo "$HOME/doxygen-1.9.6/bin" >> $GITHUB_PATH
+      - name: Build Doxygen documentation
+        run: make build_doxygen_adoc
+      - name: Build documentation
+        run: make -j 2
+      - name: Deploy to Mythic Beasts
+        if: ${{ github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/deploy-action
+        with:
+          private_ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          public_bastion_host_keys: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          bastion_host: ${{ secrets.DEPLOY_BASTION_HOST }}
+          primary_host: ${{ secrets.DEPLOY_PRIMARY_HOST }}
+          secondary_host: ${{ secrets.DEPLOY_SECONDARY_HOST }}
+          # this needs to match destination: in _config.yml
+          source: documentation/html/
+          destination: documentation

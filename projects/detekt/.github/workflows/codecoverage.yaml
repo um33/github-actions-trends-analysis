@@ -1,0 +1,44 @@
+name: Code Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  ORG_GRADLE_PROJECT_enablePTS: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish-code-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Setup Java
+        uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@6cec5d49d4d6d4bb982fbed7047db31ea6d38f11 # v3
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Generate Coverage Report
+        run: ./gradlew jacocoMergedReport
+        env:
+          DEVELOCITY_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+
+      - name: Publish Coverage
+        if: success()
+        uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4
+        with:
+          files: ./code-coverage-report/build/reports/jacoco/jacocoMergedReport/jacocoMergedReport.xml
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}

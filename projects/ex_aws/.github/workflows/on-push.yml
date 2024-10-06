@@ -1,0 +1,81 @@
+name: on-push
+on: [push, pull_request]
+env:
+  MIX_ENV: test
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    # See https://hexdocs.pm/elixir/compatibility-and-deprecations.html#compatibility-between-elixir-and-erlang-otp
+    strategy:
+      matrix:
+        include:
+          - pair:
+              otp: 26.x
+              elixir: 1.15.x
+            lint: lint
+          - pair:
+              otp: 25.x
+              elixir: 1.15.x
+          - pair:
+              otp: 25.x
+              elixir: 1.14.x
+          - pair:
+              otp: 25.x
+              elixir: 1.13.x
+          - pair:
+              otp: 24.x
+              elixir: 1.15.x
+          - pair:
+              otp: 24.x
+              elixir: 1.14.x
+          - pair:
+              otp: 24.x
+              elixir: 1.13.x
+          - pair:
+              otp: 24.x
+              elixir: 1.12.x
+          - pair:
+              otp: 24.x
+              elixir: 1.11.x
+          - pair:
+              otp: 23.x
+              elixir: 1.14.x
+          - pair:
+              otp: 23.x
+              elixir: 1.13.x
+          - pair:
+              otp: 23.x
+              elixir: 1.12.x
+          - pair:
+              otp: 23.x
+              elixir: 1.11.x
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.pair.otp}}
+          elixir-version: ${{matrix.pair.elixir}}
+      - uses: rrainn/dynamodb-action@v3.0.0
+        with:
+          port: 8000
+          cors: "*"
+      - uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{matrix.pair.otp}}-${{matrix.pair.elixir}}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{matrix.pair.otp}}-${{matrix.pair.elixir}}-
+      - run: mix deps.get
+      - run: mix compile
+      - run: mix deps.unlock --check-unused
+        if: ${{matrix.lint}} # Only check formatting with the latest verison
+      - run: mix format --check-formatted
+        if: ${{matrix.lint}}
+      - run: mix dialyzer
+        if: ${{matrix.lint}}
+      - run: mix test

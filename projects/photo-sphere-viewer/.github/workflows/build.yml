@@ -1,0 +1,110 @@
+name: build
+
+on:
+  push:
+    branches:
+      - '*'
+    paths-ignore:
+      - 'examples/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: data
+        id: data
+        run: |
+          echo "YARN_CACHE_DIR=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+      - name: yarn cache
+        uses: actions/cache@v4
+        if: github.ref_name == 'main'
+        with:
+          key: yarn-${{ hashFiles('yarn.lock') }}
+          path: ${{ steps.data.outputs.YARN_CACHE_DIR }}
+
+      - name: yarn cache ro
+        uses: actions/cache/restore@v4
+        if: github.ref_name != 'main'
+        with:
+          key: yarn-${{ hashFiles('yarn.lock') }}
+          path: ${{ steps.data.outputs.YARN_CACHE_DIR }}
+
+      - name: turbo cache
+        uses: actions/cache@v4
+        if: github.ref_name == 'main'
+        with:
+          path: .turbo
+          key: turbo-${{ github.sha }}
+          restore-keys: |
+            turbo-
+
+      - name: turbo cache ro
+        uses: actions/cache/restore@v4
+        if: github.ref_name != 'main'
+        with:
+          path: .turbo
+          key: turbo-${{ github.sha }}
+          restore-keys: |
+            turbo-
+
+      - name: build
+        run: |
+          yarn install
+          yarn ci:build
+
+  build-doc:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: data
+        id: data
+        run: |
+          echo "YARN_CACHE_DIR=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+      - name: yarn cache ro
+        uses: actions/cache/restore@v4
+        with:
+          key: yarn-${{ hashFiles('yarn.lock') }}
+          path: ${{ steps.data.outputs.YARN_CACHE_DIR }}
+
+      - name: turbo cache
+        uses: actions/cache@v4
+        if: github.ref_name == 'main'
+        with:
+          path: .turbo
+          key: turbo_doc-${{ github.sha }}
+          restore-keys: |
+            turbo_doc-
+
+      - name: turbo cache ro
+        uses: actions/cache/restore@v4
+        if: github.ref_name != 'main'
+        with:
+          path: .turbo
+          key: turbo_doc-${{ github.sha }}
+          restore-keys: |
+            turbo_doc-
+
+      - name: build
+        run: |
+          yarn install
+          yarn ci:build-doc

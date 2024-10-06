@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Matrix Chat
+    url: https://matrix.to/#/#aboutcode-org_discuss:gitter.im
+    about: Please ask questions here.
+  - name: Code Of Conduct
+    url: https://github.com/nexB/scancode-toolkit/blob/develop/CODE_OF_CONDUCT.rst
+    about: This space is protected by our Code Of Conduct.

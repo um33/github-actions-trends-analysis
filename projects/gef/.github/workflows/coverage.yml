@@ -1,0 +1,62 @@
+name: CI Coverage for PR
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+jobs:
+  coverage:
+    env:
+      PY_VER: ''
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y gdb-multiarch python3-dev python3-pip python3-wheel python3-setuptools git cmake gcc g++ pkg-config libglib2.0-dev gdbserver qemu-user curl
+        sudo python3 -m pip install --upgrade pip --quiet
+    - name: Run test coverage
+      id: get_coverage
+      env:
+        ALLOWED_MARGIN: 0.01
+        MIN_COVERAGE: 70
+      run: |
+        echo PY_VER=`gdb -q -nx -ex "pi print('.'.join(map(str, sys.version_info[:2])))" -ex quit` >> $GITHUB_ENV
+        echo GEF_CI_NB_CPU=`grep -c ^processor /proc/cpuinfo` >> $GITHUB_ENV
+        echo GEF_CI_ARCH=`uname --processor` >> $GITHUB_ENV
+        python${{ env.PY_VER }} -m pip install --user --upgrade -r tests/requirements.txt --quiet
+        current_score=$(curl --silent https://hugsy.github.io/gef/coverage/gef_py.html | grep pc_cov | sed 's?.*<span class="pc_cov">\([^%]*\)%</span>?\1?g')
+        bash scripts/generate-coverage-docs.sh
+        new_score=$(cat docs/coverage/gef_py.html | grep pc_cov | sed 's?.*<span class="pc_cov">\([^%]*\)%</span>?\1?g')
+        score_diff=$(python -c "print(f'{${new_score} - ${current_score}:.04f}')")
+        echo "new_score=${new_score}" >> $GITHUB_OUTPUT
+        echo "current_score=${current_score}" >> $GITHUB_OUTPUT
+        echo "score_diff=${score_diff}" >> $GITHUB_OUTPUT
+
+    - name: Post comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const old_score   = ${{ steps.get_coverage.outputs.current_score }};
+          const new_score   = ${{ steps.get_coverage.outputs.new_score }};
+          const score_diff  = ${{ steps.get_coverage.outputs.score_diff }};
+          const comment = `## 🤖 Coverage update for ${{ github.event.pull_request.head.sha }} ${(score_diff >= 0) ? "🟢" : "🔴"}
+
+          |        | Old | New |
+          |--------|-----|-----|
+          | Commit | ${{ github.event.pull_request.base.sha }} | ${{ github.event.pull_request.head.sha }} |
+          | Score  | ${old_score}% | ${new_score}% (${score_diff}) |
+          `;
+
+          try {
+            const { owner, repo, number } = context.issue;
+            await github.rest.issues.createComment({ owner, repo, issue_number: number, body: comment });
+          } catch (err) { console.log(err); }

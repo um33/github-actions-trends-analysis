@@ -1,0 +1,82 @@
+name: "Unit Tests"
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'releases/**'
+  pull_request:
+    branches:
+      - 'master'
+      - 'releases/**'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: 🧰 Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: 📜 Setup ccache
+      uses: hendrikmuhs/ccache-action@v1
+      with:
+        key: ${{ runner.os }}-tests-build-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-tests-build
+        max-size: 50M
+
+
+    - name: 📜 Restore CMakeCache
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/CMakeCache.txt
+        key: ${{ runner.os }}-tests-build-${{ hashFiles('**/CMakeLists.txt') }}
+
+    - name: ⬇️ Install dependencies
+      run: |
+        sudo apt update
+        sudo bash dist/get_deps_debian.sh
+
+    - name: 🛠️ Build
+      run: |
+        set -x
+        mkdir -p build
+        cd build
+        CC=gcc-12 CXX=g++-12 cmake                                                                      \
+          -DCMAKE_BUILD_TYPE=Debug                                                                      \
+          -DIMHEX_ENABLE_UNIT_TESTS=ON                                                                  \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache                                                            \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                                                          \
+          -DCMAKE_C_FLAGS="-fuse-ld=lld -fsanitize=address,leak,undefined -fno-sanitize-recover=all"    \
+          -DCMAKE_CXX_FLAGS="-fuse-ld=lld -fsanitize=address,leak,undefined -fno-sanitize-recover=all"  \
+          -DIMHEX_OFFLINE_BUILD=ON                                                                      \
+          ..
+        make -j4 unit_tests
+
+    - name: 🧪 Perform Unit Tests
+      run: |
+        cd build
+        ctest --output-on-failure
+
+  langs:
+    name: 🧪 Langs
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: 🧰 Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Check langs
+      run:
+        python3 tests/check_langs.py

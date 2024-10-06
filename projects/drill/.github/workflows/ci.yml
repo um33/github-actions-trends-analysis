@@ -1,0 +1,124 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# This workflow is triggered for each push event to the master branch or pull request.
+# It contains two jobs:
+# - "Main Build" job runs all unit tests jor two LTS java versions and the latest Java version.
+# - "Run checkstyle and generate protobufs" job builds Drill and checks its license,
+# builds Drill native client and regenerates protobufs to ensure that committed files are up-to-date.
+name: Github CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Main Build
+    runs-on: ubuntu-latest
+    if: github.repository == 'apache/drill'
+    timeout-minutes: 150
+    strategy:
+      matrix:
+        # Java versions to run unit tests
+        java: [ '8', '11', '17' ]
+        profile: ['default-hadoop']
+        include:
+          - java: '8'
+            profile: 'hadoop-2'
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java }}
+          cache: 'maven'
+      - name: Set up swap space
+        # Linux Action Runners come with 7GB of RAM which isn't quite enoough
+        # to run the test suite. Two workarounds are used below: a swap file is
+        # added to the Runner and memory hungry tests are run separately.
+        run: |
+          sudo sh -c "
+            fallocate -l 4G /tmp/swapfile
+            chmod 0600 /tmp/swapfile
+            mkswap /tmp/swapfile
+            swapon /tmp/swapfile
+          "
+      - name: Build and test
+        run: |
+          mvn -P${{ matrix.profile }} install --batch-mode --no-transfer-progress \
+          -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
+      - name: Remove swap space
+        run : |
+          sudo sh -c "
+            swapoff /tmp/swapfile
+            rm /tmp/swapfile
+          "
+  checkstyle_protobuf:
+    name: Run checkstyle and generate protobufs
+    runs-on: ubuntu-latest
+    if: github.repository == 'apache/drill'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+          cache: 'maven'
+      # Caches built protobuf library
+      - name: Cache protobufs
+        uses: actions/cache@v4
+        with:
+          path: ~/protobuf
+          key: ${{ runner.os }}-protobuf
+      # Install libraries required for protobuf generation
+      - name: Install dependencies
+        run: |
+          sudo apt update -y && sudo apt install -y libboost-all-dev libzookeeper-mt-dev libsasl2-dev cmake libcppunit-dev checkinstall && \
+          pushd .. && \
+          if [ -f $HOME/protobuf/protobuf_3.16.3* ]; then \
+            sudo dpkg -i $HOME/protobuf/protobuf_3.16.3*; \
+          else \
+            wget https://github.com/protocolbuffers/protobuf/releases/download/v3.16.3/protobuf-java-3.16.3.zip && \
+            unzip protobuf-java-3.16.3.zip && pushd protobuf-3.16.3 && \
+            ./configure && sudo make && sudo checkinstall -y && \
+            if [ ! -d $HOME/protobuf ]; then \
+              mkdir -p $HOME/protobuf; \
+            fi && \
+            mv protobuf_3.16.3* $HOME/protobuf/ && popd; \
+          fi && \
+          sudo ldconfig && popd; \
+      # Builds Drill project, performs license checkstyle goal and regenerates java and C++ protobuf files
+      - name: Build
+        run: |
+          MAVEN_OPTS="-Xms1G -Xmx1G" mvn install -Drat.skip=false -Dlicense.skip=false --batch-mode --no-transfer-progress -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -DskipTests=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true && \
+          pushd protocol && mvn process-sources -P proto-compile && popd && \
+          mkdir contrib/native/client/build && pushd contrib/native/client/build && cmake -G "Unix Makefiles" .. && make cpProtobufs && popd; \
+      # Checks whether project files weren't changed after regenerating protobufs
+      - name: Check protobufs
+        run: |
+          if [ "$(git status -s | grep -c "")" -gt 0 ]; then \
+            echo "The following changes are found in files after regenerating protobufs (output may be used as a patchto apply):" >&2 &&
+            echo "$(git diff --color)" && \
+            exit 1; \
+          else
+            echo "All checks are passed!";
+          fi

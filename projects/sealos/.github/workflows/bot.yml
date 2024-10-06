@@ -1,0 +1,19 @@
+name: Github Robot for Sealos
+on:
+  issue_comment:
+    types:
+      - created
+jobs:
+  comment:
+    if: startswith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the latest code
+        uses: actions/checkout@v3
+      - name: Gh Robot for Sealos
+        uses: labring/robot@v2.0.0
+        with:
+          version: v2.0.0
+        env:
+          SEALOS_TYPE: "/comment"
+          GH_TOKEN: "${{ secrets.GH_PAT }}"

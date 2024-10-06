@@ -1,0 +1,130 @@
+name: Publish Releases
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  sanity-check:
+    name: Pre-publish checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: '**/package.json'
+      - name: Install dependencies
+        run: npm i --ignore-scripts --no-audit --no-fund
+      - name: Run linters
+        run: npm run lint
+      - name: Build NodeJS package
+        run: npm run build
+      - name: Run tests
+        run: npm run test
+  npm:
+    name: NPM Package
+    needs: sanity-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: '**/package.json'
+      - id: get-version
+        uses: ./.github/actions/get-version
+      - name: Install dependencies
+        run: npm i --ignore-scripts --no-audit --no-fund
+      - name: Reformat to regular markdown
+        run: ./scripts/release/reformat-markdown.js "${{ steps.get-version.outputs.version }}"
+      - name: Update SDK Typescript definitions
+        run: ./scripts/release/update-sdk-ts-defs.js
+      - name: Build NodeJS package
+        run: npm run build
+      - name: Deploy to NPM
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+  github:
+    name: GitHub release
+    needs: sanity-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Get commit message (for release title and body)
+        id: commit
+        uses: kceb/git-message-action@v3
+      - id: get-version
+        uses: ./.github/actions/get-version
+      - name: Reformat to regular markdown
+        run: ./scripts/release/reformat-markdown.js "${{ steps.get-version.outputs.version }}"
+      - name: Configure GIT credentials
+        run: |
+          git config user.name "simple-icons[bot]"
+          git config user.email "simple-icons[bot]@users.noreply.github.com"
+      # Commit that will only be included in the tag
+      - name: Commit CDN theme image links removal
+        run: |
+          git add README.md
+          git commit -m 'Replace README CDN theme image links'
+      - name: Create and push git tag
+        run: |
+          set -e
+          tag="${{ steps.get-version.outputs.version }}"
+          git tag -a "${tag}" -m "${{ steps.commit.outputs.git-message }}"
+          git push origin "${tag}"
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          tag_name: ${{ steps.get-version.outputs.version }}
+          name: ${{ steps.commit.outputs.title }}
+          body: ${{ steps.commit.outputs.body }}
+  font:
+    name: Trigger simple-icons-font release
+    needs: npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          repositories: 'simple-icons-font'
+      - name: Trigger simple-icons-font release
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -d '{"ref":"develop"}' \
+            https://api.github.com/repos/simple-icons/simple-icons-font/actions/workflows/auto-release.yml/dispatches
+  website:
+    name: Trigger simple-icons-website update
+    needs: npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          repositories: 'simple-icons-website'
+      - name: Trigger simple-icons-website update
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -d '{"ref":"master"}' \
+            https://api.github.com/repos/simple-icons/simple-icons-website/actions/workflows/auto-release.yml/dispatches

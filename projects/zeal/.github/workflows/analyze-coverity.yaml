@@ -1,0 +1,63 @@
+name: Coverity Scan
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-coverity:
+    name: Analyze
+    if: github.repository == 'zealdocs/zeal'
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get -y -qq update
+        sudo apt-get -y -qq --no-install-recommends install \
+            cmake \
+            extra-cmake-modules \
+            git \
+            libarchive-dev \
+            libgl1-mesa-dev \
+            libqt6opengl6-dev \
+            libsqlite3-dev \
+            libvulkan-dev \
+            libxcb-keysyms1-dev \
+            ninja-build \
+            qt6-base-private-dev \
+            qt6-webengine-dev \
+            qt6-webengine-dev-tools
+
+    - name: Configure
+      run: cmake -B build -G Ninja
+
+    - name: Retrieve Application Version
+      run: |
+        zeal_version=$(<build/zeal_version)
+        echo "Zeal Version: ${zeal_version}"
+        echo "ZEAL_VERSION=${zeal_version}" >> $GITHUB_ENV
+
+    - name: Coverity Scan
+      uses: vapier/coverity-scan-action@v1
+      with:
+        command: ninja -C build
+        version: ${{ env.ZEAL_VERSION }}
+        email: ${{ secrets.COVERITY_SCAN_EMAIL }}
+        token: ${{ secrets.COVERITY_SCAN_TOKEN }}
+
+    - name: Upload Build Log
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: cov-int/build-log.txt
+        if-no-files-found: ignore

@@ -1,0 +1,39 @@
+name: Upload Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  upload_benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js from nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build benchmarks
+        run: |
+          npm run generate-typings
+          npm run build-benchmarks
+
+      - name: Copy benchmarks_generated.js
+        run: |
+          mkdir tmp
+          cp test/bench/versions/benchmarks_generated.js tmp
+          cp test/bench/versions/benchmarks_generated.js.map tmp
+
+      - name: Upload to GitHub Pages (main)
+        if: startsWith(github.ref, 'refs/heads/main')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: tmp
+          destination_dir: benchmarks/main

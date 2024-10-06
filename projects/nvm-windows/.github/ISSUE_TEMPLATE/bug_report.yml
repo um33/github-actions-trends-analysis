@@ -1,0 +1,173 @@
+name: "🕷️ Bug Report"
+description: Report errors or unexpected behavior
+title: "[Issue]: "
+labels:
+  - "needs review"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before submitting your issue, please do the following:
+
+        1. Make sure you're running Windows. If you're using macOS, Linux, WSL/WSL2, or a Docker container using Linux, then you probably want [nvm-sh](https://github.com/nvm-sh/nvm) (this is NVM _for Windows_).
+        1. **Run `nvm debug` (v1.1.11+) to see if you can resolve your issue yourself.**
+        1. Review the **[common issues and resolutions](https://github.com/coreybutler/nvm-windows/wiki/Common-Issues)** wiki page.
+        1. **Search existing issues to see if your issue has already been opened/closed (help prevent duplicates).**
+        1. Remember, there is a [wiki](https://github.com/coreybutler/nvm-windows/wiki) that answers questions about installation types, building from source, and project philosophy concerns.
+        1. **[Read the README](https://github.com/coreybutler/nvm-windows)**. We took the time to write it for you. Many people ignore this.
+        1. If your issue is actually a question, please use the [discussions page](https://github.com/coreybutler/nvm-windows/discussions) so the whole community can help.
+        1. If you're seeking commercial help or requesting something you really need _for work/employment_, please consider [sponsoring](https://github.com/sponsors/coreybutler) the change/fix.
+  - type: textarea
+    id: issue
+    attributes:
+      label: What happened?
+      description: Please provide a clear and concise description of what happened.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      description: Please provide a clear and concise description of what you expected to happen.
+      placeholder: Tell us what you thought you'd see!
+    validations:
+      required: true
+  - type: dropdown
+    id: version
+    attributes:
+      label: Version
+      description: What version are you running? Run `nvm version` to find out. **Please don't assume. Check the version.**
+      options:
+        - 1.1.11 or newer (Default)
+        - 1.1.10
+        - 1.1.9
+        - 1.1.8
+        - 1.1.7
+        - 1.1.6 or older
+    validations:
+      required: true
+  - type: dropdown
+    id: os-version
+    attributes:
+      label: Which version of Windows?
+      multiple: true
+      options:
+        - Windows 11+
+        - Windows 10 (Default)
+        - Windows 8.1
+        - Windows 8
+        - Windows 7
+        - Older
+  - type: dropdown
+    id: os-language
+    attributes:
+      label: Which locale?
+      description: Are you running a non-English version of Windows?
+      multiple: false
+      options:
+        - English (Default)
+        - Western European
+        - Asian
+        - Other Non-English
+  - type: dropdown
+    attributes:
+      label: Which shell are you running NVM4W in?
+      options:
+        - "Command Prompt"
+        - PowerShell
+        - WSL or WSL2
+        - Cygwin
+        - Mingw64
+        - ConEmu
+        - Commander
+        - Hyper
+        - Other
+      multiple: true
+  - type: dropdown
+    id: permissions
+    attributes:
+      label: User Permissions?
+      options:
+        - Administrative Privileges, Elevated
+        - Administrative Privileges, Non-Elevated
+        - Standard User, Elevated
+        - Standard Use, Non-Elevated
+        - I don't know (Default)
+        - Other, please describe
+    validations:
+      required: true
+  - type: dropdown
+    id: developer-mode
+    attributes:
+      label: Is Developer Mode enabled?
+      description: See [Enable your device for development](https://docs.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development).
+      options:
+        - "Yes"
+        - No (Default)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log/console output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: Shell
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Debug Output
+      description: |
+        If possible, please provide the output of `nvm debug`.
+
+        The output of `nvm debug` looks like this
+        ```
+        <username> is not using admin or elevated rights.
+        
+        PowerShell
+        Windows Developer Mode: UNKNOWN (user cannot read registry)
+        
+        NVM4W Version:      1.1.11
+        NVM4W Path:         C:\Users\username\AppData\Roaming\nvm\nvm.exe
+        NVM4W Settings:     C:\Users\username\AppData\Roaming\nvm\settings.txt
+        NVM_HOME:           C:\Users\uername\AppData\Roaming\nvm
+        NVM_SYMLINK:        C:\Program Files\nodejs
+        Node Installations: C:\Users\username\AppData\Roaming\nvm
+        
+        Active Node.js Version: v20.7.0
+        
+        No problems detected.
+        
+        Find help at https://github.com/coreybutler/nvm-windows/wiki/Common-Issues
+        ```
+
+        If you only see the standard help menu (as shown below), then you are probably running v1.1.10 or below. Upgrade to NVM4W 1.1.11+.
+
+        ```sh
+        Running version 1.1.11.
+        
+        Usage:
+        
+          nvm arch                     : Show if node is running in 32 or 64 bit mode.
+          nvm current                  : Display active version.
+          nvm debug                    : Check the NVM4W process for known problems (troubleshooter).
+          nvm install <version> [arch] : The version can be a specific version, "latest" for the latest current version, or "lts" for the
+                                         most recent LTS version. Optionally specify whether to install the 32 or 64 bit version (defaults
+                                         to system arch). Set [arch] to "all" to install 32 AND 64 bit versions.
+                                         Add --insecure to the end of this command to bypass SSL validation of the remote download server.
+          nvm list [available]         : List the node.js installations. Type "available" at the end to see what can be installed. Aliased as ls.
+          nvm on                       : Enable node.js version management.
+          nvm off                      : Disable node.js version management.
+        ```
+      render: Shell
+    validations:
+      required: true
+  - type: textarea
+    id: misc
+    attributes:
+      label: Anything else?
+      description: |
+        Links? References? Anything that will give us more context about the issue you are encountering!
+
+        Tip: You can attach images or log files by clicking this area to highlight it and then dragging files in.
+    validations:
+      required: false

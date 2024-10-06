@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -eo pipefail
+set -x
+
+DOKKU_DOMAIN=${DOKKU_DOMAIN:="dokku.me"}
+
+echo "=====> set hostname"
+hostname
+internal_ip="$(ifconfig eth0 | grep 'inet ' | awk '{print $2}')"
+echo "CI_SERVER_IP=${internal_ip}" >>"$GITHUB_ENV"
+sudo hostname "$DOKKU_DOMAIN"
+echo "$DOKKU_DOMAIN" | sudo tee /etc/hostname
+hostname
+sudo cat /etc/hostname
+
+echo "=====> resolve $DOKKU_DOMAIN"
+sudo apt -qq -y --no-install-recommends install net-tools
+if [[ "$DOKKU_DOMAIN" == "dokku.me" ]]; then
+  # dokku.me now resolves to 10.0.0.2. add 10.0.0.2/24 to eth0
+  ifconfig
+  sudo ip addr add 10.0.0.2/24 broadcast 10.0.0.255 dev eth0
+fi
+
+echo "=====> install ci-dependencies"
+make ci-dependencies
+
+echo "=====> setup tests"
+./tests/ci/setup.sh
+
+echo "=====> dokku cleanup:skip"
+echo 'export DOKKU_SKIP_CLEANUP=true' | sudo tee /home/dokku/.dokkurc/dokku_skip_cleanup
+
+echo "=====> dokku report"
+dokku report

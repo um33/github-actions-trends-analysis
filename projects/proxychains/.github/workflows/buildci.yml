@@ -1,0 +1,55 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-linux-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: configure
+        run: ./configure
+
+      - name: Build Proxychains
+        run: make
+
+      - name: Run Proxychains
+        run: ./proxychains4 -v
+
+      - name: Run tests
+        run: ./src/proxychains -f dist/proxychains.conf on
+
+      # - name: Run tests
+      #   run: ./src/proxychains -f dist/proxychains.conf curl -o /dev/null -v https://sme.sk
+
+      # - name: Run tests
+      #   run: ./src/proxychains -f dist/proxychains.conf ping -c 1 sme.sk
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: configure
+        run: ./configure
+
+      - name: Build Proxychains
+        run: make
+
+      - name: Run Proxychains
+        run: ./proxychains4 -v
+
+      - name: Run tests
+        run: ./src/proxychains -f dist/proxychains.conf on
+
+      # - name: Run tests
+      #   run: ./src/proxychains -f dist/proxychains.conf curl -o /dev/null -v https://sme.sk
+
+      # - name: Run tests
+      #   run: ./src/proxychains -f dist/proxychains.conf ping -t 1 sme.sk
+
+

@@ -1,0 +1,75 @@
+api:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.api", "detekt-api/src/**/*"]
+
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            "**/*.gradle",
+            "**/*.gradle.kts",
+            "build-logic/**/*",
+            "**/gradle.properties",
+          ]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/workflows/*"]
+
+cli:
+  - changed-files:
+      - any-glob-to-any-file: ["detekt-cli/src/**/*"]
+
+core:
+  - changed-files:
+      - any-glob-to-any-file: ["detekt-core/src/**/*.kt"]
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ["gradle/libs.versions.toml"]
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "website/**/*"]
+
+formatting:
+  - changed-files:
+      - any-glob-to-any-file: ["detekt-formatting/src/**/*"]
+
+gradle-plugin:
+  - changed-files:
+      - any-glob-to-any-file: ["detekt-gradle-plugin/src/**/*"]
+
+compiler-plugin:
+  - changed-files:
+      - any-glob-to-any-file: ["detekt-compiler-plugin/src/**/*"]
+
+reports:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            "detekt-core/src/main/kotlin/io/gitlab/arturbosch/detekt/core/reporting/**/*",
+          ]
+
+rules:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            "detekt-rules/src/**/*",
+            "detekt-rules-complexity/src/**/*",
+            "detekt-rules-coroutines/src/**/*",
+            "detekt-rules-documentation/src/**/*",
+            "detekt-rules-empty/src/**/*",
+            "detekt-rules-errorprone/src/**/*",
+            "detekt-rules-exceptions/src/**/*",
+            "detekt-rules-naming/src/**/*",
+            "detekt-rules-performance/src/**/*",
+            "detekt-rules-style/src/**/*",
+          ]
+
+suppressors:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            "detekt-core/src/main/kotlin/io/gitlab/arturbosch/detekt/core/suppressors/**/*",
+          ]

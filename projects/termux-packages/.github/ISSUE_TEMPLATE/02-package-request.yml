@@ -1,0 +1,40 @@
+name: "Package request"
+description: "Request a new package"
+title: "[Package]: "
+labels: ["package request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use search (`pkg search <name>`) to check whether package is already available. If package does not exist in our repositories, fill the form below to request it.
+
+        Package requests are recommendational and are served at low priority. There no guarantee that package will be added at all, for example if it violates our [Packaging Policy](https://github.com/termux/termux-packages/blob/master/CONTRIBUTING.md#packaging-policy) or doesn't seem to have obvious practical use.
+  - type: textarea
+    attributes:
+      label: Why is it worth to add this package?
+      description: Provide us a detailed explanation how do you plan to use the requested package and why it would be a nice addition to the Termux repository.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Home page URL
+  - type: input
+    attributes:
+      label: Source code URL
+      placeholder: Link to Git or source archive
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Packaging policy acknowledgement
+      description: We reject packages that are used for Hacking or fall under certain other conditions described in [Packaging Policy](https://github.com/termux/termux-packages/blob/master/CONTRIBUTING.md#packaging-policy). Please READ this policy document!
+      options:
+        - label: I certify that I have read [Termux Packaging Policy](https://github.com/termux/termux-packages/blob/master/CONTRIBUTING.md#packaging-policy) and understand that my request will be denied in case of violation.
+          required: true
+  - type: textarea
+    attributes:
+      label: Additional information
+      description: |
+        Have you tried to compile it on device? If it did not work then provide the error you ran into. Otherwise please share build steps and any patches that you had to apply.
+
+        Does your package have special device requirements such as root permissions, custom kernel or even additional hardware? If yes, then list all details here.

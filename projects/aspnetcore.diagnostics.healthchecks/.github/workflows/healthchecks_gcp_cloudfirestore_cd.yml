@@ -1,0 +1,16 @@
+name: HealthChecks Gcp.CloudFirestore CD
+
+on:
+  push:
+    tags:
+      - release-gcp_cloudfirestore-*
+      - release-all-*
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable_cd_workflow.yml
+    secrets: inherit
+    with:
+      BUILD_CONFIG: Release
+      PROJECT_PATH: ./src/HealthChecks.Gcp.CloudFirestore/HealthChecks.Gcp.CloudFirestore.csproj
+      PACKAGE_NAME: AspNetCore.HealthChecks.Gcp.CloudFirestore

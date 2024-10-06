@@ -1,0 +1,37 @@
+# This workflow will regenerate the manifests, commit&push them on a PR labeled with `renovate/auto-regenerate`.
+# It's to make sure that Renovate-created PRs that update kustomize dependencies also update the manifests.
+name: Regenerate on deps bump
+
+on:
+  pull_request:
+    types:
+      - labeled
+
+jobs:
+  regenerate:
+    timeout-minutes: ${{ fromJSON(vars.GHA_DEFAULT_TIMEOUT) }}
+    if: contains(github.event.*.labels.*.name, 'renovate/auto-regenerate')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: setup golang
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: regenerate
+        run: make manifests
+
+      - name: commit and push (if changes detected)
+        env:
+          GITHUB_TOKEN: ${{ secrets.K8S_TEAM_BOT_GH_PAT }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@users.noreply.github.com"
+          git add ./test/e2e/manifests
+          git diff-index --quiet HEAD || \
+          git commit -m "chore: regenerate manifests" && \
+          git push origin ${{ github.event.pull_request.head.ref }}

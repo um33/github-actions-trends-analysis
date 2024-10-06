@@ -1,0 +1,21 @@
+Please answer these questions before submitting your issue.
+
+1. What did you do? If possible, provide a simple script for reproducing the error.
+
+
+
+2. What did you expect to see?
+
+
+
+3. What did you see instead?
+
+
+
+4. What version of Swoole are you using (show your `php --ri swoole`)?
+
+
+
+5. What is your machine environment used (show your `uname -a` & `php -v` & `gcc -v`) ?
+
+

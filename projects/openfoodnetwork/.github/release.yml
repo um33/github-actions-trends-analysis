@@ -1,0 +1,37 @@
+changelog:
+  # Categorise according to what an instance manager needs to know
+  categories:
+    # Add the right label if anything appears in here.
+    # Then re-generate the release notes.
+    - title: "❓❓❓ Uncategorised ❓❓❓"
+      labels:
+        - '*'
+      exclude:
+        labels:
+          - api changes
+          - dependencies
+          - feature toggled
+          - technical changes only
+          - user facing changes
+
+    # Posted in advance for #instance-managers
+    - title: "User-facing changes 👀"
+      labels:
+        - user facing changes
+
+    - title: "API changes ⚠️"
+      labels:
+        - api changes
+
+    - title: "Experimental features for testing 🚧" # may be tested by instance managers
+      labels:
+        - feature toggled
+
+    # Instance managers ignore below
+    - title: "Technical changes 🛠️"
+      labels:
+        - technical changes only
+
+    - title: "Dependencies 📦"
+      labels:
+        - dependencies

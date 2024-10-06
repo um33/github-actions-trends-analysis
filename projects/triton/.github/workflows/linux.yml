@@ -1,0 +1,87 @@
+name: Tests on Linux
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+        boost-interface: ['ON', 'OFF']
+        capstone-version: ['5.0.1', '4.0.2']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade pip version
+        run: |
+          python -m pip install -U pip
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install python-setuptools libboost-dev libgmp-dev
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: "14.0"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Install Z3
+        run: |
+          sudo apt-get install libz3-dev
+          python -m pip install z3-solver
+          python -m pip install importlib-resources
+
+      - name: Install Ninja
+        run: |
+          sudo apt-get install ninja-build
+
+      - name: Install Meson
+        run: |
+          python -m pip install meson
+
+      - name: Install Bitwuzla
+        run: |
+          git clone https://github.com/bitwuzla/bitwuzla.git
+          cd bitwuzla
+          git checkout -b 0.2.0 0.2.0
+          python ./configure.py --shared
+          cd build
+          sudo ninja install
+          sudo ldconfig
+          cd ..
+
+      - name: Install Capstone
+        run: |
+          wget https://github.com/aquynh/capstone/archive/${{ matrix.capstone-version }}.tar.gz
+          tar -xf ./${{ matrix.capstone-version }}.tar.gz
+          cd ./capstone-${{ matrix.capstone-version }}
+          bash ./make.sh
+          sudo make install
+          cd ../
+
+      - name: Install Unicorn
+        run: |
+          python -m pip install unicorn==2.0.0
+
+      - name: Install LIEF
+        run: |
+          python -m pip install lief
+
+      - name: Compile Triton
+        run: |
+          mkdir ./build
+          cd ./build
+          cmake -DZ3_INTERFACE=ON -DBITWUZLA_INTERFACE=ON -DBITWUZLA_INCLUDE_DIRS=/usr/local/include -DBITWUZLA_LIBRARIES=/usr/local/lib/x86_64-linux-gnu/libbitwuzla.so -DLLVM_INTERFACE=ON -DCMAKE_PREFIX_PATH=${{env.LLVM_PATH}} -DBOOST_INTERFACE=${{ matrix.boost-interface }} ..
+          sudo make -j3 install
+
+      - name: Unittests
+        run: |
+          ctest --test-dir build --output-on-failure

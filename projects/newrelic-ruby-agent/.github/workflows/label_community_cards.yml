@@ -1,0 +1,29 @@
+name: Label community issues and pr
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  Check_contributor_handle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label community issue
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # tag v6.4.1
+        with:
+         script: |
+           github.rest.issues.addLabels({
+             issue_number: context.issue.number,
+             owner: context.repo.owner,
+             repo: context.repo.repo,
+             labels: ['community']
+           })
+        if: |
+          github.event.issue.user.login != 'fallwith' && github.event.issue.user.login != 'kaylareopelle' && github.event.issue.user.login != 'tannalynn' && github.event.issue.user.login != 'kford-newrelic' && github.event.issue.user.login != 'elucus' && github.event.issue.user.login != 'hannahramadan' &&
+          github.event.pull_request.user.login != 'fallwith' && github.event.pull_request.user.login != 'kaylareopelle' && github.event.pull_request.user.login != 'tannalynn' && github.event.pull_request.user.login != 'kford-newrelic' && github.event.pull_request.user.login != 'elucus' && github.event.pull_request.user.login != 'hannahramadan'

@@ -1,0 +1,28 @@
+name: Cleanup staging deploy
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v3.3.0
+        with:
+          persist-credentials: false
+
+      - name: Auth G Cloud
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_NODEJS_INFRASTRUCTURE }}'
+
+      - name: Setup G Cloud
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Remove from G Cloud Storage
+        run: gsutil -m rm -f gs://staging.nodejs.dev/${{ github.event.pull_request.number }}/** || true

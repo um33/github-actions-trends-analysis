@@ -1,0 +1,410 @@
+on:
+  push:
+    branches: [main, release]
+  pull_request:
+    types: [unlabeled, opened, synchronize, reopened]
+  merge_group:
+
+name: CI
+
+# Cancel previous workflows if they are the same workflow on same ref (branch/tags)
+# with the same event (push/pull_request) even they are in progress.
+# This setting will help reduce the number of duplicated workflows.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_ARGS: --no-default-features --features stdlib,zlib,importlib,encodings,ssl,jit
+  # Skip additional tests on Windows. They are checked on Linux and MacOS.
+  WINDOWS_SKIPS: >-
+    test_glob
+    test_importlib
+    test_io
+    test_os
+    test_pathlib
+    test_posixpath
+    test_shutil
+    test_venv
+  # configparser: https://github.com/RustPython/RustPython/issues/4995#issuecomment-1582397417
+  # socketserver: seems related to configparser crash.
+  MACOS_SKIPS: >-
+    test_configparser
+    test_socketserver
+  # PLATFORM_INDEPENDENT_TESTS are tests that do not depend on the underlying OS. They are currently
+  # only run on Linux to speed up the CI.
+  PLATFORM_INDEPENDENT_TESTS: >-
+    test_argparse
+    test_array
+    test_asyncgen
+    test_binop
+    test_bisect
+    test_bool
+    test_bytes
+    test_call
+    test_class
+    test_cmath
+    test_collections
+    test_complex
+    test_contains
+    test_copy
+    test_dataclasses
+    test_decimal
+    test_decorators
+    test_defaultdict
+    test_deque
+    test_dict
+    test_dictcomps
+    test_dictviews
+    test_dis
+    test_enumerate
+    test_exception_variations
+    test_exceptions
+    test_float
+    test_format
+    test_fractions
+    test_genericalias
+    test_genericclass
+    test_grammar
+    test_range
+    test_index
+    test_int
+    test_int_literal
+    test_isinstance
+    test_iter
+    test_iterlen
+    test_itertools
+    test_json
+    test_keyword
+    test_keywordonlyarg
+    test_list
+    test_long
+    test_longexp
+    test_math
+    test_operator
+    test_ordered_dict
+    test_pow
+    test_raise
+    test_richcmp
+    test_scope
+    test_set
+    test_slice
+    test_sort
+    test_string
+    test_string_literals
+    test_strtod
+    test_structseq
+    test_subclassinit
+    test_super
+    test_syntax
+    test_tuple
+    test_types
+    test_unary
+    test_unicode
+    test_unpack
+    test_weakref
+    test_yield_from
+  # Python version targeted by the CI.
+  PYTHON_VERSION: "3.12.3"
+
+jobs:
+  rust_tests:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    env:
+      RUST_BACKTRACE: full
+    name: Run rust tests
+    runs-on:  ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Set up the Windows environment
+        shell: bash
+        run: |
+          cargo install --target-dir=target -v cargo-vcpkg
+          cargo vcpkg -v build
+        if: runner.os == 'Windows'
+      - name: Set up the Mac environment
+        run: brew install autoconf automake libtool
+        if: runner.os == 'macOS'
+
+      - name: run clippy
+        run: cargo clippy ${{ env.CARGO_ARGS }} --workspace  --exclude rustpython_wasm -- -Dwarnings
+
+      - name: run rust tests
+        run: cargo test --workspace --exclude rustpython_wasm --verbose --features threading ${{ env.CARGO_ARGS }}
+        if: runner.os != 'macOS'
+      # temp skip ssl linking for Mac to avoid CI failure
+      - name: run rust tests (MacOS no ssl)
+        run: cargo test --workspace --exclude rustpython_wasm --verbose --no-default-features --features threading,stdlib,zlib,importlib,encodings,jit
+        if: runner.os == 'macOS'
+
+      - name: check compilation without threading
+        run: cargo check ${{ env.CARGO_ARGS }}
+
+      - name: prepare AppleSilicon build
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-apple-darwin
+        if: runner.os == 'macOS'
+      - name: Check compilation for Apple Silicon
+        run: cargo check --target aarch64-apple-darwin
+        if: runner.os == 'macOS'
+      - name: prepare iOS build
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-apple-ios
+        if: runner.os == 'macOS'
+      - name: Check compilation for iOS
+        run: cargo check --target aarch64-apple-ios
+        if: runner.os == 'macOS'
+
+  exotic_targets:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    name: Ensure compilation on various targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: i686-unknown-linux-gnu
+
+      - name: Install gcc-multilib and musl-tools
+        run: sudo apt-get update && sudo apt-get install gcc-multilib musl-tools
+      - name: Check compilation for x86 32bit
+        run: cargo check --target i686-unknown-linux-gnu
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-linux-android
+
+      - name: Check compilation for android
+        run: cargo check --target aarch64-linux-android
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install gcc-aarch64-linux-gnu
+        run: sudo apt install gcc-aarch64-linux-gnu
+      - name: Check compilation for aarch64 linux gnu
+        run: cargo check --target aarch64-unknown-linux-gnu
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: i686-unknown-linux-musl
+
+      - name: Check compilation for musl
+        run: cargo check --target i686-unknown-linux-musl
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-unknown-freebsd
+
+      - name: Check compilation for freebsd
+        run: cargo check --target x86_64-unknown-freebsd
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Check compilation for wasm32
+        run: cargo check --target wasm32-unknown-unknown --no-default-features
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-unknown-freebsd
+
+      - name: Check compilation for freeBSD
+        run: cargo check --target x86_64-unknown-freebsd
+
+      - name: Prepare repository for redox compilation
+        run: bash scripts/redox/uncomment-cargo.sh
+      - name: Check compilation for Redox
+        uses: coolreader18/redoxer-action@v1
+        with:
+          command: check
+
+  snippets_cpython:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    env:
+      RUST_BACKTRACE: full
+    name: Run snippets and cpython tests
+    runs-on:  ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up the Windows environment
+        shell: bash
+        run: |
+          cargo install cargo-vcpkg
+          cargo vcpkg build
+        if: runner.os == 'Windows'
+      - name: Set up the Mac environment
+        run: brew install autoconf automake libtool openssl@3
+        if: runner.os == 'macOS'
+
+      - name: build rustpython
+        run: cargo build --release --verbose --features=threading ${{ env.CARGO_ARGS }}
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: run snippets
+        run: python -m pip install -r requirements.txt && pytest -v
+        working-directory: ./extra_tests
+      - if: runner.os == 'Linux'
+        name: run cpython platform-independent tests
+        run:
+          target/release/rustpython -m test -j 1 -u all --slowest --fail-env-changed -v ${{ env.PLATFORM_INDEPENDENT_TESTS }}
+      - if: runner.os == 'Linux'
+        name: run cpython platform-dependent tests (Linux)
+        run: target/release/rustpython -m test -j 1 -u all --slowest --fail-env-changed -v -x ${{ env.PLATFORM_INDEPENDENT_TESTS }}
+      - if: runner.os == 'macOS'
+        name: run cpython platform-dependent tests (MacOS)
+        run: target/release/rustpython -m test -j 1 all --slowest --fail-env-changed -v -x ${{ env.PLATFORM_INDEPENDENT_TESTS }} ${{ env.MACOS_SKIPS }}
+      - if: runner.os == 'Windows'
+        name: run cpython platform-dependent tests (windows partial - fixme)
+        run:
+          target/release/rustpython -m test -j 1 all --slowest --fail-env-changed -v -x ${{ env.PLATFORM_INDEPENDENT_TESTS }} ${{ env.WINDOWS_SKIPS }}
+      - if: runner.os != 'Windows'
+        name: check that --install-pip succeeds
+        run: |
+          mkdir site-packages
+          target/release/rustpython --install-pip ensurepip --user
+      - if: runner.os != 'Windows'
+        name: Check that ensurepip succeeds.
+        run: |
+          target/release/rustpython -m ensurepip
+          target/release/rustpython -c "import pip"
+      - if: runner.os != 'Windows'
+        name: Check if pip inside venv is functional
+        run: |
+          target/release/rustpython -m venv testvenv
+          testvenv/bin/rustpython -m pip install wheel
+      - name: Check whats_left is not broken
+        run: python -I whats_left.py
+
+  lint:
+    name: Check Rust code with rustfmt and clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+            components: rustfmt, clippy
+      - name: run rustfmt
+        run: cargo fmt --check
+      - name: run clippy on wasm
+        run: cargo clippy --manifest-path=wasm/lib/Cargo.toml -- -Dwarnings
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: install ruff
+        run: python -m pip install ruff==0.0.291 # astral-sh/ruff#7778
+      - name: run python lint
+        run: ruff extra_tests wasm examples  --exclude='./.*',./Lib,./vm/Lib,./benches/ --select=E9,F63,F7,F82 --show-source
+      - name: install prettier
+        run: yarn global add prettier && echo "$(yarn global bin)" >>$GITHUB_PATH
+      - name: check wasm code with prettier
+        # prettier doesn't handle ignore files very well: https://github.com/prettier/prettier/issues/8506
+        run: cd wasm && git ls-files -z | xargs -0 prettier --check -u
+
+  miri:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    name: Run tests under miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: nightly
+            components: miri
+
+      - uses: Swatinem/rust-cache@v2
+      - name: Run tests under miri
+        # miri-ignore-leaks because the type-object circular reference means that there will always be
+        # a memory leak, at least until we have proper cyclic gc
+        run: MIRIFLAGS='-Zmiri-ignore-leaks' cargo +nightly miri test -p rustpython-vm -- miri_test
+
+  wasm:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    name: Check the WASM package and demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+      - name: install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: install geckodriver
+        run: |
+          wget https://github.com/mozilla/geckodriver/releases/download/v0.30.0/geckodriver-v0.30.0-linux64.tar.gz
+          mkdir geckodriver
+          tar -xzf geckodriver-v0.30.0-linux64.tar.gz -C geckodriver
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install -r requirements.txt
+        working-directory: ./wasm/tests
+      - uses: actions/setup-node@v3
+      - name: run test
+        run: |
+          export PATH=$PATH:`pwd`/../../geckodriver
+          npm install
+          npm run test
+        env:
+          NODE_OPTIONS: "--openssl-legacy-provider"
+        working-directory: ./wasm/demo
+      - name: build notebook demo
+        if: github.ref == 'refs/heads/release'
+        run: |
+          npm install
+          npm run dist
+          mv dist ../demo/dist/notebook
+        env:
+          NODE_OPTIONS: "--openssl-legacy-provider"
+        working-directory: ./wasm/notebook
+      - name: Deploy demo to Github Pages
+        if: success() && github.ref == 'refs/heads/release'
+        uses: peaceiris/actions-gh-pages@v2
+        env:
+          ACTIONS_DEPLOY_KEY: ${{ secrets.ACTIONS_DEMO_DEPLOY_KEY }}
+          PUBLISH_DIR: ./wasm/demo/dist
+          EXTERNAL_REPOSITORY: RustPython/demo
+          PUBLISH_BRANCH: master
+
+  wasm-wasi:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:ci') }}
+    name: Run snippets and cpython tests on wasm-wasi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-wasi
+
+      - uses: Swatinem/rust-cache@v2
+      - name: Setup Wasmer
+        uses: wasmerio/setup-wasmer@v2
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install clang -y
+      - name: build rustpython
+        run: cargo build --release --target wasm32-wasi --features freeze-stdlib,stdlib --verbose
+      - name: run snippets
+        run: wasmer run --dir `pwd` target/wasm32-wasi/release/rustpython.wasm -- `pwd`/extra_tests/snippets/stdlib_random.py

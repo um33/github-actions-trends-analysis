@@ -1,0 +1,36 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 7 * * 1" # Mondays at 7:00 AM
+
+permissions: read-all
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-22.04
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@3ab4101902695724f9365a384f86c1074d94e18c
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@3ab4101902695724f9365a384f86c1074d94e18c
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@3ab4101902695724f9365a384f86c1074d94e18c

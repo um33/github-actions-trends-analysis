@@ -1,0 +1,98 @@
+name: Check for repro
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - labeled
+  issue_comment:
+    types:
+      - created
+      - edited
+
+jobs:
+  check-repro:
+    runs-on: ubuntu-latest
+    if: (github.event.action == 'labeled' && github.event.label.name == 'needs repro') || github.event.action != 'labeled'
+    steps:
+      - uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const user = context.payload.comment
+              ? context.payload.comment.user.login
+              : context.payload.issue.user.login;
+            const body = context.payload.comment
+              ? context.payload.comment.body
+              : context.payload.issue.body;
+
+            const regex = new RegExp(
+              `https?:\\/\\/((github\\.com\\/${user}\\/[^/]+\\/?[\\s\\n]+)|(snack\\.expo\\.dev\\/.+)|(www\\.typescriptlang\\.org\\/play\\?.+))`,
+              'gm'
+            );
+
+            if (context.payload.action != 'labeled' && regex.test(body)) {
+              await github.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['repro provided'],
+              });
+
+              try {
+                await github.issues.removeLabel({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: 'needs repro',
+                });
+              } catch (error) {
+                if (!/Label does not exist/.test(error.message)) {
+                  throw error;
+                }
+              }
+            } else {
+              if (context.eventName !== 'issues') {
+                return;
+              }
+
+              const body = `Hey @${user}! Thanks for opening the issue. It seems that the issue doesn't contain a link to a repro.
+
+              **The best way to get attention to your issue is to provide an easy way for a developer to reproduce the issue.**
+
+              You can provide a repro using any of the following:
+
+              - [Expo Snack](https://snack.expo.io)
+              - [TypeScript Playground](https://www.typescriptlang.org/play)
+              - GitHub repo under your username
+
+              A snack link is preferred since it's the easiest way to both create and share a repro. If it's not possible to create a repro using a snack, link to a GitHub repo under your username is a good alternative. **Don't link to a branch or specific file etc.** as it won't be detected.
+
+              Try to keep the repro as small as possible by narrowing down the minimal amount of code needed to reproduce the issue. **Don't link to your entire project or a project containing code unrelated to the issue.** See ["How to create a Minimal, Reproducible Example"](https://stackoverflow.com/help/minimal-reproducible-example) for more information.
+
+              You can edit your original issue to include a link to the repro, or leave it as a comment. **The issue will be closed automatically after a while** if you don't provide a repro.`
+
+              const comments = await github.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+
+              if (comments.data.some((comment) => comment.body === body)) {
+                return;
+              }
+
+              await github.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+
+              await github.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['needs repro'],
+              });
+            }

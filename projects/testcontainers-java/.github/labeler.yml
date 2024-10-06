@@ -1,0 +1,234 @@
+"area/docker-compose":
+  - changed-files:
+    - any-glob-to-any-file:
+      - core/src/main/java/org/testcontainers/containers/ComposeContainer.java
+      - core/src/main/java/org/testcontainers/containers/ComposeDelegate.java
+      - core/src/main/java/org/testcontainers/containers/DockerComposeContainer.java
+      - core/src/main/java/org/testcontainers/containers/DockerComposeFiles.java
+"github_actions":
+  - changed-files:
+    - any-glob-to-any-file:
+      - .github/workflows/*
+"gradle-wrapper":
+  - changed-files:
+    - any-glob-to-any-file:
+      - gradle/wrapper/*
+      - gradlew
+      - gradlew.bat
+"modules/activemq":
+  - changed-files:
+      - any-glob-to-any-file:
+          - modules/activemq/**/*
+"modules/azure":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/azure/**/*
+"modules/cassandra":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/cassandra/**/*
+"modules/chromadb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/chromadb/**/*
+"modules/clickhouse":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/clickhouse/**/*
+"modules/cockroachdb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/cockroachdb/**/*
+"modules/consul":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/consul/**/*
+"modules/couchbase":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/couchbase/**/*
+"modules/cratedb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/cratedb/**/*
+"modules/db2":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/db2/**/*
+"modules/dynalite":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/dynalite/**/*
+"modules/elasticsearch":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/elasticsearch/**/*
+"modules/gcloud":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/gcloud/**/*
+"modules/hivemq":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/hivemq/**/*
+"modules/influx":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/influxdb/**/*
+"modules/jdbc":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/jdbc/**/*
+"modules/jupiter":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/junit-jupiter/**/*
+"modules/k3s":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/k3s/**/*
+"modules/k6":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/k6/**/*
+"modules/kafka":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/kafka/**/*
+"modules/localstack":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/localstack/**/*
+"modules/mariadb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/mariadb/**/*
+"modules/milvus":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/milvus/**/*
+"modules/minio":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/minio/**/*
+"modules/mockserver":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/mockserver/**/*
+"modules/mongodb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/mongodb/**/*
+"modules/sql-server":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/mssqlserver/**/*
+"modules/mysql":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/mysql/**/*
+"modules/neo4j":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/neo4j/**/*
+"modules/nginx":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/nginx/**/*
+"modules/oceanbase":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/oceanbase/**/*
+"modules/ollama":
+  - changed-files:
+      - any-glob-to-any-file:
+          - modules/ollama/**/*
+"modules/openfga":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/openfga/**/*
+"modules/oracle":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/oracle-free/**/*
+      - modules/oracle-xe/**/*
+"modules/orientdb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/orientdb/**/*
+"modules/postgres":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/postgresql/**/*
+"modules/presto":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/presto/**/*
+"modules/pulsar":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/pulsar/**/*
+"modules/qdrant":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/qdrant/**/*
+"modules/questdb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/questdb/**/*
+"modules/r2dbc":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/r2dbc/**/*
+"modules/rabbitmq":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/rabbitmq/**/*
+"modules/redpanda":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/redpanda/**/*
+"modules/selenium":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/selenium/**/*
+"modules/solace":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/solace/**/*
+"modules/solr":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/solr/**/*
+"modules/spock":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/spock/**/*
+"modules/tidb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/tidb/**/*
+"modules/toxiproxy":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/toxiproxy/**/*
+"modules/trino":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/trino/**/*
+"modules/vault":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/vault/**/*
+"modules/weaviate":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/weaviate/**/*
+"modules/yugabytedb":
+  - changed-files:
+    - any-glob-to-any-file:
+      - modules/yugabytedb/**/*
+"type/docs":
+  - changed-files:
+    - any-glob-to-any-file:
+      - docs/**/*.md

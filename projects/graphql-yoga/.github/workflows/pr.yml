@@ -1,0 +1,42 @@
+name: pr
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  alpha:
+    uses: the-guild-org/shared-config/.github/workflows/release-snapshot.yml@main
+    if: ${{ github.event.pull_request.title != 'Upcoming Release Changes' }}
+    with:
+      npmTag: alpha
+      buildScript: build
+      nodeVersion: 20
+      packageManager: pnpm
+    secrets:
+      githubToken: ${{ secrets.GITHUB_TOKEN }}
+      npmToken: ${{ secrets.NODE_AUTH_TOKEN }}
+
+  release-candidate:
+    uses: the-guild-org/shared-config/.github/workflows/release-snapshot.yml@main
+    if: ${{ github.event.pull_request.title != 'Upcoming Release Changes' }}
+    with:
+      npmTag: rc
+      restoreDeletedChangesets: false
+      buildScript: build
+      nodeVersion: 20
+      packageManager: pnpm
+    secrets:
+      githubToken: ${{ secrets.GITHUB_TOKEN }}
+      npmToken: ${{ secrets.NODE_AUTH_TOKEN }}
+
+  dependencies:
+    uses: the-guild-org/shared-config/.github/workflows/changesets-dependencies.yaml@main
+    if: ${{ github.event.pull_request.title != 'Upcoming Release Changes' }}
+    secrets:
+      githubToken: ${{ secrets.GUILD_BOT_TOKEN }}
+    with:
+      installDependencies: true
+      packageManager: pnpm
+      nodeVersion: 20

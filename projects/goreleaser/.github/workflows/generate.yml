@@ -1,0 +1,46 @@
+name: generate
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v4
+        with:
+          go-version: stable
+          cache: true
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: "go install mvdan.cc/gofumpt@latest"
+      - run: "go install github.com/santhosh-tekuri/jsonschema/cmd/jv@latest"
+      - run: task docs:releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/install-nix-action@v26
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task docs:generate
+      - run: task schema:generate
+      - run: task nix:licenses:generate
+      - run: task nix:flake:update
+      - run: task nix:flake:update-vendor
+      - run: task schema:validate
+      - uses: stefanzweifel/git-auto-commit-action@8621497c8c39c72f3e2a999a26b4ca1b5058a842 # v5
+        with:
+          commit_message: "chore: auto-update generated files"
+          branch: main
+          commit_user_name: actions-user
+          commit_user_email: actions@github.com
+          commit_author: actions-user <actions@github.com>

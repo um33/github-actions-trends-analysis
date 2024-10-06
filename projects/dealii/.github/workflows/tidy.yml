@@ -1,0 +1,52 @@
+name: tidy
+
+on:
+  push:
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    - ready_for_review
+
+concurrency:
+  group: ${ {github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+
+jobs:
+  tidy:
+    name: tidy
+    runs-on: [ubuntu-22.04]
+
+    #
+    # The following condition only runs the workflow on 'push' or if the
+    # 'pull_request' is not a draft. This is only useful for hackathons or
+    # other situations when the CI is massively overburdened with pull
+    # requests.
+    #
+    # if: ${{ github.event_name == 'push' || !github.event.pull_request.draft }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: modules
+      run: |
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository -y ppa:ginggs/deal.ii-9.4.0-backports
+        sudo apt-get update
+        sudo apt-get install -yq --no-install-recommends \
+            clang-12 \
+            clang-tidy-12 \
+            numdiff \
+            libboost-all-dev \
+            libcgal-dev \
+            libp4est-dev \
+            trilinos-all-dev \
+            petsc-dev \
+            libmetis-dev \
+            libhdf5-mpi-dev
+    - name: tidy
+      run: |
+        mkdir build
+        cd build
+        export PATH=/usr/lib/llvm-12/share/clang/:$PATH
+        ../contrib/utilities/run_clang_tidy.sh ..

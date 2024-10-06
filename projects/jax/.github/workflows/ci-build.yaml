@@ -1,0 +1,179 @@
+name: CI
+
+# We test all supported Python versions as follows:
+# - 3.9  : Documentation build
+# - 3.9  : Part of Matrix with NumPy dispatch
+# - 3.10 : Part of Matrix
+# - 3.11 : Part of Matrix
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the main branch
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read  # to fetch code
+  actions: write  # to cancel previous workflows
+
+jobs:
+  lint_and_typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel previous
+        uses: styfle/cancel-workflow-action@85880fa0301c86cca9da44039ee3bb12d3bedbfa # ratchet: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+        if: ${{github.ref != 'refs/heads/main'}}
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # ratchet:actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # ratchet:actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # ratchet: pre-commit/action@v3.0.1
+
+  build:
+    name: "build ${{ matrix.name-prefix }} (py ${{ matrix.python-version }} on ${{ matrix.os }}, x64=${{ matrix.enable-x64}})"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        # Test the oldest and newest supported Python versions here.
+        include:
+          - name-prefix: "with 3.9"
+            python-version: "3.9"
+            os: ubuntu-20.04-16core
+            enable-x64: 1
+            prng-upgrade: 1
+            num_generated_cases: 1
+          - name-prefix: "with 3.12"
+            python-version: "3.12"
+            os: ubuntu-20.04-16core
+            enable-x64: 0
+            prng-upgrade: 0
+            num_generated_cases: 1
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@85880fa0301c86cca9da44039ee3bb12d3bedbfa # ratchet: styfle/cancel-workflow-action@0.12.1
+      with:
+        access_token: ${{ github.token }}
+      if: ${{github.ref != 'refs/heads/main'}}
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # ratchet:actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # ratchet:actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Get pip cache dir
+      id: pip-cache
+      run: |
+        python -m pip install --upgrade pip wheel
+        echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+    - name: pip cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # ratchet: actions/cache@v4
+      with:
+        path: ${{ steps.pip-cache.outputs.dir }}
+        key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('**/setup.py', '**/requirements.txt', '**/test-requirements.txt') }}
+    - name: Install dependencies
+      run: |
+        pip install .[minimum-jaxlib] -r build/test-requirements.txt
+
+    - name: Run tests
+      env:
+        JAX_NUM_GENERATED_CASES: ${{ matrix.num_generated_cases }}
+        JAX_ENABLE_X64: ${{ matrix.enable-x64 }}
+        JAX_ENABLE_CUSTOM_PRNG: ${{ matrix.prng-upgrade }}
+        JAX_THREEFRY_PARTITIONABLE: ${{ matrix.prng-upgrade }}
+        JAX_ENABLE_CHECKS: true
+        JAX_SKIP_SLOW_TESTS: true
+        PY_COLORS: 1
+      run: |
+        pip install -e .
+        echo "JAX_NUM_GENERATED_CASES=$JAX_NUM_GENERATED_CASES"
+        echo "JAX_ENABLE_X64=$JAX_ENABLE_X64"
+        echo "JAX_ENABLE_CUSTOM_PRNG=$JAX_ENABLE_CUSTOM_PRNG"
+        echo "JAX_THREEFRY_PARTITIONABLE=$JAX_THREEFRY_PARTITIONABLE"
+        echo "JAX_ENABLE_CHECKS=$JAX_ENABLE_CHECKS"
+        echo "JAX_SKIP_SLOW_TESTS=$JAX_SKIP_SLOW_TESTS"
+        pytest -n auto --tb=short --maxfail=20 tests examples
+
+
+  documentation:
+    name: Documentation - test code snippets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: [3.9]
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@85880fa0301c86cca9da44039ee3bb12d3bedbfa # ratchet: styfle/cancel-workflow-action@0.12.1
+      with:
+        access_token: ${{ github.token }}
+      if: ${{github.ref != 'refs/heads/main'}}
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # ratchet:actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # ratchet:actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Get pip cache dir
+      id: pip-cache
+      run: |
+        python -m pip install --upgrade pip wheel
+        echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+    - name: pip cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # ratchet: actions/cache@v4
+      with:
+        path: ${{ steps.pip-cache.outputs.dir }}
+        key: ${{ runner.os }}-pip-docs-${{ hashFiles('**/setup.py', '**/requirements.txt', '**/test-requirements.txt') }}
+    - name: Install dependencies
+      run: |
+        pip install -r docs/requirements.txt
+    - name: Test documentation
+      env:
+        XLA_FLAGS: "--xla_force_host_platform_device_count=8"
+        JAX_ARRAY: 1
+        PY_COLORS: 1
+      run: |
+        pytest -n auto --tb=short docs
+        pytest -n auto --tb=short --doctest-modules jax --ignore=jax/config.py --ignore=jax/experimental/jax2tf --ignore=jax/_src/lib/mlir --ignore=jax/_src/lib/triton.py --ignore=jax/interpreters/mlir.py --ignore=jax/_src/iree.py --ignore=jax/experimental/array_serialization --ignore=jax/collect_profile.py --ignore=jax/_src/tpu_custom_call.py --ignore=jax/experimental/mosaic --ignore=jax/experimental/pallas --ignore=jax/_src/pallas
+
+
+  documentation_render:
+    name: Documentation - render documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: [3.9]
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@85880fa0301c86cca9da44039ee3bb12d3bedbfa # ratchet: styfle/cancel-workflow-action@0.12.1
+      with:
+        access_token: ${{ github.token }}
+      if: ${{github.ref != 'refs/heads/main'}}
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # ratchet:actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # ratchet:actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Get pip cache dir
+      id: pip-cache
+      run: |
+        python -m pip install --upgrade pip wheel
+        echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+    - name: pip cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # ratchet: actions/cache@v4
+      with:
+        path: ${{ steps.pip-cache.outputs.dir }}
+        key: ${{ runner.os }}-pip-docs-${{ hashFiles('**/setup.py', '**/requirements.txt', '**/test-requirements.txt') }}
+    - name: Install dependencies
+      run: |
+        pip install -r docs/requirements.txt
+    - name: Render documentation
+      run: |
+        sphinx-build --color -W --keep-going -b html -D nb_execution_mode=off docs docs/build/html

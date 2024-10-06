@@ -1,0 +1,188 @@
+name: Partial Tests Workflow
+
+on:
+  workflow_call:
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jpetrucciani/mypy-check@master
+        with:
+          mypy_flags:  "--ignore-missing-imports --implicit-optional --no-namespace-packages --exclude (taipy/templates/|generate_pyi.py|tools) --follow-imports skip --disable-error-code import-untyped"
+
+      - uses: chartboost/ruff-action@v1
+  tests:
+    needs: linter
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            cli:
+              - 'taipy/_cli/**'
+            config:
+              - 'taipy/config/**'
+            core:
+              - 'taipy/core/**'
+            gui:
+              - 'taipy/gui/**'
+              - 'frontend/taipy-gui/**'
+            gui-core:
+              - 'taipy/gui_core/**'
+            logger:
+              - 'taipy/logger/**'
+            rest:
+              - 'taipy/rest/**'
+            templates:
+              - 'taipy/templates/**'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python-version}}
+      - name: Install Setuptools and wheel
+        run: pip install --upgrade setuptools wheel
+
+      - name: Install pipenv
+        run: pip install --upgrade pipenv
+
+      - name: Install Dependencies
+        run: pipenv install --dev --python=${{ matrix.python-version }}
+
+      - name: Setup LibMagic (MacOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install libmagic
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Frontend Bundle Build
+        if: steps.changes.outputs.gui == 'true' || steps.changes.outputs.gui-core == 'true'
+        run: pipenv run python tools/frontend/bundle_build.py
+
+      - name: Install Playwright
+        if: steps.changes.outputs.gui == 'true' || steps.changes.outputs.gui-core == 'true'
+        run: pipenv run playwright install chromium --with-deps
+
+      - name: Pytest CLI
+        if: steps.changes.outputs.cli == 'true'
+        run: pipenv run pytest tests/cli
+
+      - name: Pytest Config
+        if: steps.changes.outputs.config == 'true'
+        run: pipenv run pytest tests/config
+
+      - name: Pytest Core
+        if: steps.changes.outputs.core == 'true'
+        run: pipenv run pytest -m "not orchestrator_dispatcher and not standalone" tests/core
+
+      - name: Run GUI Test Action
+        if: steps.changes.outputs.gui == 'true'
+        uses: ./.github/actions/gui-test
+        with:
+          os: ${{ matrix.os }}
+
+      - name: Pytest GUI Core
+        if: steps.changes.outputs.gui-core == 'true'
+        run: pipenv run pytest tests/gui_core
+
+      - name: Pytest Logger
+        if: steps.changes.outputs.logger == 'true'
+        run: pipenv run pytest tests/logger
+
+      - name: Pytest Rest
+        if: steps.changes.outputs.rest == 'true'
+        run: pipenv run pytest tests/rest
+
+      - name: Pytest Templates
+        if: steps.changes.outputs.templates == 'true'
+        run: pipenv run pytest tests/templates
+
+  submit_tests:
+    needs: linter
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            core:
+              - 'taipy/core/**'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python-version}}
+
+      - name: Install pipenv
+        if: steps.changes.outputs.core == 'true'
+        run: pip install --upgrade pipenv
+
+      - name: Install Dependencies
+        if: steps.changes.outputs.core == 'true'
+        run: pipenv install --dev --python=${{ matrix.python-version }}
+
+      - name: Setup LibMagic (MacOS)
+        if: matrix.os == 'macos-latest' && steps.changes.outputs.core == 'true'
+        run: brew install libmagic
+
+      - name: Pytest Core orchestrator_dispatcher
+        if: steps.changes.outputs.core == 'true'
+        run: pipenv run pytest -m "orchestrator_dispatcher" tests/core
+
+  standalone_tests:
+    needs: linter
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            core:
+              - 'taipy/core/**'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python-version}}
+
+      - name: Install pipenv
+        if: steps.changes.outputs.core == 'true'
+        run: pip install --upgrade pipenv
+
+      - name: Install Dependencies
+        if: steps.changes.outputs.core == 'true'
+        run: pipenv install --dev --python=${{ matrix.python-version }}
+
+      - name: Setup LibMagic (MacOS)
+        if: matrix.os == 'macos-latest' && steps.changes.outputs.core == 'true'
+        run: brew install libmagic
+
+      - name: Pytest Core standalone
+        if: steps.changes.outputs.core == 'true'
+        run: pipenv run pytest -m "standalone" tests/core

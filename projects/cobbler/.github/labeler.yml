@@ -1,0 +1,18 @@
+Documentation:
+- docs/**/*
+
+Tests:
+- tests/**/*
+- system-tests/**/*
+
+CI:
+- .github/**/*
+
+Packaging:
+- .obs/**/*
+
+API:
+- cobbler/api.py
+- cobbler/remote.py
+- cobbler/services.py
+- svc/services.py

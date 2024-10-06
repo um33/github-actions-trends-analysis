@@ -1,0 +1,70 @@
+name: test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    paths-ignore:
+      - 'web/**'
+
+jobs:
+  test:
+
+    runs-on: macos-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        android:
+          - { version: '21', arch: "x86_64" }
+          - { version: '26', arch: "x86_64" }
+          - { version: '34', arch: "x86_64" }
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4.2.1
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Checkout ACRA
+        uses: actions/checkout@v4
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/buildSrc/**/*.kt') }}
+
+      - name: load AVD from cache for API ${{ matrix.android.version }}
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: emulator-${{ matrix.android.version }}-${{ matrix.android.arch }}
+
+      - name: create and cache AVD for API ${{ matrix.android.version }}
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.android.version }}
+          arch: ${{ matrix.android.arch }}
+          target: 'google_apis'
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: run tests on API ${{ matrix.android.version }}
+        uses: Wandalen/wretry.action@v3.2.0
+        with:
+          action: reactivecircus/android-emulator-runner@v2
+          with: |
+            api-level: ${{ matrix.android.version }}
+            arch: ${{ matrix.android.arch }}
+            target: google_apis
+            force-avd-creation: false
+            emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+            disable-animations: true
+            script: ./gradlew uninstallAll connectedCheck --no-daemon

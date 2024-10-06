@@ -1,0 +1,814 @@
+---
+name: Testing
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoketest:
+    name: Smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Run minimal test set
+        run: |
+          ./autogen.sh
+          ./configure
+          make test
+
+      - if: ${{ failure() }}
+        name: Upload tests output
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests-smoketest
+          path: tests
+
+  smoketest_all_opts:
+    name: Smoke test With all options turned on
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install libraries needed for all options turned on
+        run: |
+          sudo apt-get install -y \
+            libminiupnpc-dev \
+            libnatpmp-dev \
+            libpcap-dev \
+            libcap-dev \
+            libzstd-dev
+
+      - name: Run minimal test set
+        run: |
+          ./autogen.sh
+          ./configure \
+            --enable-pthread \
+            --enable-miniupnp \
+            --enable-natpmp \
+            --enable-cap \
+            --enable-pcap \
+            --with-openssl \
+            --with-zstd \
+            CFLAGS="-O3"
+          make test
+
+  lint:
+    name: Code syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+
+      - name: Make the makefiles
+        run: |
+          ./autogen.sh
+          ./configure
+
+      - name: Install essential
+        run: |
+          sudo apt update
+          make build-dep
+
+      - name: Run the lint tools
+        run: |
+          make lint
+
+  analyse:
+    name: Code Analysers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        flags:
+          - -fsanitize=address -static-libasan
+          - -fsanitize=undefined -static-libubsan
+
+          # This option results in timeouts sending RPC requests during the
+          # test_integration_supernode.sh test when running in github actions.
+          # Disable it until more investigation can be done.
+          # - -fsanitize=leak
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Make the makefiles
+        run: |
+          ./autogen.sh
+
+          export CFLAGS="${{ matrix.flags }}"
+          export LDFLAGS="${{ matrix.flags }}"
+          ./configure
+
+      - name: Install essential
+        run: |
+          sudo apt update
+          make build-dep
+
+      - name: Run the analysis
+        run: |
+          make test
+
+      - if: ${{ failure() }}
+        name: Upload tests output
+        uses: actions/upload-artifact@v3
+        with:
+          name: "analysis${{ matrix.flags }}"
+          path: tests
+
+  test_linux:
+    name: Test Linux
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - ubuntu-20.04
+          - ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+
+      - name: Install essential
+        run: |
+          sudo apt-get update
+          sudo apt-get install build-essential
+
+      - name: generate a makefile and use it to install more packages
+        run: |
+          ./autogen.sh
+          ./configure
+          make build-dep
+        shell: bash
+
+      - name: Run the real configure step
+        run: |
+          export CFLAGS="-fprofile-arcs -ftest-coverage"
+          export LDFLAGS="--coverage"
+          ./configure
+        shell: bash
+
+      - name: Run embedded unit tests
+        run: make test.units
+        shell: bash
+
+      - if: ${{ failure() }}
+        name: Move test outputs to an arch specific location
+        shell: bash
+        run: |
+          mkdir -p tests/${{ matrix.os }}
+          mv tests/*.out tests/${{ matrix.os }}
+
+      - if: ${{ failure() }}
+        name: Upload tests output
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests-linux
+          path: tests
+
+      - name: Generate coverage reports
+        run: |
+          make gcov
+          make cover COVERAGEDIR=coverage/${{ matrix.os }}
+        shell: bash
+
+      - name: Upload gcovr report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: coverage
+
+      - name: Upload data to codecov
+        uses: codecov/codecov-action@v3
+
+  test_bsd:
+    name: Test BSD
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - name: freebsd
+            architecture: x86-64
+            version: '13.2'
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Test on ${{ matrix.os.name }}
+        uses: cross-platform-actions/action@v0.15.0
+        with:
+          operating_system: ${{ matrix.os.name }}
+          architecture: ${{ matrix.os.architecture }}
+          version: ${{ matrix.os.version }}
+          shell: bash
+          memory: 5G
+          cpu_count: 4
+          run: |
+            sudo pkg install -y \
+              autoconf \
+              automake \
+              gcc \
+              git \
+              gmake \
+              python3
+            ./autogen.sh
+            ./configure
+            gmake all
+
+  test_macos:
+    name: Test MacOS
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - macos-11
+          - macos-12
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+
+      - name: Install packages
+        run: |
+          brew install automake
+
+      - name: generate a makefile and use it to install more packages
+        run: |
+          ./autogen.sh
+          ./configure
+          make build-dep
+        shell: bash
+
+      - name: Run the real configure step
+        run: |
+          export CFLAGS="-fprofile-arcs -ftest-coverage"
+          export LDFLAGS="--coverage"
+          ./configure
+        shell: bash
+
+      - name: Run embedded unit tests
+        run: make test.units
+        shell: bash
+
+      - if: ${{ failure() }}
+        name: Move test outputs to an arch specific location
+        shell: bash
+        run: |
+          mkdir -p tests/${{ matrix.os }}
+          mv tests/*.out tests/${{ matrix.os }}
+
+      - if: ${{ failure() }}
+        name: Upload tests output
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests-macos
+          path: tests
+
+      - name: Generate coverage reports
+        run: |
+          make gcov
+          # This was working fine for tens of jobs, up until
+          # 2021-10-19T18:53+0100 and it still works fine when run from my
+          # personal github actions. The next run at 2021-10-19T19:08+0100
+          # didnt work.
+          # Assume that they changed something on the runner - I cannot debug
+          # it as I do not have a Mac.
+          #
+          # make cover COVERAGEDIR=coverage/${{ matrix.os }}
+        shell: bash
+
+      # - name: Upload gcovr report artifact
+      #  uses: actions/upload-artifact@v3
+      #  with:
+      #    name: coverage
+      #    path: coverage
+
+      - name: Upload data to codecov
+        uses: codecov/codecov-action@v3
+
+  test_windows:
+    name: Test Windows
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - windows-2019
+          - windows-2022
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Run a configure step
+        run: |
+          export CFLAGS="-fprofile-arcs -ftest-coverage"
+          export LDFLAGS="--coverage"
+          ./scripts/hack_fakeautoconf.sh
+        shell: bash
+
+      - name: Build the project
+        run: make
+        shell: bash
+
+      - name: Run embedded unit tests
+        run: make test.units
+        shell: bash
+
+      - if: ${{ failure() }}
+        name: Move test outputs to an arch specific location
+        shell: bash
+        run: |
+          mkdir -p tests/${{ matrix.os }}
+          mv tests/*.out tests/${{ matrix.os }}
+
+      - if: ${{ failure() }}
+        name: Upload tests output
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests-windows
+          path: tests
+
+      - name: Generate coverage data
+        run: |
+          make gcov
+        shell: bash
+
+      - name: Upload data to codecov
+        uses: codecov/codecov-action@v3
+
+  package_dpkg:
+    name: Package for Debian/Ubuntu
+    needs:
+      - test_linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+          - armhf
+          - i386
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install packages needed for build
+        run: |
+          sudo apt-get update
+          sudo apt-get install debhelper build-essential \
+            devscripts \
+            crossbuild-essential-${{ matrix.arch }}
+
+      - name: Hack dpkg-shlibdeps
+        run: |
+          echo '#!/bin/bash' | sudo tee /usr/bin/dpkg-shlibdeps
+
+      - name: Configure
+        # The HOST_TRIPLET line is not easily foldable
+        # yamllint disable rule:line-length
+        run: |
+          # This will warn about CC, but we cannot set CC until we run it :-S
+          HOST_TRIPLET=$(dpkg-architecture -a${{ matrix.arch }} -q DEB_HOST_GNU_TYPE)
+          ./autogen.sh
+          ./configure --host $HOST_TRIPLET
+        # yamllint enable rule:line-length
+
+      - name: Build
+        run: |
+          cd packages/debian/
+          make
+
+      - name: Upload dpkg
+        uses: actions/upload-artifact@v3
+        with:
+          name: packages-dpkg
+          path: packages/debian/*.deb
+
+  package_rpm:
+    name: Package for Redhat/RPM
+    needs:
+      - test_linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install packages needed for build
+        run: |
+          sudo apt-get install rpm
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          ./configure
+          cd packages/rpm/
+          ./configure
+
+      - name: Build
+        run: |
+          make
+          HOME=$(pwd)/../
+          cd packages/rpm/
+          make
+          cd ../../
+          mv ../rpmbuild ./
+
+      - name: Upload rpm
+        uses: actions/upload-artifact@v3
+        with:
+          name: packages-rpm
+          path: rpmbuild/RPMS/x86_64/*.rpm
+
+  package_ipk:
+    name: Package for OpenWrt
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: mips_24kc
+            sdk_ver: 22.03.3
+            sdk: https://downloads.openwrt.org/releases/22.03.3/targets/lantiq/xrx200/openwrt-sdk-22.03.3-lantiq-xrx200_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+          - name: i386_pentium4
+            sdk_ver: 22.03.3
+            sdk: https://downloads.openwrt.org/releases/22.03.3/targets/x86/generic/openwrt-sdk-22.03.3-x86-generic_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+          - name: x86_64
+            sdk_ver: 22.03.3
+            sdk: https://downloads.openwrt.org/releases/22.03.3/targets/x86/64/openwrt-sdk-22.03.3-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+
+    defaults:
+      run:
+        working-directory: openwrt
+
+    steps:
+      - name: Cache entire openwrt dir
+        id: cache-openwrt
+        uses: actions/cache@v3
+        with:
+          path: openwrt
+          key: openwrt-${{ matrix.sdk_ver }}-${{ matrix.name }}
+
+      - name: Get sdk
+        if: steps.cache-openwrt.outputs-cache-hit != 'true'
+        run: |
+          wget -q ${{ matrix.sdk }} -O openwrt-sdk.tar.xz
+          tar xf openwrt-sdk.tar.xz
+          mv openwrt-sdk-* openwrt
+        working-directory: ./
+
+      - name: Checkout n2n
+        uses: actions/checkout@v3
+        with:
+          path: n2n
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+        working-directory: n2n
+
+      - name: Copy n2n package definition into openwrt
+        run: |
+          cp -r n2n/packages/openwrt openwrt/package/n2n
+        working-directory: ./
+
+      - name: Configure OpenWrt
+        run: |
+          make defconfig
+
+      - name: Build n2n openwrt packages
+        run: |
+          export N2N_PKG_VERSION=$(../n2n/scripts/version.sh)
+          echo "Build for $N2N_PKG_VERSION"
+          make package/n2n/clean V=s
+          make package/n2n/prepare USE_SOURCE_DIR=$GITHUB_WORKSPACE/n2n V=s
+          make package/n2n/compile V=s
+
+# FIXME: add a way to run the test suite!
+#      - name: Run embedded tests
+#        run: make test
+
+      - name: Save config used
+        if: always()
+        run: |
+          cp openwrt/.config config.${{ matrix.name }}
+        working-directory: ./
+
+      - name: Upload config file used for build
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: openwrt-config
+          path: config.*
+
+      - name: Upload ipk
+        uses: actions/upload-artifact@v3
+        with:
+          name: packages-ipk
+          path: openwrt/bin/packages/*/base/*.ipk
+
+  binaries_windows:
+    name: Binaries for Windows (x86_64-pc-mingw64)
+    needs:
+      - test_windows
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Configure and Build
+        shell: bash
+        run: |
+          ./scripts/hack_fakeautoconf.sh
+          make
+
+      - name: Create binary dir
+        shell: bash
+        run: |
+          make install DESTDIR=binaries/x86_64-pc-mingw64
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: binaries
+
+  binaries_macos:
+    name: Binaries for MacOS
+    needs:
+      - test_macos
+    runs-on: macos-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - x86_64-apple-macos
+          - arm64-apple-macos
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install packages needed for build
+        run: |
+          brew install automake
+
+      - name: Configure and Build
+        shell: bash
+        run: |
+          # this is a hack! it assumes the default SDK is the 'right' one
+          export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          ./autogen.sh
+          export CFLAGS="-target ${{ matrix.arch }}"
+          export LDFLAGS="-target ${{ matrix.arch }}"
+          ./configure --host=${{ matrix.arch }}
+          make
+
+      - if: ${{ failure() }}
+        name: Upload config.log output
+        uses: actions/upload-artifact@v3
+        with:
+          name: config-log-${{ matrix.arch }}
+          path: config.log
+
+      - name: Create binary dir
+        shell: bash
+        run: |
+          make install DESTDIR=binaries/${{ matrix.arch }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: binaries
+
+  binaries_macos_universal:
+    name: Binaries for MacOS (universal arch)
+    needs:
+      - test_macos
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install packages needed for build
+        run: |
+          brew install automake
+
+      - name: Configure and Build
+        shell: bash
+        run: |
+          # this is a hack! it assumes the default SDK is the 'right' one
+          export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          ./autogen.sh
+          export CFLAGS="-arch x86_64 -arch arm64"
+          export LDFLAGS="-arch x86_64 -arch arm64"
+          ./configure
+          make
+
+      - name: Create binary dir
+        shell: bash
+        run: |
+          make install DESTDIR=binaries/universal-apple-darwin
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: binaries
+
+  binaries_linux_crosscompile:
+    name: Binaries for linux
+    needs:
+      - test_linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: arm-linux-gnueabi
+          - arch: aarch64-linux-gnu
+
+          # Unfortunately, the ubnuts mingw package names dont follow the
+          # same naming convention as every other cross-compiler.
+          - arch: i686-w64-mingw32
+            package_suffix: mingw-w64-i686
+          - arch: x86_64-w64-mingw32
+            package_suffix: mingw-w64-x86-64
+
+          # I assume these architectures produce working code, but this has
+          # not been directly confirmed.
+          # They are compiled dynamically against normal libc, so will not
+          # work on openwrt.
+          - arch: mips-linux-gnu
+          - arch: mipsel-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Install cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+            binutils-${{ matrix.package_suffix || matrix.arch }} \
+            gcc-${{ matrix.package_suffix || matrix.arch }}
+
+      - name: Configure and Build
+        shell: bash
+        run: |
+          ./autogen.sh
+          ./configure --host ${{ matrix.arch }}
+          make
+
+      - name: Create binary dir
+        shell: bash
+        run: |
+          make install DESTDIR=binaries/${{ matrix.arch }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: binaries
+
+  # Given the clearly documented use of annotated tags to signal releases,
+  # it seems strange that there is no simple way to trigger actions if the
+  # tag is annotated.  So we need to jump through some extra hoops.
+  #
+  # Looking at https://github.com/actions/checkout/issues/290 seems to show
+  # that github just doesnt care about how git expects annotated tags to be
+  # used.
+  #
+  # This workflow has added a `git fetch --force --tags` to every job that
+  # needs to have working tags
+
+  upload_release:
+    name: Upload Release Assets
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - package_dpkg
+      - package_rpm
+      - package_ipk
+      - binaries_windows
+      - binaries_macos
+      - binaries_macos_universal
+      - binaries_linux_crosscompile
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fix Checkout
+        run: |
+          git fetch --force --tags
+
+      - name: Get Tag Type
+        id: get_tagtype
+        run: |
+          TYPE=$(git cat-file -t $GITHUB_REF)
+          echo "::set-output name=TAGTYPE::$TYPE"
+          echo ==========
+          echo REF=$GITHUB_REF
+          echo TAGTYPE=$TYPE
+
+      - name: Fetch all Artifacts
+        if: steps.get_tagtype.outputs.TAGTYPE == 'tag'
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Upload Assets to Release
+        if: steps.get_tagtype.outputs.TAGTYPE == 'tag'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          files: |
+            artifacts/packages-dpkg/*.deb
+            artifacts/packages-rpm/*.rpm
+            artifacts/packages-ipk/*/base/*.pkg
